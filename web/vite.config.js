@@ -1,0 +1,14 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { viteSingleFile } from 'vite-plugin-singlefile';
+
+// It builds one self-contained index.html file (every JS/CSS inlined) inside web/build
+export default defineConfig({
+  plugins: [react(), viteSingleFile()],
+  base: './',
+  build: {
+    outDir: 'build',
+    emptyOutDir: true,
+    target: 'chrome110',
+  },
+});
