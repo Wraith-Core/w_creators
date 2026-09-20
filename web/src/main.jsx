@@ -83,7 +83,12 @@ window.uiSound = (name) => {
 // Inside the game the NUI layer must stay transparent so the world shows behind it; the scene's background
 // is for the browser preview only.
 const IS_GAME =
-  typeof window.invokeNative !== 'undefined' || /CitizenFX/i.test(navigator.userAgent);
+  typeof window.GetParentResourceName === 'function' ||
+  typeof window.invokeNative !== 'undefined' ||
+  /CitizenFX/i.test(navigator.userAgent);
 if (IS_GAME) document.documentElement.classList.add('rsm-ingame');
 
 createRoot(document.getElementById('app')).render(<App />);
+
+import './store-adapter.css';
+import './responsive';

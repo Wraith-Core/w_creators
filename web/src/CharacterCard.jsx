@@ -13,11 +13,11 @@ export default function CharacterCard({ data, strings: L }) {
     { key: 'gold', label: L.gold || '', value: money(data.gold),       icon: CURRENCY_ICONS.gold },
   ];
   return (
-    <div className="charcard">
+    <div className="wst-panel charcard">
       <Frame/>
       {rows.map((r, i) => (
         // --i delays each chip's animation behind the one before it so they cascade from the top down
-        <div key={r.key} className={'cc-chip cc-row ' + r.key} style={{ '--i': i }}>
+        <div key={r.key} className={'wst-row cc-chip cc-row ' + r.key} style={{ '--i': i }}>
           <span className="cc-label">{r.label}</span>
           <span className="cc-amount">
             <span className={'cc-value' + (r.text ? ' cc-text' : '')}>{r.value}</span>

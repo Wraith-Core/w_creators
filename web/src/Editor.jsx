@@ -2,10 +2,11 @@ import React, {useEffect, useRef, useState} from 'react';
 import {nuiSend} from './nui';
 import {Frame, Glyph, Choice} from './Chrome';
 import SceneCamera from './SceneCamera';
+import FeaturePad,{pairFeatures,featureValue} from './FeaturePad';
 
 const copy = {
   ar: {
-    creator:'إنشاء الشخصية', store:'الخياط', wardrobe:'خزانة الملابس', barber:'الحلاق',
+    creator:'إنشاء الشخصية', store:'الخياط', wardrobe:'خزانة الملابس', barber:'الحلاق',center:'توسيط',padHelp:'اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع',advanced:'تفاصيل إضافية',
     appearance:'مظهر الشخصية', identity:'الهوية', base:'الهيئة', face:'الملامح', body:'الجسد', hair:'الشعر واللحية', overlays:'تفاصيل البشرة', clothes:'الملابس',
     firstname:'الاسم الأول', lastname:'اسم العائلة', age:'العمر', save:'إنهاء الشخصية', buy:'شراء وارتداء', wear:'ارتداء', cut:'تأكيد الحلاقة',
     cancel:'رجوع', reset:'استعادة الأصل', undo:'تراجع', random:'مظهر عشوائي', search:'بحث…', style:'النمط', color:'اللون', none:'بدون', owned:'مملوكة', total:'الإجمالي',
@@ -18,7 +19,7 @@ const copy = {
     eyes:'العينان', nose:'الأنف', mouth:'الفم والشفتان', jaw:'الفك والذقن', cheek:'الخدان', ear:'الأذنان', skull:'الرأس',
   },
   en: {
-    creator:'Character creation', store:'Tailor', wardrobe:'Wardrobe', barber:'Barber',
+    creator:'Character creation', store:'Tailor', wardrobe:'Wardrobe', barber:'Barber',center:'Center',padHelp:'Drag the point or use arrow keys · Shift for larger steps',advanced:'Additional details',
     appearance:'Appearance', identity:'Identity', base:'Heritage', face:'Facial features', body:'Physique', hair:'Hair & beard', overlays:'Complexion', clothes:'Clothing',
     firstname:'First name', lastname:'Last name', age:'Age', save:'Finish character', buy:'Purchase & wear', wear:'Wear outfit', cut:'Confirm haircut',
     cancel:'Back', reset:'Restore original', undo:'Undo', random:'Random appearance', search:'Search…', style:'Style', color:'Colour', none:'None', owned:'Owned', total:'Total',
@@ -48,7 +49,7 @@ function Slider({name,value,min=-1,max=1,step=.02,onChange}) {
 }
 
 function MenuRow({id,label,value,art,onClick}) {
-  return <button className="menu-row" data-navkey={id} onClick={onClick}>
+  return <button className="wst-card menu-row" data-navkey={id} onClick={onClick}>
     {art&&<Glyph tex={art} className="row-art"/>}<span className="row-label">{label}</span>
     {value!=null&&<span className="row-value">{value}</span>}<Glyph tex="selection_arrow_right" className="row-arrow"/>
   </button>;
@@ -122,6 +123,7 @@ export default function Editor({payload,onPayload,onClose}) {
   const cats=array(payload.categories).filter(c=>c.section===tab&&c.name.toLowerCase().includes(search.toLowerCase()));
   const overlays=array(payload.overlays).filter(o=>o.name.toLowerCase().includes(search.toLowerCase()));
   const features=array(payload.features).filter(f=>f.section===tab&&(!entry||entry.kind!=='face'||partOf(f.id)===entry.id));
+  const paired=pairFeatures(features);
   const cat=entry?.kind==='component'?array(payload.categories).find(c=>c.id===entry.id):null;
   const overlay=entry?.kind==='overlay'?array(payload.overlays).find(o=>o.id===entry.id):null;
   const models=array(cat?.models),model=models.find(m=>m.index===cat?.model),variants=array(model?.variants);
@@ -132,22 +134,24 @@ export default function Editor({payload,onPayload,onClose}) {
 
   return <div className="editor-shell" dir={payload.locale==='ar'?'rtl':'ltr'}>
     <SceneCamera camera={camera} part={cameraPart} text={t} disabled={busy||!!confirm}/>
-    <section className="atelier" aria-label={t[payload.mode]} aria-busy={busy}>
-      <header><h1>{t[payload.mode]}</h1><span className="header-rule" aria-hidden="true"/></header>
-      <div className="menu-heading">
-        {(tab||entry)&&<button className="menu-back" aria-label={t.cancel} disabled={busy} onClick={back}><Glyph tex="selection_arrow_left"/></button>}
+    <section className="wst-panel atelier" aria-label={t[payload.mode]} aria-busy={busy}>
+      <Frame/>
+      <header className="wst-header"><small className="wst-title atelier-brand">WRAITH · CHARACTER STUDIO</small><h1>{t[payload.mode]}</h1><span className="wst-rule header-rule" aria-hidden="true"/></header>
+      {isCreator&&<nav className="atelier-sections" aria-label={t.appearance}>{tabs.map((key,i)=><button key={key} type="button" disabled={busy} className={`wst-tab ${tab===key?'selected':''}`} aria-current={tab===key?'page':undefined} onClick={()=>chooseTab(key)}><b>{String(i+1).padStart(2,'0')}</b>{t[key]}{key==='identity'&&missingName&&<i/>}</button>)}</nav>}
+      <div className="wst-plate menu-heading">
+        {(tab||entry)&&<button className="wst-button menu-back" aria-label={t.cancel} disabled={busy} onClick={back}><Glyph tex="selection_arrow_left"/></button>}
         <h2>{title}</h2>
       </div>
       <main key={viewKey} ref={main} tabIndex={-1} className="editor-workspace" onKeyDown={menuKeys}>
-        {showSearch&&<span className="input-plate search-plate"><input className="search" aria-label={t.search} placeholder={t.search} value={search} onChange={e=>setSearch(e.target.value)}/></span>}
+        {showSearch&&<span className="wst-field input-plate search-plate"><input className="wst-input search" aria-label={t.search} placeholder={t.search} value={search} onChange={e=>setSearch(e.target.value)}/></span>}
         <fieldset className="fields" disabled={busy}>
           {!tab&&<nav className="menu-list" aria-label={t.appearance}>
             {tabs.map(key=><MenuRow key={key} id={key} label={t[key]} onClick={()=>chooseTab(key)}/>)}
-            <div className="wc-hr"/><MenuRow id="random" label={t.random} onClick={()=>action({action:'random'})}/>
+            <div className="wst-rule wc-hr"/><MenuRow id="random" label={t.random} onClick={()=>action({action:'random'})}/>
           </nav>}
           {tab==='identity'&&<div className="identity">
-            {['firstname','lastname'].map(key=><label key={key}>{t[key]}<span className="input-plate"><input required maxLength={25} autoComplete="off" value={identity[key]} onChange={e=>setIdentity({...identity,[key]:e.target.value})}/></span></label>)}
-            <label>{t.age}<span className="input-plate"><input type="number" min={18} max={100} value={identity.age} onChange={e=>setIdentity({...identity,age:e.target.value})}/></span></label>
+            {['firstname','lastname'].map(key=><label key={key}>{t[key]}<span className="wst-field input-plate"><input className="wst-input" required maxLength={25} autoComplete="off" value={identity[key]} onChange={e=>setIdentity({...identity,[key]:e.target.value})}/></span></label>)}
+            <label>{t.age}<span className="wst-field input-plate"><input className="wst-input" type="number" min={18} max={100} value={identity.age} onChange={e=>setIdentity({...identity,age:e.target.value})}/></span></label>
           </div>}
           {showList&&tab==='face'&&<nav className="menu-list" aria-label={t.face}>
             {['skull','eyes','nose','mouth','jaw','cheek','ear'].filter(id=>features.some(f=>partOf(f.id)===id)).map(id=><MenuRow key={id} id={id} label={t[id]} onClick={()=>chooseEntry('face',id,id==='eyes'?'eyes':'head')}/>)}
@@ -166,7 +170,10 @@ export default function Editor({payload,onPayload,onClose}) {
             <Slider name={t.height} value={components.__scale??1} min={.9} max={1.1} step={.005} onChange={value=>action({action:'body',field:'scale',value})}/>
             <Slider name={t.waist} value={components.__waist??11} min={1} max={21} step={1} onChange={value=>action({action:'body',field:'waist',value})}/>
           </>}
-          {(tab==='body'||entry?.kind==='face')&&features.map(f=><Slider key={f.hash} name={f.name} value={f.expression?(components.__expressions?.[f.expression]||0):(array(app.faceFeatures).find(v=>v.hash===f.hash)?.index||0)} onChange={value=>action({action:'feature',field:f.id,value})}/>)}
+          {(tab==='body'||entry?.kind==='face')&&<>
+            {paired.pairs.map(([x,y])=><FeaturePad key={x.id} x={x} y={y} app={app} text={t} disabled={busy} onChange={values=>action({action:'features',values})}/>)}
+            {paired.other.length>0&&<details className="feature-extra" open={!paired.pairs.length}><summary>{t.advanced}</summary>{paired.other.map(f=><Slider key={f.id} name={f.name} value={featureValue(f,app)} onChange={value=>action({action:'feature',field:f.id,value})}/>)}</details>}
+          </>}
           {overlay&&<article className="component">
             <Choice caption={t.style} label={overlay.name} value={overlay.value.offsetModel} options={[{value:0,label:t.none},...overlay.models.map((m,i)=>({value:m,label:i+1}))]} onChange={value=>action({action:'overlay',category:overlay.id,model:value,color:overlay.value.offsetVariation,opacity:overlay.value.opacity})}/>
             <Choice caption={t.color} label={`${overlay.name} ${t.color}`} value={overlay.value.offsetVariation} disabled={!overlay.value.offsetModel} options={Array.from({length:64},(_,i)=>({value:i+1,label:String(i+1).padStart(2,'0')}))} onChange={value=>action({action:'overlay',category:overlay.id,model:overlay.value.offsetModel,color:value,opacity:overlay.value.opacity})}/>
@@ -174,19 +181,19 @@ export default function Editor({payload,onPayload,onClose}) {
           </article>}
           {showSearch&&(tab==='overlays'?overlays:cats).length===0&&<p className="empty-search" role="status">{t.empty}</p>}
         </fieldset>
-        {showGrowth&&<aside className="growth"><strong>{t.growth}</strong>{['hair','beard'].filter(k=>k!=='beard'||app.isMale).map(k=><p key={k}>{k==='hair'?t.hairTime:t.beardTime} · {t.stage} {payload.growth[k]?.stage||0}<span>{Math.ceil(payload.growth[k]?.remainingMinutes||0)} {t.minutes}</span></p>)}</aside>}
+        {showGrowth&&<aside className="wst-plate growth"><strong>{t.growth}</strong>{['hair','beard'].filter(k=>k!=='beard'||app.isMale).map(k=><p key={k}>{k==='hair'?t.hairTime:t.beardTime} · {t.stage} {payload.growth[k]?.stage||0}<span>{Math.ceil(payload.growth[k]?.remainingMinutes||0)} {t.minutes}</span></p>)}</aside>}
       </main>
       <footer>
         {error&&<p className="error" role="alert">{error}</p>}
-        {(tab||!isCreator)&&<div className="tools"><button disabled={busy} onClick={()=>action({action:'undo'})}>{t.undo}</button><button disabled={busy} onClick={()=>setConfirm('reset')}>{t.reset}</button></div>}
+        {(tab||!isCreator)&&<div className="tools"><button className="wst-button" disabled={busy} onClick={()=>action({action:'undo'})}>{t.undo}</button><button className="wst-button" disabled={busy} onClick={()=>setConfirm('reset')}>{t.reset}</button></div>}
         {!tab&&<p className="menu-help">{missingName?t.nameHint:t.details}</p>}
-        <div className="commit"><button disabled={busy} onClick={back}>{t.cancel}</button><button className="primary" disabled={busy||missingName} onClick={()=>setConfirm('save')}>{busy?t.saving:saveText}{!isCreator&&<span dir="ltr">${Number(payload.price||0).toFixed(2)}</span>}</button></div>
+        <div className="commit"><button className="wst-button" disabled={busy} onClick={back}>{t.cancel}</button><button className="wst-button primary" disabled={busy||missingName} onClick={()=>setConfirm('save')}>{busy?t.saving:saveText}{!isCreator&&<span dir="ltr">${Number(payload.price||0).toFixed(2)}</span>}</button></div>
       </footer>
     </section>
-    {confirm&&<div className="modal-shade"><section className="confirmation" role="dialog" aria-modal="true" aria-labelledby="confirmation-title"><Frame/>
-      <h2 id="confirmation-title">{confirm==='save'?t.review:confirm==='reset'?t.reset:t.cancel}</h2><div className="wc-hr"/>
+    {confirm&&<div className="modal-shade"><section className="wst-panel confirmation" role="dialog" aria-modal="true" aria-labelledby="confirmation-title"><Frame/>
+      <h2 id="confirmation-title">{confirm==='save'?t.review:confirm==='reset'?t.reset:t.cancel}</h2><div className="wst-rule wc-hr"/>
       <p>{confirm==='save'?(isCreator?`${identity.firstname} ${identity.lastname}`:`${t.total} · $${Number(payload.price||0).toFixed(2)}`):t.leave}</p>
-      <div className="confirmation-actions"><button disabled={busy} onClick={()=>setConfirm(null)}>{t.stay}</button><button className={`primary ${confirm==='save'?'':'destructive'}`} disabled={busy} onClick={()=>action({action:confirm,identity})}>{busy?t.saving:t.confirm}</button></div>
+      <div className="confirmation-actions"><button className="wst-button" disabled={busy} onClick={()=>setConfirm(null)}>{t.stay}</button><button className={`wst-button primary ${confirm==='save'?'':'destructive danger'}`} disabled={busy} onClick={()=>action({action:confirm,identity})}>{busy?t.saving:t.confirm}</button></div>
     </section></div>}
   </div>;
 }

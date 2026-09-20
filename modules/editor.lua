@@ -97,6 +97,17 @@ function E.close()
     SendNUIMessage({type='editorClose'})
 end
 local function mutate(s,data)
+    local updates
+    if data.action=='features' then
+        if s.mode~='creator' or type(data.values)~='table' then error('invalid feature edit') end
+        updates={}
+        local known={};for _,field in ipairs(featureFields()) do known[field.id]=field end
+        for id,value in pairs(data.values) do
+            if not known[id] or type(value)~='number' or value~=value or value < -1 or value > 1 or #updates>=2 then error('invalid feature axis') end
+            updates[#updates+1]={field=known[id],value=value}
+        end
+        if #updates==0 then error('empty feature edit') end
+    end
     if data.action=='undo' then
         if #s.history>0 then s.app=table.remove(s.history) end
         return
@@ -132,6 +143,16 @@ local function mutate(s,data)
         for _, field in ipairs(featureFields()) do
             if not field.expression then s.app.faceFeatures[#s.app.faceFeatures+1]={hash=field.hash,index=math.random(-25,25)/100} end
         end
+    elseif updates then
+        for _,update in ipairs(updates) do
+            local field,value=update.field,update.value
+            if field.expression then s.app.components.__expressions[field.expression]=value
+            else
+                local found=false
+                for _,feature in ipairs(s.app.faceFeatures) do if feature.hash==field.hash then feature.index=value;found=true;break end end
+                if not found then s.app.faceFeatures[#s.app.faceFeatures+1]={hash=field.hash,index=value} end
+            end
+        end
     elseif s.mode=='creator' and data.action=='feature' then
         for _, field in ipairs(featureFields()) do
             if field.id==data.field then
@@ -158,8 +179,9 @@ local function mutate(s,data)
 end
 RegisterNUICallback('editor:action',function(data,cb)
     local s=E.session
-    if not s or data.id~=s.id or s.busy then cb({ok=false,error='busy'});return end
+    if type(data)~='table' or not s or data.id~=s.id or s.busy then cb({ok=false,error='busy'});return end
     s.busy=true
+    local original,history=A.copy(s.app),{table.unpack(s.history)}
     local ok,result=pcall(function()
         if data.action=='save' then
             return s.finish(A.copy(s.app),data.identity)
@@ -175,7 +197,12 @@ RegisterNUICallback('editor:action',function(data,cb)
         end
     end)
     s.busy=false
-    if not ok then w.print.error('editor action failed: %s',result);cb({ok=false,error=label('تعذر تطبيق التعديل')})
+    if not ok then
+        if E.session==s and data.action~='save' and data.action~='cancel' then
+            s.app,s.history=original,history
+            pcall(ApplyCreatorAppearance,s.ped,original)
+        end
+        w.print.error('editor action failed: %s',result);cb({ok=false,error=label('تعذر تطبيق التعديل')})
     else cb(result or {ok=true}) end
 end)
 RegisterNUICallback('editor:camera',function(data,cb)

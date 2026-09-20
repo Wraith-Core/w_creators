@@ -38,7 +38,7 @@ export default function SceneCamera({camera,part,text,disabled}) {
       onPointerUp={up} onPointerCancel={cancel} onLostPointerCapture={cancel} onContextMenu={reset}
       onWheel={e=>{if(!disabled&&e.deltaY)send.current({zoom:e.deltaY>0?-2:2});}}/>
     <aside className="scene-tools" aria-label={text.camera}>
-      <div className="camera-help"><span className="camera-view"><Glyph tex="weapon_kit_camera"/><span aria-live="polite">{text[label]}</span></span>
+      <div className="wst-plate camera-help"><span className="camera-view"><Glyph tex="weapon_kit_camera"/><span aria-live="polite">{text[label]}</span></span>
         <span>{text.clickZoom}</span><span>{text.dragRotate}</span><span>{text.rightReset}</span>
       </div>
     </aside>
