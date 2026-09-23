@@ -130,7 +130,9 @@ function Wardrobe.plan(saved, submitted, owned, outfitIds)
     local draft = WCUtil.copy(saved)
     draft.clothing = { equipped = resolved, tints = tints, outfit = outfit,
                        states = statesOn and validStates(clothing.states) or WCUtil.copy(saved.clothing.states) }
-    local merged = AppearanceSchema.mergeSections(saved, draft, { clothing = true, states = true })
+    -- every tint is a stored dye (owned / saved): the merge keeps it as stored
+    local merged = AppearanceSchema.mergeSections(saved, draft, { clothing = true, states = true },
+        { storedTints = tints })
     for category in pairs(changed) do
         if merged.clothing.equipped[category] ~= resolved[category] then return nil, 'CONFLICTING_ITEMS', category end
     end

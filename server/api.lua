@@ -652,6 +652,8 @@ function Api.OpenSpawnSelector(src)
     if WCSessions.current(src) then return fail('BUSY') end
     if WCSpawnServer.pending(src) then return fail('BUSY') end
     if GetPlayerRoutingBucket(src) ~= 0 then return fail('BUSY') end
+    -- the death system owns a dead / downed player and one in a hospital bed
+    if WCSpawnServer.heldByDeathOwner(src) then return fail('BUSY') end
     local points = WCSpawnServer.pointIds()
     local last = WCSpawnServer.lastPosition(src)
     if last then last.label = WCSpawnServer.nearestLabel(last) end

@@ -256,8 +256,9 @@ There are 18 layers (`WCOverlays`), all applied through `w.pedTexture` only. `id
 
 - Colour N is `tint0 = N - 1` of the layer palette: `metaped_tint_hair` for eyebrows, hair and beard,
   `metaped_tint_makeup` for every other layer.
-- The skin-section libraries (`Appearance.Overlays.UNTINTED`) are drawn by w_lib with blend type 1 and
-  no palette, so their colour has no visible effect. **Requires live verification.**
+- The skin-section libraries (`WCOverlays.UNTINTED`, shared; their layers carry `tint = false`) are
+  drawn by w_lib with blend type 1 and no palette, so their colour has no visible effect: the editors
+  offer no Color for them and `sanitize` stores their colour as 1 (a colour-only change is no change).
 - The whole head layer set is rewritten every time: `w.pedTexture.overwriteBodyPart(ped, 'heads', set,
   true)`, then `refreshNow`. `w.pedTexture` only acts on **networked** peds, so on an unnetworked ped
   the overlays are skipped (logged).

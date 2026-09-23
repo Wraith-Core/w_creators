@@ -22,6 +22,8 @@
 --  refuses a direct callback request (SURGERY_NOT_ALLOWED).
 --  With allow.clothing, only owned items may be put on (the wardrobe rule): a new item the character
 --  does not own -> ITEM_NOT_OWNED; every worn item keeps its owned (or saved) tint.
+--  GlobalState['w_creators:clinics'] = { [clinicId] = true }: the clinics usable now (enabled, service
+--  on, open), refreshed on the WCSessions clock tick; w_ambulancejob hides the prompt of the others.
 -- =====================================================================
 
 WCSurgeryService = {}
@@ -299,6 +301,38 @@ function Surgery.commit(src, token, opId, submitted)
     end
     return WCSessions.commit(src, token, opId, function(s) return commitSurgery(src, s, submitted) end, { kind = 'surgery' })
 end
+
+-- ---------------------------------------------------------------------
+--  The clinics that can be opened now, for w_ambulancejob (its surgery prompts, client/job.lua):
+--  GlobalState['w_creators:clinics'] = { [clinicId] = true } for every surgery location that is
+--  usable (enabled, surgery service on, inside its opening hours); a closed clinic is absent.
+--  Published at start and on every WCSessions clock tick (60 s), only when it changed.
+-- ---------------------------------------------------------------------
+Surgery.CLINICS_KEY = 'w_creators:clinics'
+local publishedClinics
+
+--- The usable clinics now: { [clinicId] = true }.
+function Surgery.clinics()
+    local out = {}
+    for _, loc in ipairs(WCLocations.byType('surgery')) do
+        if type(loc.id) == 'string' and WCLocations.isUsable(loc) then out[loc.id] = true end
+    end
+    return out
+end
+
+--- Publish Surgery.clinics() to GlobalState when it differs from the last publication. Returns the
+--  published set (nil when GlobalState is unavailable).
+function Surgery.publishClinics()
+    local clinics = Surgery.clinics()
+    if publishedClinics and WCUtil.deepEqual(publishedClinics, clinics) then return clinics end
+    local done = pcall(function() GlobalState[Surgery.CLINICS_KEY] = clinics end)
+    if not done then return nil end
+    publishedClinics = clinics
+    return clinics
+end
+
+Surgery.publishClinics()
+if WCSessions and WCSessions.onClock then WCSessions.onClock(Surgery.publishClinics) end
 
 w.callback.register('w_creators:surgery:open', function(src, clinicId)
     return Surgery.open(src, clinicId)

@@ -23,7 +23,9 @@
 --    WCSpawnServer.lastPosition(src)            -> the valid last position | nil
 --    WCSpawnServer.nearestLabel(pos)            -> locale key of the nearest enabled point | nil
 --    WCSpawnServer.points() / pointIds()        enabled points in display order
---    WCSpawnServer.respawn(src, pointId, kind, extra?) -> Result { pos, kind, point } (client:respawn)
+--    WCSpawnServer.respawn(src, pointId, kind, extra?) -> Result { pos, kind, point } (client:respawn);
+--                                               kind 'admin' is BUSY while heldByDeathOwner
+--    WCSpawnServer.heldByDeathOwner(src)        w_ambulancejob (started) says dead / downed / in a bed
 --
 --  Events (§16.3):
 --    w_creators:client:selectSpawn  { last = {x, y, z, heading, label} | nil, points = { ids }, kind }
@@ -62,6 +64,28 @@ end
 
 local function lastLocationEnabled()
     return WCServices.enabled('lastLocation') and Config.Spawn.lastLocation.enabled ~= false
+end
+
+--- The death system (w_ambulancejob): its server IsDead(playerId) answers dead, last stand or in a
+--  hospital bed; InHospitalBed(playerId) the bed alone. Either export may be missing.
+Spawn.DEATH_OWNER = { resource = 'w_ambulancejob', exports = { 'IsDead', 'InHospitalBed' } }
+
+--- Is the player down or in a hospital bed for the death system (only while it is started)? An
+--  in-world spawn selector or admin respawn then answers BUSY: the death system owns the player.
+--  A missing, stopped or throwing export never blocks.
+function Spawn.heldByDeathOwner(src)
+    local owner = Spawn.DEATH_OWNER
+    if type(owner) ~= 'table' or type(owner.resource) ~= 'string' or type(owner.exports) ~= 'table' then
+        return false
+    end
+    local okState, state = pcall(GetResourceState, owner.resource)
+    if not okState or state ~= 'started' then return false end
+    for _, name in ipairs(owner.exports) do
+        -- a CitizenFX export proxy member is function(self, ...): the player id is the second argument
+        local done, held = pcall(function() return exports[owner.resource][name](nil, src) end)
+        if done and held ~= nil and held ~= false then return true end
+    end
+    return false
 end
 
 -- { x, y, z, heading } of a config position, or nil when its coordinates are not finite.
@@ -369,6 +393,8 @@ function Spawn.respawn(src, pointId, kind, extra)
     kind = Spawn.KINDS[kind] and kind or 'admin'
     local active = WCSessions and WCSessions.activeCharacter(src)
     if not active then return WCResult.fail('NO_CHARACTER') end
+    -- a dead / downed player or one in a hospital bed belongs to the death system
+    if kind == 'admin' and Spawn.heldByDeathOwner(src) then return WCResult.fail('BUSY') end
     -- A pending login grant belongs to the character scene, where the client ignores world
     -- respawns: refused. An in-world grant ('admin' / 'death' spawn selector) is withdrawn: the
     -- client respawn closes that selector without a spawn:choose, and a grant left behind would

@@ -217,7 +217,11 @@ class SelectTests(Base):
         self.assertEqual(sel[0].args[1].last.label, 'رودز')
         remote = self.rt.client_events('w_creators:client:applyRemoteAppearance')
         self.assertEqual((remote[0].player, remote[0].args[1]), (-1, 1))
-        self.assertEqual(self.call('characters:loaded', 1).code, 'NO_CHARACTER')   # one-shot
+        # a repeated call replays the answer (a lost reply), without a second spawn hand-off
+        again = self.call('characters:loaded', 1)
+        self.assertTrue(again.ok, again.code)
+        self.assertEqual(again.data.spawn, 'selector')
+        self.assertEqual(len(self.rt.client_events('w_creators:client:selectSpawn')), len(sel))
 
     def test_login_timeout_is_a_failure_not_a_blind_wait(self):
         self.rt.run('Bridge.LoginCharacter = function(src, charid) table.insert(loginCalls, charid) return true end')

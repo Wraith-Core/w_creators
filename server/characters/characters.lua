@@ -22,7 +22,8 @@
 --    w_creators:characters:select        (charid) -> { appearance } | { needsAppearance, token, sex?,
 --                                        appearance?, degraded?, repairSections? (degraded: the only
 --                                        sections the repair saves; no clothing stage) }
---    w_creators:characters:loaded        -> { spawn = 'selector' | 'direct' | 'event' }
+--    w_creators:characters:loaded        -> { spawn = 'selector' | 'direct' | 'event' } (a repeated call
+--                                           replays the last answer while its character is active)
 --    w_creators:characters:beginCreate   (sex?) -> { token }
 --    w_creators:characters:create        (token, identity, app) -> { appearance, charid }
 --    w_creators:characters:cancelCreate  (token) -> {}
@@ -40,6 +41,10 @@ local active = {}    -- [src] = { charid, sex, recoveredUntil? }
 -- [src] = { from = charid, at = ms started, seen = ms last seen in the character scene }
 local switching = {}
 local pending = {}   -- [src] = { charid, sex, app, kind, isNew, token?, selected? } awaiting `loaded`
+-- [src] = { entry = the active[src] it made, data }: the last successful `loaded` answer, replayed to a
+-- repeated call (a retry after a lost reply) while that activation stands; cleared on drop, clear,
+-- select and a new creation.
+local lastLoaded = {}
 local grants = {}    -- [src] = { token, kind = 'create' | 'repair', expires, sex?, charid?, provisioned?, identity? }
 local busy = {}      -- [src] = operation name (one character operation per player at a time)
 -- [src] = { [charid] = 'owed' | 'unconfirmed' }: 'owed' = the framework row is gone, the appearance
@@ -131,6 +136,7 @@ function Chars.clear(src, reason)
     if not src then return false end
     local entry = active[src]
     active[src] = nil
+    lastLoaded[src] = nil
     if entry then
         WCSync.forget(src)
         TriggerEvent('w_creators:server:characterCleared', src, entry.charid, reason or 'clear')
@@ -760,7 +766,7 @@ function Chars.select(src, charid)
         end
         if Chars.ownerOf(charid) then return fail('BUSY') end
 
-        grants[src] = nil
+        grants[src], lastLoaded[src] = nil, nil
         -- another character selected before this one was loaded: its cached look is not in play
         local previous = pending[src]
         if previous and previous.charid ~= charid and not Chars.ownerOf(previous.charid) then
@@ -822,7 +828,13 @@ function Chars.loaded(src)
     -- a lapsed switch (outside the character scene) ends here: no spawn grant is given for it
     settleSwitch(src)
     local p = pending[src]
-    if not p then return fail('NO_CHARACTER') end
+    if not p then
+        -- A repeated call after a successful one (its reply was lost) answers the same, while the
+        -- character it activated is still the active one; nothing runs twice (no second spawn).
+        local last = lastLoaded[src]
+        if last and active[src] == last.entry then return ok(WCUtil.copy(last.data)) end
+        return fail('NO_CHARACTER')
+    end
 
     return guarded(src, 'loaded', function()
         if pending[src] ~= p then return fail('NO_CHARACTER') end
@@ -834,6 +846,7 @@ function Chars.loaded(src)
         Chars.setActive(src, p.charid, p.sex)
         WCSync.broadcast(src, p.app)
         local mode = WCSpawnServer.finish(src, p.kind, p.isNew)
+        lastLoaded[src] = { entry = active[src], data = { spawn = mode } }
         return ok({ spawn = mode })
     end)
 end
@@ -872,7 +885,7 @@ function Chars.beginCreate(src, sex)
         if #list >= Chars.slots(src) then return fail('CHARACTER_SLOT_LIMIT') end
         local token = newToken(src)
         grants[src] = { token = token, kind = 'create', sex = sex, expires = now() + GRANT_TTL_MS }
-        pending[src] = nil
+        pending[src], lastLoaded[src] = nil, nil
         return ok({ token = token, sex = sex })
     end)
 end
@@ -1171,6 +1184,7 @@ AddEventHandler('playerDropped', function()
         if charid and not Chars.ownerOf(charid) then WCAppearanceRepo.invalidate(charid) end
     end
     busy[src], grants[src], pending[src], switching[src], lapsed[src] = nil, nil, nil, nil, nil
+    lastLoaded[src] = nil
     -- Appearance cleanups the player did not retry: one last attempt in the background.
     local owed = cleanup[src]
     cleanup[src] = nil

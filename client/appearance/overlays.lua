@@ -33,20 +33,16 @@ local function usable(ped)
     return w and w.pedTexture and w.pedTexture.overwriteBodyPart ~= nil
 end
 
---- The layers w.pedTexture draws with blend type 1 (w_lib ped-texture applyLayer): it never
---  applies a palette / tint to them, so their colour has no visible effect. Keyed by library name.
-O.UNTINTED = { scar = true, spots = true, disc = true, complex = true, acne = true, ageing = true,
-               moles = true, freckles = true }
+--- The layers w.pedTexture draws with blend type 1 (never tinted): the shared list
+--  (WCOverlays.UNTINTED, shared/overlays.lua), keyed by library name.
+O.UNTINTED = WCOverlays.UNTINTED
 
---- Does the colour of a layer show? layer.tint = false (shared/overlays.lua) marks a layer as not
---  tintable; otherwise the renderer's blend-type-1 list decides.
+--- Does the colour of a layer show? (WCOverlays.tintable: layer.tint = false marks a layer as not
+--  tintable; a table without the flag falls back to the blend-type-1 list.)
 ---@param layer table|string a WCOverlays layer or its id
 ---@return boolean
 function O.tintable(layer)
-    if type(layer) == 'string' then layer = WCOverlays.byId[layer] end
-    if type(layer) ~= 'table' then return false end
-    if layer.tint ~= nil then return layer.tint ~= false end
-    return not O.UNTINTED[layer.library]
+    return WCOverlays.tintable(layer)
 end
 
 --- The w.pedTexture payload of one stored layer: layerName, payload (nil when not renderable).

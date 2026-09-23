@@ -102,8 +102,10 @@ editor in 'surgery' mode ─► Save ─► callback w_creators:surgery:commit(t
 ```
 
 w_ambulancejob's prompt also reads `GlobalState['w_creators:clinics']` to hide clinics that are closed.
-w_creators does **not** publish that key at this commit (grep finds no writer), so the prompt shows
-whenever the player is upright and w_creators is started, and the server's answer decides.
+w_creators publishes it (`WCSurgeryService.publishClinics`) as `{ [clinicId] = true }` for every
+surgery location that is usable now (location `enabled`, the `surgery` service on, inside its `hours`);
+a closed clinic is absent. It is written at start and on every `WCSessions` clock tick (60 s,
+`WCSessions.onClock`), only when the set changed. The server's answer still decides at open and commit.
 
 ## 4. Server authority
 

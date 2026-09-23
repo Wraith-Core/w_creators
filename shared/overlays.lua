@@ -59,11 +59,18 @@ WCOverlays.COLORS = 64
 WCOverlays.layers = {}
 WCOverlays.byId = {}
 
+--- The w.pedTexture layers drawn with blend type 1 (w_lib ped-texture applyLayer): no palette or
+--  tint is ever applied to them, so their colour has no visible effect. Keyed by library name. Their
+--  WCOverlays layers carry tint = false: the editors offer no Color for them and
+--  AppearanceSchema.sanitize stores their color as 1 (a colour-only change is never a change).
+WCOverlays.UNTINTED = { scar = true, spots = true, disc = true, complex = true, acne = true, ageing = true,
+                        moles = true, freckles = true }
+
 for index, def in ipairs(LAYERS) do
     local layer = {
         id = def.id, library = def.library, ids = def.ids, section = def.section, label = def.label,
         palette = def.palette or MAKEUP_PALETTE, sexes = def.sexes or BOTH, order = index,
-        styles = #def.ids,
+        styles = #def.ids, tint = not WCOverlays.UNTINTED[def.library],
     }
     WCOverlays.layers[index] = layer
     WCOverlays.byId[def.id] = layer
@@ -79,4 +86,15 @@ end
 function WCOverlays.allowed(id, sex)
     local layer = WCOverlays.byId[id]
     return layer ~= nil and layer.sexes[sex] == true
+end
+
+--- Does the colour of a layer show? A layer table's own tint flag decides (false = drawn without
+--  its palette); a table without one falls back to the blend-type-1 list.
+---@param layer table|string a WCOverlays layer or its id
+---@return boolean
+function WCOverlays.tintable(layer)
+    if type(layer) == 'string' then layer = WCOverlays.byId[layer] end
+    if type(layer) ~= 'table' then return false end
+    if layer.tint ~= nil then return layer.tint ~= false end
+    return not WCOverlays.UNTINTED[layer.library]
 end

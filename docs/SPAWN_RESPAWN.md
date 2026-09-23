@@ -90,9 +90,11 @@ config order), or to `firstSpawn` when no point is enabled. A new character is n
 - Withdrawn when the player leaves the character scene without spawning (login kinds), when an
   `admin` selector is cancelled (`w_creators:server:spawnCancel`), on a world respawn, and on
   `playerDropped`.
-- `OpenSpawnSelector` answers `BUSY` while any grant is pending, while a service session is open, and
-  outside routing bucket 0. An `admin` selector is refused client-side (grant handed back) while
-  w_ambulancejob holds the player (dead, last stand, hospital bed).
+- `OpenSpawnSelector` answers `BUSY` while any grant is pending, while a service session is open,
+  outside routing bucket 0, and while w_ambulancejob (started) holds the player: its server exports
+  `IsDead` / `InHospitalBed` (dead, last stand, hospital bed; `WCSpawnServer.heldByDeathOwner`). An
+  admin respawn (`wc_respawn`, `RespawnPlayer` kind `admin`) is refused the same way. The client also
+  refuses an `admin` selector (grant handed back) meanwhile.
 
 ## 5. Safe spawn (client)
 

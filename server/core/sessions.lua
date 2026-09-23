@@ -368,6 +368,14 @@ end)
 SS.HOUR_KEY = 'w_creators:hour'
 SS.CLOCK_INTERVAL = 60000
 
+local clockListeners = {}
+
+--- Run fn() after every clock publication (the 60 s tick): what depends on the hour (the clinics
+--  published for w_ambulancejob) is refreshed with it. A throwing listener is logged and skipped.
+function SS.onClock(fn)
+    if type(fn) == 'function' then clockListeners[#clockListeners + 1] = fn end
+end
+
 function SS.publishClock()
     local t = os.date('*t')
     if type(t) ~= 'table' then return false end
@@ -375,6 +383,10 @@ function SS.publishClock()
         GlobalState[SS.HOUR_KEY] = t.hour
         GlobalState[WCUtil.TODAY_KEY] = { year = t.year, month = t.month, day = t.day, hour = t.hour }
     end)
+    for _, fn in ipairs(clockListeners) do
+        local done, err = pcall(fn)
+        if not done then WCDebug.warn('sessions', 'a clock listener failed: %s', tostring(err)) end
+    end
     return ok
 end
 

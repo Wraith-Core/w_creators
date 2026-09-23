@@ -129,17 +129,24 @@ function Store.plan(saved, submitted, owned, loc)
     changed, code, detail = WCOwnership.checkRules(saved.clothing.equipped, resolved)
     if not changed then return nil, code, detail end
 
-    local tints = {}
+    -- A category without a tint (nil / false) is the item's original colour: an owned dye is reset
+    -- only by that explicit choice, never because a submitted dye was dropped (see the pricing loop).
+    local tints, stored = {}, {}
     for category, hash in pairs(resolved) do
         local raw = clothing.tints and clothing.tints[category]
         if raw ~= nil and raw ~= false then
-            -- The saved item with its saved dye, unchanged, is stored data: checked structurally
-            -- only (it survives tints being disabled or a palette list narrowed, §5.4). Only a
+            -- The saved item with its saved dye, unchanged, and an owned item with its owned dye (the
+            -- stored form, WCOwnership.tintOf: re-wearing it) are stored data: checked structurally
+            -- only (they survive tints being disabled or a palette list narrowed, §5.4). Only a
             -- changed or new tint must satisfy the live Config.Clothing.tints.
             local savedTint = saved.clothing.tints[category]
+            local ownedTint = WCOwnership.tintOf(owned, hash, category)
             local tint
             if hash == saved.clothing.equipped[category] and WCOwnership.sameTint(raw, savedTint) then
                 tint = WCOwnership.storedTint(category, savedTint)
+            elseif ownedTint and WCOwnership.sameTint(raw, ownedTint) then
+                tint = ownedTint
+                stored[category] = WCUtil.copy(ownedTint)
             else
                 tint = WCOwnership.cleanTint(category, raw)
             end
@@ -155,7 +162,7 @@ function Store.plan(saved, submitted, owned, loc)
         states = WCUtil.copy(saved.clothing.states),
         outfit = next(changed) == nil and saved.clothing.outfit or nil,
     }
-    local merged = AppearanceSchema.mergeSections(saved, draft, { clothing = true })
+    local merged = AppearanceSchema.mergeSections(saved, draft, { clothing = true }, { storedTints = stored })
     local final = merged.clothing.equipped
     for category in pairs(changed) do
         if final[category] ~= resolved[category] then return nil, 'CONFLICTING_ITEMS', category end
@@ -170,6 +177,10 @@ function Store.plan(saved, submitted, owned, loc)
     for _, category in ipairs(WCUtil.sortedKeys(final)) do
         local hash = final[category]
         local tint = merged.clothing.tints[category]
+        -- a submitted dye the merge did not keep is refused, never turned into a reset of the dye
+        if tint == nil and tints[category] ~= nil and hash == resolved[category] then
+            return nil, 'INVALID_TINT', category
+        end
         -- Only what the player changed is priced: an item worn as saved, with its saved tint, is
         -- never charged and its owned row is never rewritten.
         local untouched = hash == saved.clothing.equipped[category]

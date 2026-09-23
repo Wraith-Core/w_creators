@@ -310,7 +310,9 @@ function S.sanitize(app, opts)
             if style and style >= 1 then
                 out.overlays[id] = {
                     style = math.min(style, layer.styles),
-                    color = WCUtil.int(o.color, 1, WCOverlays.COLORS, 1),
+                    -- a layer drawn without its palette stores colour 1: its colour never shows, so a
+                    -- colour-only change is no change (never charged, NO_CHANGES)
+                    color = WCOverlays.tintable(layer) and WCUtil.int(o.color, 1, WCOverlays.COLORS, 1) or 1,
                     opacity = WCUtil.number(o.opacity, 0, 1, 1) + 0.0,
                 }
             end
@@ -599,7 +601,11 @@ end
 --  saved set is kept as stored). A skin tone never changes unless `skin` is allowed: a submitted
 --  head or body model that has no variant in the kept tone falls back to the saved part.
 --  allowed: a list { 'hair', ... } or a set { hair = true }.
-function S.mergeSections(saved, submitted, allowed)
+--  opts.storedTints { [category] = tint }: stored dyes the caller vouches for (an owned item's dye,
+--  WCOwnership.tintOf): a submitted tint equal to it is kept as stored (structural check only, like
+--  the saved item's saved dye), never re-validated against the live Config.Clothing.tints.
+function S.mergeSections(saved, submitted, allowed, opts)
+    local storedTints = type(opts) == 'table' and type(opts.storedTints) == 'table' and opts.storedTints or {}
     local base = S.sanitize(saved, { rules = false })
     local draft = WCUtil.copy(tableOr(submitted))
     draft.sex, draft.version = base.sex, S.VERSION
@@ -645,10 +651,12 @@ function S.mergeSections(saved, submitted, allowed)
         out.clothing.equipped = equipped
         out.clothing.tints = {}
         for category, tint in pairs(sub.clothing.tints) do
-            -- A saved item with its saved tint keeps it as stored; any other (new) tint must satisfy
-            -- the live Config.Clothing.tints (enabled, the category's palettes).
-            local kept = equipped[category] == base.clothing.equipped[category]
-                and WCUtil.deepEqual(tint, base.clothing.tints[category])
+            -- A saved item with its saved tint, or an item with the stored dye the caller vouches for
+            -- (its owned tint), keeps it as stored; any other (new) tint must satisfy the live
+            -- Config.Clothing.tints (enabled, the category's palettes).
+            local kept = (equipped[category] == base.clothing.equipped[category]
+                    and WCUtil.deepEqual(tint, base.clothing.tints[category]))
+                or (storedTints[category] ~= nil and WCUtil.deepEqual(tint, storedTints[category]))
             if equipped[category] and (kept or WCCatalog.validTint(category, tint)) then
                 out.clothing.tints[category] = WCUtil.copy(tint)
             end

@@ -283,7 +283,11 @@ expiresIn }`. The session lasts 1800 s.
      category cannot be removed.
    - The rules must hold for every changed category (`CONFLICTING_ITEMS`).
    - A new or changed tint must satisfy the live tint config (`INVALID_TINT`). The unchanged saved dye
-     is kept as stored.
+     is kept as stored, and so is an owned item's own dye (`WCOwnership.tintOf`, re-wearing it): that
+     item is free and its owned row is not rewritten, even when tints are disabled or its palette is no
+     longer offered (`mergeSections` keeps it through `opts.storedTints`; the wardrobe does the same).
+     No tint (absent or `false`) is the item's original colour: an owned dye is reset only by that
+     choice, never because a submitted dye was dropped (that is `INVALID_TINT`).
    - Every item that is **not owned** and was changed in any way, a dye of a worn but unowned uniform
      included, is a purchase. It must be sold by the store profile and priced by the pricing profile
      (`COMPONENT_NOT_AVAILABLE`).

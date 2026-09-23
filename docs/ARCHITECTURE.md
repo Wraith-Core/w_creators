@@ -454,7 +454,8 @@ its transport throws; a logger that starts later is picked up by the readiness w
 - The server clock for the client (it has no os library): `publishClock()` (at start and every
   `CLOCK_INTERVAL` = 60 s) sets `GlobalState[HOUR_KEY]` (`'w_creators:hour'`, 0..23, read by the
   service prompts) and `GlobalState[WCUtil.TODAY_KEY]` (`{year, month, day, hour}`, read through
-  `WCUtil.today()` by the creator's date-of-birth window).
+  `WCUtil.today()` by the creator's date-of-birth window), then runs the `onClock(fn)` listeners (the
+  surgery clinics publication).
 
 **`WCAppearanceRepo`**: `load(charid)` → `app, meta` (lazy v3 upgrade §6.2), `save(charid, app, extra?)`
 (one transaction; `extra` = additional `{query, values}` pairs), `create(charid, identity, app, extra?)`,
@@ -1041,7 +1042,8 @@ Kinds `admin` and `death` belong to a player who is already in the world: their 
 `w_creators:client:spawn` (w_core treats `client:spawn` as a fresh login and fires `OnPlayerLoaded`
 again) and never touches the routing bucket (a bucket another resource set after the grant — jail,
 instance — is kept). `OpenSpawnSelector` refuses (`BUSY`) while any grant is pending, while a session
-is open and outside bucket 0.
+is open, outside bucket 0 and while w_ambulancejob holds the player (`heldByDeathOwner`: its server
+`IsDead` / `InHospitalBed`; an admin respawn too).
 
 Client modules. **`WCSpawnSelector`** (`client/spawn/selector.lua`): `open(data)`, `close(opts?)`,
 `active()`, `kind()`, `holding()`, `current()`, `points()`, `index()`, `resolve(data)`, `move(delta)`,
@@ -1177,7 +1179,7 @@ below are the `data` of an `ok` result. Every callback applies `WCSecurity.rate`
 |---|---|---|
 | `w_creators:characters:list` | — | `{characters = [{charid, name, firstname, lastname, dob, age, sex, lastLocation, job, cash, bank, gold, appearance}], slots, canCreate, deletion = {enabled, holdTime, typed}}` — `lastLocation` is the locale key of the nearest spawn point label or nil |
 | `w_creators:characters:select` | `charid` | ownership + per-player lock → `Bridge.LoginCharacter` → wait until `Bridge.GetCharId(src) == charid` (timeout 10 s) → load appearance. `{appearance}`; or `{needsAppearance = true, token, sex?}` when the character has no appearance row (repair path → creator in appearance-only mode) |
-| `w_creators:characters:loaded` | — | valid only after a successful `select`/`create`; marks the character active (`WCCharacters.setActive`), broadcasts the appearance, then starts the spawn flow (grant + `w_creators:client:selectSpawn` or `w_creators:client:spawn`). `{spawn = 'selector'|'direct'|'event'}` |
+| `w_creators:characters:loaded` | — | valid only after a successful `select`/`create` (a repeated call replays the last answer while that activation stands); marks the character active (`WCCharacters.setActive`), broadcasts the appearance, then starts the spawn flow (grant + `w_creators:client:selectSpawn` or `w_creators:client:spawn`). `{spawn = 'selector'|'direct'|'event'}` |
 | `w_creators:characters:beginCreate` | `sex?` (`'male'|'female'`) | service `characterCreation` + free slot → one-shot grant, taken under the per-player lock. `{token, sex}`. Called again with the picked `sex` after the gender scene: same token, sex locked server-side (once the framework character exists the answer carries the locked sex and the creator opens the editor with it; a `create` of the other sex is then `INVALID_PAYLOAD`). After a creation that completed but was never loaded (a lost reply, a failed render) it answers that creation's token (and sex): `create` with it replays the stored result, so no second character is registered |
 | `w_creators:characters:create` | `token, identity {firstname, lastname, dob}, app` | grant valid (a player with an active character → `CREATION_NOT_GRANTED`) → `WCIdentity.validate` (skipped for appearance-only repair) → `AppearanceSchema.sanitize` with creator sections; starting clothing restricted to `Config.Creator.startingClothing` → `TriggerEvent('w_creators:server:characterCreated', src)` → `Bridge.RegisterCharacter` (with the identity `dob`) → appearance row + `starter` ownership in one transaction. `{appearance, charid}`; a repeated token returns the same result |
 | `w_creators:characters:cancelCreate` | `token` | releases the grant |
@@ -1317,3 +1319,13 @@ Every `open` result carries the session `token` and `expiresIn` (seconds); every
   (§3.2, §11, §12, §13); the fixed header wordmark (§0.7); the pending locale queues merged and the
   pre-v3 files removed (§2). Enforced by `tests/test_locale_coverage.py`, `tests/test_static_hygiene.py`
   and `tests/test_global_symbols.py`.
+- **Final gaps (server/shared side of the client review round 3).** The store keeps an owned item's
+  stored dye when it is re-worn (free, not `INVALID_TINT`; `AppearanceSchema.mergeSections(saved,
+  submitted, allowed, opts)` with `opts.storedTints`, also used by the wardrobe) and resets a dye only on
+  an explicit original colour (§5.4); `WCOverlays.UNTINTED` / `WCOverlays.tintable` (layer `tint = false`
+  for the 8 blend-type-1 layers, read by the client renderer) and `sanitize` stores their colour as 1, so
+  a colour-only change is `NO_CHANGES`; a repeated `characters:loaded` replays the last answer while its
+  activation stands (§16.1); `OpenSpawnSelector` and an admin respawn answer `BUSY` while w_ambulancejob
+  reports the player dead, downed or in a bed (`WCSpawnServer.heldByDeathOwner`, §11, §13);
+  `GlobalState['w_creators:clinics']` is published by `WCSurgeryService.publishClinics` at start and on
+  the clock tick (`WCSessions.onClock`, §3.3). Enforced by `tests/test_final_gaps.py`.
