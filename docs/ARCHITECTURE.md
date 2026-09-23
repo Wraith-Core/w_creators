@@ -260,6 +260,10 @@ freezing; `exit` restores everything `enter` changed. Idempotent.
 
 **`WCSpawn`**, **`WCRespawn`**: see §11–§12.
 
+**Domain entry points** (client): `WCStore.open(locationId)`, `WCWardrobe.open(locationId?)`,
+`WCBarber.open(locationId)`, `WCSurgery.open(clinicId)` — each returns immediately if another
+session/editor/scene is active, requests the matching `<kind>:open` callback and drives §17.
+
 ### 3.3 Server
 
 `Bridge` (framework layer, kept), `CreatorLogs` (optional logger, kept).
