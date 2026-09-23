@@ -201,12 +201,22 @@ local function toWorld(src)
     end
 end
 
+--- Kinds of a player who is already in the world (the character is logged in and playing): the
+--  move goes through w_creators:client:respawn and the routing bucket is left alone. w_core treats
+--  w_creators:client:spawn as a fresh login (OnPlayerLoaded), and a bucket another resource set
+--  after the grant (jail, instance) must not be reset to 0.
+local IN_WORLD = { admin = true, death = true }
+
 -- Move the player into the world at pos (the grant, if any, is consumed).
 local function spawnNow(src, pos, point, kind)
     SpawnPending[src] = nil
     pendingKind[src] = nil
-    toWorld(src)
-    TriggerClientEvent('w_creators:client:spawn', src, pos, { kind = kind })
+    if IN_WORLD[kind] then
+        TriggerClientEvent('w_creators:client:respawn', src, pos, { kind = kind, point = point })
+    else
+        toWorld(src)
+        TriggerClientEvent('w_creators:client:spawn', src, pos, { kind = kind })
+    end
     logSpawn(src, kind, point)
     return kind
 end

@@ -186,7 +186,12 @@ end
 -- ---------------------------------------------------------------------
 w.callback.register('w_creators:scene:prepare', function(src) return Scene.isolate(src, true) end)
 w.callback.register('w_creators:scene:registerPed', function(src, netId) return Scene.registerPed(src, netId) end)
-w.callback.register('w_creators:scene:release', function(src) return Scene.release(src) end)
+-- Client-requested releases are rate-limited here (the internal callers of Scene.release are not).
+local function releaseRequest(src)
+    if not WCSecurity.rate(src, 'scene:release', 6, 10000) then return WCResult.fail('RATE_LIMITED') end
+    return Scene.release(src)
+end
+w.callback.register('w_creators:scene:release', function(src) return releaseRequest(src) end)
 
 RegisterNetEvent('w_creators:server:isolate', function() Scene.isolate(source) end)
 RegisterNetEvent('PersonaCreatorHandler.setPlayerRoutingBucket', function() Scene.isolate(source) end)
@@ -195,7 +200,7 @@ RegisterNetEvent('PersonaCreatorHandler.setRoutingBucket', function(netId)
     -- registerPed may wait for the entity: never block the event queue
     CreateThread(function() Scene.registerPed(src, netId) end)
 end)
-RegisterNetEvent('w_creators:server:rejoinWorld', function() Scene.release(source) end)
+RegisterNetEvent('w_creators:server:rejoinWorld', function() releaseRequest(source) end)
 
 -- A fitting-room isolation ends with its store session (expiry, cancel, commit, death).
 if WCSessions and WCSessions.onClose then

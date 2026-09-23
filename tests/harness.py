@@ -7,7 +7,7 @@ Usage (from any tests/test_*.py; the tests directory is on sys.path under unitte
     rt = Runtime()                    # stubs + fixture catalogue (tests/fixtures/catalog.lua)
     rt = Runtime(catalog='real')      # the real w_lib catalogue (skip the test if not REAL_CATALOG)
     rt.load_shared()                  # config/*.lua + shared/*.lua in fxmanifest order
-    rt.load_server_core()             # + server bridge/core/appearance repository/spawn (manifest order)
+    rt.load_server_core()             # + server bridge/core/appearance repository+sync/spawn (manifest order)
     rt.load('server/core/economy.lua')
     rt.eval('WCUtil.u32(-1)')         # evaluate a Lua expression
     rt.run('x = 1')                   # execute Lua statements
@@ -99,10 +99,11 @@ class Runtime:
         return self.load(*manifest_scripts('shared'))
 
     def load_server_core(self):
-        """Shared scripts, then the server scripts up to and including the appearance repository
-        and the spawn service (bridge, core, repository, spawn)."""
+        """Shared scripts, then the server scripts up to and including the appearance repository,
+        the appearance sync and the spawn service (bridge, core, repository, sync, spawn)."""
         self.load_shared()
-        wanted = ('server/bridge/', 'server/core/', 'server/appearance/repository.lua', 'server/spawn/spawn.lua')
+        wanted = ('server/bridge/', 'server/core/', 'server/appearance/repository.lua',
+                  'server/appearance/sync.lua', 'server/spawn/spawn.lua')
         return self.load(*[p for p in manifest_scripts('server') if p.startswith(wanted)])
 
     # -- evaluation ------------------------------------------------------------------------

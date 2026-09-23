@@ -87,7 +87,7 @@ class EditorBase(unittest.TestCase):
         self.rt = Runtime()
         self.rt.load_shared()
         self.rt.run(CLIENT)
-        self.rt.load('client/editor/editor.lua', 'client/editor/tree.lua', 'client/editor/panel.lua')
+        self.rt.load('client/editor/tree.lua', 'client/editor/editor.lua', 'client/editor/panel.lua')
 
     def run_lua(self, code):
         return self.rt.run(code)

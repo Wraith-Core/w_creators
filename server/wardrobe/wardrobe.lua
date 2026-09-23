@@ -189,7 +189,7 @@ function Wardrobe.commit(src, token, opId, submitted)
         or not WCSecurity.payload(submitted, MAX_PAYLOAD) then
         return fail('INVALID_PAYLOAD')
     end
-    return WCSessions.commit(src, token, opId, function(s) return commitWardrobe(src, s, submitted) end)
+    return WCSessions.commit(src, token, opId, function(s) return commitWardrobe(src, s, submitted) end, { kind = 'wardrobe' })
 end
 
 w.callback.register('w_creators:wardrobe:open', function(src, locationId)

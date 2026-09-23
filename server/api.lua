@@ -37,16 +37,10 @@ local REMOVED = { [0] = true, [-1] = true }
 local fail, ok = WCResult.fail, WCResult.ok
 local writeCounter = 0
 
--- The waist type metaped outfit hashes; body.weight is the 1-based index. The same list as
--- Appearance.WAIST_TYPES (client/appearance/pipeline.lua), which the renderer equips: the
--- framework-bridge skin carries the outfit hash (w.component.applySkin -> EquipMetaPedOutfit).
-Api.WAIST_TYPES = {
-    -2045421226, -1745814259, -325933489, -1065791927, -844699484,
-    -1273449080, 927185840, 149872391, 399015098, -644349862,
-    1745919061, 1004225511, 1278600348, 502499352, -2093198664,
-    -1837436619, 1736416063, 2040610690, -1173634986, -867801909,
-    1960266524,
-}
+-- The waist type metaped outfit hashes; body.weight is the 1-based index. The shared list
+-- (AppearanceSchema.WAIST_TYPES) the client renderer equips: the framework-bridge skin carries the
+-- outfit hash (w.component.applySkin -> EquipMetaPedOutfit).
+Api.WAIST_TYPES = AppearanceSchema.WAIST_TYPES
 
 --- The body.weight index of a standard bodyWeight (a WAIST_TYPES outfit hash, signed or unsigned),
 --  or nil when it is not one of them.

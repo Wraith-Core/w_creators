@@ -130,6 +130,15 @@ class SceneTests(Base):
         self.assertTrue(self.call('scene:release', 1).ok)
         self.assertEqual(self.bucket(), 77)
 
+    def test_release_requests_are_rate_limited(self):
+        self.assertTrue(self.call('scene:prepare', 1).ok)
+        for _ in range(5):
+            self.assertTrue(self.call('scene:release', 1).ok)
+        self.rt.run('fireEvent("w_creators:server:rejoinWorld", 1)')         # the 6th (shared budget)
+        self.assertEqual(self.call('scene:release', 1).code, 'RATE_LIMITED')
+        self.later()
+        self.assertTrue(self.call('scene:release', 1).ok)
+
     def test_resource_stop_and_drop_touch_only_tracked_buckets(self):
         self.rt.run('Players[3] = { name = "three", coords = vector3(0, 0, 0), bucket = 0 }')
         self.assertTrue(self.call('scene:prepare', 1).ok)

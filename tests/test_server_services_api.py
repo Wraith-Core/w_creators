@@ -268,6 +268,21 @@ class ApiReviewRegressionTests(unittest.TestCase):
         self.rt.run('Players[1].bucket = 0')
         self.assertTrue(self.e('WCApi.OpenSpawnSelector(1).ok'))
 
+    def test_admin_spawn_choice_moves_the_player_without_a_fresh_login(self):
+        self.assertTrue(self.e('WCApi.OpenSpawnSelector(1).ok'))
+        # another resource instances the player between the grant and the choice
+        self.rt.run('Players[1].bucket = 55')
+        r = self.e('Callbacks["w_creators:spawn:choose"](1, "rhodes")')
+        self.assertTrue(r.ok, r.code)
+        self.assertEqual(r.data.kind, 'admin')
+        self.assertEqual(len(self.rt.client_events('w_creators:client:spawn')), 0,
+                         'client:spawn is a fresh login for w_core')
+        respawn = self.rt.client_events('w_creators:client:respawn')
+        self.assertEqual(len(respawn), 1)
+        self.assertEqual((respawn[0].args[2].kind, respawn[0].args[2].point), ('admin', 'rhodes'))
+        self.assertEqual(self.e('Players[1].bucket'), 55, 'the other resource keeps its bucket')
+        self.assertIsNone(self.e('WCSpawnServer.pending(1)'))
+
     def test_prompt_less_clinic_opens_only_through_the_export(self):
         self.rt.run('Players[1].coords = vector3(-284.49, 807.49, 119.38)')
         self.assertEqual(self.e('WCSurgeryService.open(1, "valentine_surgery").code'), 'SURGERY_NOT_ALLOWED')

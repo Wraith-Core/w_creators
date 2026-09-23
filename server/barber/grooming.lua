@@ -254,3 +254,17 @@ AddEventHandler('w_creators:server:characterCleared', function(src, charid)
     local t = tracked[tonumber(src) or src]
     if t and (charid == nil or tostring(charid) == t.charid) then GS.flush(tonumber(src) or src, false) end
 end)
+
+-- A character became active: a leftover entry of another character is written first, and the new
+-- one is tracked (paused until the next tick finds it eligible: the spawn grant is usually still
+-- pending here) so it never waits for the polling pass to be noticed.
+AddEventHandler('w_creators:server:characterActivated', function(src, charid)
+    src = tonumber(src)
+    if not src or charid == nil or not enabled() then return end
+    charid = tostring(charid)
+    local t = tracked[src]
+    if t and t.charid == charid then return end
+    if t then GS.flush(src, false) end
+    local now = GetGameTimer()
+    tracked[src] = { charid = charid, seconds = 0, last = now, savedAt = now, paused = true }
+end)

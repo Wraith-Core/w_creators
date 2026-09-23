@@ -210,6 +210,9 @@ end
 RegisterNetEvent('w_creators:client:applyAppearance', function(app) Sync.applyOwn(app) end)
 -- legacy alias (kept event name, §13)
 RegisterNetEvent('PersonaCreatorHandler.applyCharacterAppearance', function(app) Sync.applyOwn(app) end)
+-- hair / beard grew a stage (server/barber/grooming.lua): the same store-and-render path (never
+-- rendered over an open editor)
+RegisterNetEvent('w_creators:client:grooming', function(app) Sync.applyOwn(app) end)
 
 -- ---------------------------------------------------------------------
 --  The scope watcher and the initial request

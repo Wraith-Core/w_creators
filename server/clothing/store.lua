@@ -276,7 +276,7 @@ function Store.commit(src, token, opId, submitted)
         or not WCSecurity.payload(submitted, MAX_PAYLOAD) then
         return fail('INVALID_PAYLOAD')
     end
-    return WCSessions.commit(src, token, opId, function(s) return commitStore(src, s, submitted) end)
+    return WCSessions.commit(src, token, opId, function(s) return commitStore(src, s, submitted) end, { kind = 'store' })
 end
 
 w.callback.register('w_creators:store:open', function(src, locationId)

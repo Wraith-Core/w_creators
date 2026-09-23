@@ -547,6 +547,27 @@ end
 --- Equip a hash through the rules; the owned tint (if any) follows the item.
 --  An item the rules drop (a requirement missing, e.g. a buckle without a belt) is a conflict, not
 --  a silent no-op.
+--- Store mode: the clothing states the server will save with this equipment
+--  (WCOwnership.settleStates on the commit). A saved state is kept only while its items are still
+--  the saved ones and it still applies; a swapped or removed item is shown in its default state.
+local function storeStates(s, app)
+    local out = {}
+    local savedStates = s.saved.clothing.states or {}
+    local savedEq, eq = s.saved.clothing.equipped, app.clothing.equipped
+    for _, def in ipairs(WCClothingStates.groups) do
+        local value = savedStates[def.id]
+        if value ~= nil and def.persist and WCClothingStates.isValid(def.id, value) then
+            local swapped = false
+            for _, category in ipairs(def.categories or {}) do
+                if eq[category] ~= savedEq[category] then swapped = true break end
+            end
+            if not swapped and WCClothingStates.applicable(app, def.id) then out[def.id] = value end
+        end
+    end
+    return out
+end
+T.storeStates = storeStates
+
 local function equipItem(s, app, category, hash)
     local _, removed, err = AppearanceSchema.equip(app, category, hash)
     if err then return err end
@@ -558,6 +579,7 @@ local function equipItem(s, app, category, hash)
         app.clothing.tints[category] = ownedTint(s, category, hash)
     end
     app.clothing.outfit = nil
+    if s.mode == 'store' then app.clothing.states = storeStates(s, app) end
     return nil
 end
 
@@ -944,9 +966,14 @@ function T.price(s)
         for _, category in ipairs(WCUtil.sortedKeys(s.working.clothing.tints)) do
             local tint = s.working.clothing.tints[category]
             local hash = equipped[category]
+            -- the server prices only what changed: the saved item with its saved tint is free even
+            -- when its owned tint differs (WCClothingStore.plan)
+            local untouched = hash == saved.equipped[category] and sameTint(tint, saved.tints[category])
             local baseline = ownedTint(s, category, hash)
             if hash == saved.equipped[category] and baseline == nil then baseline = saved.tints[category] end
-            if not sameTint(tint, baseline) then line(L(K.color) .. ' · ' .. L(WCCatalog.label(category)), tintPrice) end
+            if not untouched and not sameTint(tint, baseline) then
+                line(L(K.color) .. ' · ' .. L(WCCatalog.label(category)), tintPrice)
+            end
         end
     elseif s.mode == 'barber' then
         local changed = AppearanceSchema.changedSections(s.saved, s.working)

@@ -60,8 +60,8 @@ client_scripts {
     'client/scene/scene.lua',
     'client/scene/environment.lua',
     -- editor
+    'client/editor/tree.lua',   -- WCEditorTree before the editor that builds with it
     'client/editor/editor.lua',
-    'client/editor/tree.lua',
     'client/editor/panel.lua',
     -- domains
     'client/characters/selector.lua',

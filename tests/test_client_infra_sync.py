@@ -163,6 +163,11 @@ class OwnAppearanceTests(unittest.TestCase):
         self.assertEqual(self.e('count("preset")'), 1)
         self.assertEqual(self.e('WCState.appearance.version'), 3)
 
+    def test_grooming_stage_change_renders_and_stores(self):
+        self.run('clearLog(); fire("w_creators:client:grooming", app)')
+        self.assertEqual(self.e('count("preset")'), 1)
+        self.assertTrue(self.e('AppearanceSchema.equal(WCState.appearance, app)'))
+
     def test_skipped_while_in_editor(self):
         self.run('WCState.busy("editor", true); clearLog(); fire("w_creators:client:applyAppearance", app)')
         self.assertEqual(self.e('count("preset")'), 0)

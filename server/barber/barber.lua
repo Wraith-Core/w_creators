@@ -284,7 +284,7 @@ function Barber.commit(src, token, opId, submitted)
         or not WCSecurity.payload(submitted, MAX_PAYLOAD) then
         return fail('INVALID_PAYLOAD')
     end
-    return WCSessions.commit(src, token, opId, function(s) return commitBarber(src, s, submitted) end)
+    return WCSessions.commit(src, token, opId, function(s) return commitBarber(src, s, submitted) end, { kind = 'barber' })
 end
 
 w.callback.register('w_creators:barber:open', function(src, locationId)

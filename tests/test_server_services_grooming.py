@@ -120,6 +120,21 @@ class GroomingTests(unittest.TestCase):
         self.assertEqual(self.e('saves()'), 1)
         self.assertEqual(self.e('FakeDB.transactions[1][1].values[8]'), 'vorp:1')
 
+    def test_activation_tracks_at_once_and_writes_a_leftover_character(self):
+        self.rt.run('TriggerEvent("w_creators:server:characterActivated", 1, "vorp:1", "male")')
+        self.assertEqual(self.e('WCGroomingServer.pending(1).charid'), 'vorp:1')
+        self.assertTrue(self.e('WCGroomingServer.pending(1).paused'), 'paused until a tick finds it eligible')
+        self.rt.run('step(0); step(30)')
+        self.assertEqual(self.e('WCGroomingServer.pending(1).seconds'), 30)
+        # a repeated activation of the same character keeps the counter
+        self.rt.run('TriggerEvent("w_creators:server:characterActivated", 1, "vorp:1", "male")')
+        self.assertEqual(self.e('WCGroomingServer.pending(1).seconds'), 30)
+        # another character activated without a clear: the leftover growth is written first
+        self.rt.run('rows["vorp:2"] = { id = 12, charid = "vorp:2", appearance = json.encode(S.default("male")), appearance_version = 3 }')
+        self.rt.run('charids[1] = "vorp:2"; TriggerEvent("w_creators:server:characterActivated", 1, "vorp:2", "male"); tick(1000)')
+        self.assertEqual(self.e('saves()'), 1)
+        self.assertEqual(self.e('WCGroomingServer.pending(1).charid'), 'vorp:2')
+
     def test_a_locked_character_defers_the_write(self):
         self.rt.run('Config.Grooming.saveIntervalSeconds = 30; step(0); CreatorAppearanceLocks["vorp:1"] = "other"; step(30); step(30)')
         self.assertEqual(self.e('saves()'), 0)

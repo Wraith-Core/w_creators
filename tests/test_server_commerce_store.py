@@ -9,7 +9,6 @@ import unittest
 from harness import Runtime
 
 COMMERCE_FILES = (
-    'server/appearance/sync.lua',
     'server/clothing/ownership.lua',
     'server/clothing/store.lua',
     'server/clothing/states.lua',

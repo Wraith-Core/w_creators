@@ -23,6 +23,17 @@ S.VERSION = 3
 S.SECTIONS = { 'identity', 'body', 'face', 'eyebrows', 'skin', 'eyes', 'hair', 'facialHair', 'makeup',
                'clothing', 'states' }
 
+--- The waist type metaped outfit hashes (signed); body.weight is the 1-based index. The client
+--  renderer equips them (Appearance.WAIST_TYPES) and the server API exposes them as the framework
+--  bridge's bodyWeight (WCApi.WAIST_TYPES): one list for both sides.
+S.WAIST_TYPES = {
+    -2045421226, -1745814259, -325933489, -1065791927, -844699484,
+    -1273449080, 927185840, 149872391, 399015098, -644349862,
+    1745919061, 1004225511, 1278600348, 502499352, -2093198664,
+    -1837436619, 1736416063, 2040610690, -1173634986, -867801909,
+    1960266524,
+}
+
 -- The essential part -> the section it belongs to (meta.defaultsUsed reports sections).
 local ESSENTIAL_SECTION = { heads = 'face', teeth = 'face', eyes = 'eyes', BODIES_UPPER = 'body',
                             BODIES_LOWER = 'body' }

@@ -548,8 +548,21 @@ class ReviewRegressionTests(Base):
         self.rt.run('FakeDB.transactionOk = false')
         self.assertEqual(self.call('characters:delete', 1, 'vorp:1').code, 'DATABASE_ERROR')
         self.later(11000)
-        self.rt.run('FakeDB.transactionOk = true; table.insert(owned[1], { charid = "vorp:1", name = "John Smith" })')
-        self.assertTrue(self.call('characters:delete', 1, 'vorp:1').ok)       # a retry completes it
+        self.rt.run('FakeDB.transactionOk = true')
+        before = self.e('#FakeDB.transactions')
+        self.assertTrue(self.call('characters:delete', 1, 'vorp:1').ok)       # the retry finishes the cleanup
+        self.assertEqual(self.e('#FakeDB.transactions'), before + 1)
+        self.assertEqual(self.e('countLogs("character_access_denied")'), 0)
+        self.later(11000)
+        self.assertEqual(self.call('characters:delete', 1, 'vorp:1').code, 'NOT_CHARACTER_OWNER')  # cleanup done once
+
+    def test_a_failed_appearance_cleanup_is_retried_when_the_player_drops(self):
+        self.rt.run('FakeDB.transactionOk = false')
+        self.assertEqual(self.call('characters:delete', 1, 'vorp:1').code, 'DATABASE_ERROR')
+        self.rt.run('FakeDB.transactionOk = true')
+        before = self.e('#FakeDB.transactions')
+        self.rt.run('fireEvent("playerDropped", 1); tick(0)')
+        self.assertEqual(self.e('#FakeDB.transactions'), before + 1)
 
 
 class OptionalLoggingTests(Base):

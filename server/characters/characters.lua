@@ -37,6 +37,7 @@ local switching = {} -- [src] = { from = charid, at = ms }
 local pending = {}   -- [src] = { charid, sex, app, kind, isNew, token?, selected? } awaiting `loaded`
 local grants = {}    -- [src] = { token, kind = 'create' | 'repair', expires, sex?, charid?, provisioned?, identity? }
 local busy = {}      -- [src] = operation name (one character operation per player at a time)
+local cleanup = {}   -- [src] = { [charid] = true }: framework row deleted, appearance cleanup still owed
 
 local GRANT_TTL_MS = 30 * 60 * 1000
 -- A character adopted after a resource restart may re-enter the selection (the restarted client
@@ -769,6 +770,18 @@ function Chars.delete(src, charid, confirmText)
     end
 
     return guarded(src, 'delete', function()
+        -- A previous deletion removed the framework row but not the appearance data: the retry
+        -- only finishes that cleanup (the row is gone, so no ownership check can succeed).
+        if cleanup[src] and cleanup[src][charid] then
+            local removed, repoDone = pcall(WCAppearanceRepo.delete, charid)
+            if not removed or repoDone ~= true then
+                WCDebug.warn('characters', 'deleting the appearance data of %s failed again: %s', charid, tostring(repoDone))
+                return fail('DATABASE_ERROR')
+            end
+            cleanup[src][charid] = nil
+            if next(cleanup[src]) == nil then cleanup[src] = nil end
+            return ok({ charid = charid })
+        end
         local row, ownCode = findOwned(src, charid)
         if not row then
             if ownCode == 'NOT_CHARACTER_OWNER' then
@@ -785,17 +798,15 @@ function Chars.delete(src, charid, confirmText)
             end
         end
         -- The framework row, then the appearance, owned clothes and outfits (one transaction in
-        -- WCAppearanceRepo.delete, called by the bridge).
-        local called, err = pcall(Bridge.DeleteCharacter, src, charid)
-        if not called then
-            WCDebug.warn('characters', 'deleting %s failed: %s', charid, tostring(err))
+        -- WCAppearanceRepo.delete, called by the bridge). The bridge returns false, stage.
+        local called, deleted, stage = pcall(Bridge.DeleteCharacter, src, charid)
+        if not called or (deleted ~= true and stage ~= 'appearance') then
+            WCDebug.warn('characters', 'deleting %s failed: %s', charid, tostring(called and stage or deleted))
             return fail('DATABASE_ERROR')
         end
         local g = grants[src]
         if g and (g.charid == charid or g.provisioned == charid) then grants[src] = nil end
-        -- The bridge swallows framework errors and ignores the appearance transaction's result:
-        -- the framework row must be gone (rsg / qbr delete asynchronously) and the appearance, clothes
-        -- and outfits deleted (idempotent, checked here).
+        -- rsg / qbr delete asynchronously: the framework row must really be gone.
         local gone = WCUtil.waitUntil(function()
             local _, code = findOwned(src, charid)
             return code == 'NOT_CHARACTER_OWNER'
@@ -804,10 +815,15 @@ function Chars.delete(src, charid, confirmText)
             WCDebug.warn('characters', 'the framework row of %s is still present after the deletion', charid)
             return fail('DATABASE_ERROR')
         end
-        local removed, repoDone = pcall(WCAppearanceRepo.delete, charid)
-        if not removed or repoDone ~= true then
-            WCDebug.warn('characters', 'deleting the appearance data of %s failed: %s', charid, tostring(repoDone))
-            return fail('DATABASE_ERROR')
+        -- The appearance transaction failed in the bridge: one more attempt (idempotent).
+        if deleted ~= true then
+            local removed, repoDone = pcall(WCAppearanceRepo.delete, charid)
+            if not removed or repoDone ~= true then
+                WCDebug.warn('characters', 'deleting the appearance data of %s failed: %s', charid, tostring(repoDone))
+                cleanup[src] = cleanup[src] or {}
+                cleanup[src][charid] = true
+                return fail('DATABASE_ERROR')
+            end
         end
         return ok({ charid = charid })
     end)
@@ -838,6 +854,20 @@ AddEventHandler('playerDropped', function()
     local src = playerId(source)
     if not src then return end
     busy[src], grants[src], pending[src], switching[src] = nil, nil, nil, nil
+    -- Appearance cleanups the player did not retry: one last attempt in the background.
+    local owed = cleanup[src]
+    cleanup[src] = nil
+    if owed then
+        CreateThread(function()
+            for charid in pairs(owed) do
+                local removed, repoDone = pcall(WCAppearanceRepo.delete, charid)
+                if not removed or repoDone ~= true then
+                    WCDebug.warn('characters', 'the appearance data of the deleted character %s is left behind: %s',
+                        charid, tostring(repoDone))
+                end
+            end
+        end)
+    end
     -- The active character is kept until the end of this tick so the playerDropped handlers of
     -- later files (grooming, domains) can still read it.
     local entry = active[src]

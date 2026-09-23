@@ -36,7 +36,7 @@ function logsOf(event)
 end
 '''
 
-FILES = ('server/appearance/sync.lua', 'server/barber/barber.lua', 'server/barber/grooming.lua',
+FILES = ('server/barber/barber.lua', 'server/barber/grooming.lua',
          'server/surgery/surgery.lua', 'server/api.lua')
 
 

@@ -132,13 +132,11 @@ function Surgery.open(src, clinicId)
     local opened = WCSessions.open(src, 'surgery', { locationId = clinicId })
     if not opened.ok then return opened end
     local s = opened.data.session
-    if needsGrant(clinicId) then
-        if not Surgery.granted(src, clinicId) then
-            WCDebug.log('surgery', '%s requested %s without a grant', tostring(src), clinicId)
-            WCSessions.close(src, s.token)
-            return fail('SURGERY_NOT_ALLOWED')
-        end
-        grants[tonumber(src) or src] = nil
+    local grantNeeded = needsGrant(clinicId)
+    if grantNeeded and not Surgery.granted(src, clinicId) then
+        WCDebug.log('surgery', '%s requested %s without a grant', tostring(src), clinicId)
+        WCSessions.close(src, s.token)
+        return fail('SURGERY_NOT_ALLOWED')
     end
     local sections = Surgery.sections(s.sex)
     if next(sections) == nil then
@@ -151,12 +149,27 @@ function Surgery.open(src, clinicId)
         WCSessions.close(src, s.token)
         return fail('INVALID_PRICE')
     end
+    local allow = Surgery.allow(s.sex)
+    -- A clinic that allows clothing offers the owned items too (the editor's clothing filter reads
+    -- context.owned, which is this open data).
+    local owned
+    if allow.clothing then
+        local list, code = WCOwnership.list(s.charid)
+        if not list then
+            WCSessions.close(src, s.token)
+            return fail(code or 'DATABASE_ERROR')
+        end
+        owned = list
+    end
+    -- The one-use grant is consumed only by an open that succeeded.
+    if grantNeeded then grants[tonumber(src) or src] = nil end
     return WCResult.ok({
         token = s.token,
         appearance = WCUtil.copy(s.snapshot),
         price = price,
-        allow = Surgery.allow(s.sex),
+        allow = allow,
         sections = sections,
+        owned = owned,
         clinic = s.location.id,
         expiresIn = math.max(0, s.expires - os.time()),
     })
@@ -275,7 +288,7 @@ function Surgery.commit(src, token, opId, submitted)
         or not WCSecurity.payload(submitted, MAX_PAYLOAD) then
         return fail('INVALID_PAYLOAD')
     end
-    return WCSessions.commit(src, token, opId, function(s) return commitSurgery(src, s, submitted) end)
+    return WCSessions.commit(src, token, opId, function(s) return commitSurgery(src, s, submitted) end, { kind = 'surgery' })
 end
 
 w.callback.register('w_creators:surgery:open', function(src, clinicId)

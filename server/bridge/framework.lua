@@ -387,15 +387,17 @@ local function coreLogin(source, citizenid, newData)
     return false
 end
 
---- Deleting a character on the citizenid-based cores (rsg / qbr).
+--- Deleting a character on the citizenid-based cores (rsg / qbr). Returns true when the core
+--  accepted the request (both cores delete asynchronously; the caller confirms the row is gone).
 local function coreDelete(source, citizenid)
     if Bridge.Name == 'rsg' then
-        pcall(function() rsgCore().Player.DeleteCharacter(source, citizenid) end)
+        return (pcall(function() rsgCore().Player.DeleteCharacter(source, citizenid) end))
     elseif Bridge.Name == 'qbr' then
         if GetResourceState('qbr-core') == 'started' then
-            pcall(function() exports.w_lib:FwNativeCoreCall('DeleteCharacter',source,citizenid) end)
+            return (pcall(function() exports.w_lib:FwNativeCoreCall('DeleteCharacter',source,citizenid) end))
         end
     end
+    return false
 end
 
 --- An approximate date of birth from the age (in YYYY-MM-DD form).
@@ -403,6 +405,28 @@ local function birthdateFromAge(age)
     local years = tonumber(age) or 20
     local year = tonumber(os.date('%Y')) - years
     return ('%04d-01-01'):format(year)
+end
+
+--- The date of birth to store: the validated identity dob (YYYY-MM-DD) when present, otherwise
+--  derived from the age (the pre-v3 callers only sent an age).
+local function birthdateOf(data)
+    local dob = type(data.dob) == 'string' and data.dob:match('^(%d%d%d%d%-%d%d%-%d%d)$') or nil
+    return dob or birthdateFromAge(data.age)
+end
+
+--- The age to store (VORP keeps an age column, not a date): the identity age, else computed from
+--  the dob against the current year, else 20.
+local function ageOf(data)
+    local age = tonumber(data.age)
+    if age then return math.floor(age) end
+    local y, m, d = tostring(data.dob or ''):match('^(%d%d%d%d)%-(%d%d)%-(%d%d)$')
+    if y then
+        local now = os.date('*t')
+        age = now.year - tonumber(y)
+        if now.month < tonumber(m) or (now.month == tonumber(m) and now.day < tonumber(d)) then age = age - 1 end
+        return age
+    end
+    return 20
 end
 
 --- The job label for the selection card (rsg / qbr): the players table keeps the job as a JSON
@@ -542,7 +566,8 @@ function Bridge.DisplayName(data)
 end
 
 --- Registering a new character officially in the framework. It returns the charid on success or nil.
---  data = { firstname, lastname, name, isMale, age }
+--  data = { firstname, lastname, name, isMale, dob?, age? } — dob (YYYY-MM-DD, validated by
+--  WCIdentity) is the rsg/qbr charinfo.birthdate; VORP stores the age (from data.age or the dob).
 --  firstname/lastname are the source: VORP and every framework here store them in two
 --  separate columns. name stays for display only.
 function Bridge.RegisterCharacter(source, data)
@@ -571,7 +596,7 @@ function Bridge.RegisterCharacter(source, data)
                 lastname = last,
                 charDescription = 'New Character',
                 nickname = first,
-                age = data.age or 20,
+                age = ageOf(data),
                 gender = data.isMale and 'm' or 'f',
                 skin = '{}',
                 comps = '{}',
@@ -609,7 +634,7 @@ function Bridge.RegisterCharacter(source, data)
             charinfo = {
                 firstname = first,
                 lastname = last,
-                birthdate = birthdateFromAge(data.age),
+                birthdate = birthdateOf(data),
                 gender = data.isMale and 0 or 1,
                 nationality = 'USA',
             },
@@ -650,35 +675,48 @@ function Bridge.LoginCharacter(source, charid)
     end
 end
 
---- Deleting a character.
+--- Deleting a character: the framework row, then the appearance, owned clothes and outfits (one
+--  transaction in WCAppearanceRepo.delete).
+--  Returns true when both succeeded, otherwise false, stage ('framework' | 'appearance'). rsg / qbr
+--  delete asynchronously: true there means the core accepted the request, and the caller confirms
+--  that the row is gone.
 function Bridge.DeleteCharacter(source, charid)
-    -- It is recorded before the deletion: after it the character's name is unrecoverable.
+    charid = tostring(charid)
+    -- It is recorded before the deletion: after it the character's name is unrecoverable. The
+    -- logger is optional and never blocks the deletion.
     local deletedName
-    for _, c in ipairs(Bridge.GetCharacters(source)) do
+    local listed, list = pcall(Bridge.GetCharacters, source)
+    for _, c in ipairs(listed and type(list) == 'table' and list or {}) do
         if c.charid == charid then deletedName = c.name break end
     end
-    CreatorLogs.Emit('character_deleted', {
+    pcall(CreatorLogs.Emit, 'character_deleted', {
         playerSource = source,
-        charid = tostring(charid),
+        charid = charid,
         charName = deletedName,
         framework = Bridge.Name,
-        transactionId = ('wcdel-%s-%s'):format(tostring(charid), os.time()),
+        transactionId = ('wcdel-%s-%s'):format(charid, os.time()),
         reason = 'حذف من شاشة اختيار الشخصيات',
     })
+
+    local frameworkOk
     if Bridge.Name == 'vorp' then
         local raw = tonumber((charid:gsub('^vorp:', '')))
-        if raw then
-            w.database.query.await(('DELETE FROM %s WHERE charidentifier = ?'):format(Config.Characters.tables.vorp), { raw })
-        end
+        frameworkOk = raw ~= nil and (pcall(w.database.query.await,
+            ('DELETE FROM %s WHERE charidentifier = ?'):format(Config.Characters.tables.vorp), { raw }))
     else
-        coreDelete(source, charid)
+        frameworkOk = coreDelete(source, charid)
     end
-    -- The appearance, the owned clothing and the outfits go in one transaction (WCAppearanceRepo).
+    if not frameworkOk then return false, 'framework' end
+
+    local appearanceOk
     if WCAppearanceRepo and WCAppearanceRepo.delete then
-        WCAppearanceRepo.delete(charid)
+        local called, done = pcall(WCAppearanceRepo.delete, charid)
+        appearanceOk = called and done == true
     else
-        w.database.query.await('DELETE FROM characters_appearence WHERE charid = ?', { charid })
+        appearanceOk = (pcall(w.database.query.await, 'DELETE FROM characters_appearence WHERE charid = ?', { charid }))
     end
+    if not appearanceOk then return false, 'appearance' end
+    return true
 end
 
 CreateThread(function()

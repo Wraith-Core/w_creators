@@ -208,17 +208,20 @@ local function replayOf(src, opId, token)
 end
 
 --- Commit: fn(session) -> Result | value (a thrown error becomes INTERNAL_ERROR).
-function SS.commit(src, token, opId, fn)
+--  opts = { kind? }: when kind is given, a session of another kind is SESSION_NOT_FOUND.
+function SS.commit(src, token, opId, fn, opts)
     if (type(opId) ~= 'string' and type(opId) ~= 'number') or #tostring(opId) > MAX_OP_ID
         or type(fn) ~= 'function' then
         return fail('INVALID_PAYLOAD')
     end
+    local wantKind = type(opts) == 'table' and opts.kind or nil
     opId = tostring(opId)
     local cached = replayOf(src, opId, token)
     if cached then return cached end
 
     local s, code = SS.get(src, token)
     if not s then return fail(code) end
+    if wantKind ~= nil and s.kind ~= wantKind then return fail('SESSION_NOT_FOUND') end
     if s.busy or CreatorAppearanceLocks[s.charid] then return fail('BUSY') end
     if s.location and not withinRange(src, s.location) then return fail('TOO_FAR') end
 
@@ -258,6 +261,26 @@ end
 
 AddEventHandler('playerDropped', function()
     SS.clear(source, 'dropped')
+end)
+
+--- Forced closes the client did not ask for: tell it, so it restores its snapshot and leaves the
+--  preview (§16.4 w_creators:client:sessionClosed(token, reason)). A drop has nobody to tell; a
+--  commit or a client close already knows.
+SS.NOTIFY_REASONS = { expired = true, stopped = true, character = true }
+
+SS.onClose(function(s, reason)
+    if not SS.NOTIFY_REASONS[reason] then return end
+    TriggerClientEvent('w_creators:client:sessionClosed', s.src, s.token, reason)
+end)
+
+--- w_creators:session:close(token): the client left the editor (cancel, death, own cleanup).
+--  Ok for any known or unknown token (idempotent); RATE_LIMITED / INVALID_PAYLOAD on abuse; a commit
+--  still running keeps its session and closes it itself.
+w.callback.register('w_creators:session:close', function(src, token)
+    if not WCSecurity.rate(src, 'session:close', 10, 10000) then return fail('RATE_LIMITED') end
+    if type(token) ~= 'string' or #token > 128 then return fail('INVALID_PAYLOAD') end
+    SS.close(src, token)
+    return WCResult.ok()
 end)
 
 AddEventHandler('onResourceStop', function(resource)

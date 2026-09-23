@@ -305,6 +305,40 @@ class SessionTests(unittest.TestCase):
         self.rt.run('WCSessions.clear(1); Config.CosmeticSurgery.enabled = false')
         self.assertEqual(self.open(kind='surgery', loc='valentine_surgery').code, 'SURGERY_DISABLED')
 
+    def test_close_callback_is_registered_and_idempotent(self):
+        self.open()
+        self.rt.run('token = r.data.token')
+        cb = self.e('Callbacks["w_creators:session:close"]')
+        self.assertIsNotNone(cb)
+        self.assertTrue(cb(1, self.e('token')).ok)
+        self.assertIsNone(self.e('WCSessions.current(1)'))
+        self.assertTrue(cb(1, self.e('token')).ok, 'idempotent')
+        self.assertEqual(cb(1, 42).code, 'INVALID_PAYLOAD')
+        self.assertEqual(len(self.rt.client_events('w_creators:client:sessionClosed')), 0,
+                         'a close the client asked for is not echoed')
+        self.assertTrue(self.open().ok, 'a cancelled visit no longer blocks the next open')
+
+    def test_forced_closes_notify_the_client(self):
+        self.open()
+        self.rt.run('token = r.data.token; r.data.session.expires = os.time() - 1')
+        self.e('WCSessions.get(1, token)')
+        self.rt.run('Clock.now = Clock.now + 11000')
+        self.open()
+        self.rt.run('token2 = r.data.token')
+        self.rt.run('fireEvent("onResourceStop", nil, "w_creators")')
+        events = self.rt.client_events('w_creators:client:sessionClosed')
+        self.assertEqual([(e.player, e.args[2]) for e in events], [(1, 'expired'), (1, 'stopped')])
+        self.assertEqual((events[0].args[1], events[1].args[1]), (self.e('token'), self.e('token2')))
+
+    def test_commit_refuses_a_session_of_another_kind(self):
+        self.open()
+        self.rt.run('token = r.data.token')
+        self.rt.run('c = WCSessions.commit(1, token, "op1", function() return WCResult.ok() end, { kind = "barber" })')
+        self.assertEqual(self.e('c.code'), 'SESSION_NOT_FOUND')
+        self.assertIsNotNone(self.e('WCSessions.current(1)'))
+        self.rt.run('c = WCSessions.commit(1, token, "op2", function() return WCResult.ok() end, { kind = "store" })')
+        self.assertTrue(self.e('c.ok'))
+
     def test_uses_wccharacters_when_present(self):
         self.rt.run('WCCharacters = { active = function(src) return src == 2 and { charid = "vorp:1", sex = "male" } or nil end }')
         self.rt.run('Players[2].coords = Players[1].coords')
@@ -452,12 +486,73 @@ class BridgeTests(unittest.TestCase):
                     'outfit_saved', 'character_spawned', 'security_violation', 'haircut'):
             self.assertIn(key, keys)
 
+    RSG = r'''
+        Bridge.Name = 'rsg'
+        Bridge.GetCharacters = function() return {} end
+        rsgCalls = { login = {}, delete = {} }
+        failDelete = false
+        fakeRsg = {
+            Functions = { GetPlayer = function() return nil end },
+            Player = {
+                Logout = function() end,
+                Login = function(src, cid, data) table.insert(rsgCalls.login, data) return true end,
+                DeleteCharacter = function(src, cid)
+                    if failDelete then error('core refused') end
+                    table.insert(rsgCalls.delete, cid)
+                end,
+            },
+        }
+        w.framework = { getCore = function() return fakeRsg end }
+    '''
+
     def test_delete_character_uses_the_repository_transaction(self):
         rt = server()
-        rt.run('Bridge.GetCharacters = function() return {} end; Bridge.DeleteCharacter(1, "qbr-cid")')
+        rt.run(self.RSG)
+        rt.run('deleted, stage = Bridge.DeleteCharacter(1, "qbr-cid")')
         tx = rt.eval('FakeDB.transactions[1]')
         self.assertEqual(len(tx), 3)
         self.assertEqual(tx[2]['values'][1], 'qbr-cid')
+        self.assertTrue(rt.eval('deleted'))
+        self.assertEqual(rt.eval('rsgCalls.delete[1]'), 'qbr-cid')
+
+    def test_delete_character_reports_the_failed_stage(self):
+        rt = server()
+        rt.run(self.RSG)
+        rt.run('failDelete = true; deleted, stage = Bridge.DeleteCharacter(1, "qbr-cid")')
+        self.assertEqual((rt.eval('deleted'), rt.eval('stage')), (False, 'framework'))
+        self.assertEqual(rt.eval('#FakeDB.transactions'), 0, 'the appearance is kept when the framework refused')
+        rt.run('failDelete = false; FakeDB.transactionOk = false; deleted, stage = Bridge.DeleteCharacter(1, "qbr-cid")')
+        self.assertEqual((rt.eval('deleted'), rt.eval('stage')), (False, 'appearance'))
+
+    def test_delete_character_survives_a_throwing_logger(self):
+        rt = server()
+        rt.run(self.RSG)
+        rt.run("CreatorLogs.Emit = function() error('logger down') end; deleted = Bridge.DeleteCharacter(1, 'qbr-cid')")
+        self.assertTrue(rt.eval('deleted'))
+
+    def test_register_character_stores_the_identity_dob(self):
+        rt = server()
+        rt.run(self.RSG)
+        rt.run("Bridge.RegisterCharacter(1, { firstname = 'John', lastname = 'Smith', dob = '1871-04-09', age = 28, isMale = true })")
+        self.assertEqual(rt.eval('rsgCalls.login[1].charinfo.birthdate'), '1871-04-09')
+        rt.run("Bridge.RegisterCharacter(1, { firstname = 'Jane', lastname = 'Doe', age = 30, isMale = false })")
+        self.assertRegex(rt.eval('rsgCalls.login[2].charinfo.birthdate'), r'^\d{4}-01-01$')
+
+    def test_register_character_gives_vorp_the_age(self):
+        rt = server()
+        rt.run(r'''
+            Bridge.Name = 'vorp'
+            added = {}
+            local user = { addCharacter = function(d) table.insert(added, d) end, setUsedCharacter = function() end }
+            w.framework = { getCore = function() return { getUser = function() return user end } end }
+            Bridge.GetLicense = function() return 'license:1' end
+            FakeDB.on('SELECT charidentifier FROM', function() return { { charidentifier = 7 } } end)
+            id1 = Bridge.RegisterCharacter(1, { firstname = 'John', lastname = 'Smith', dob = '1871-04-09', age = 28, isMale = true })
+            Bridge.RegisterCharacter(1, { firstname = 'Jane', lastname = 'Doe', dob = '1990-01-01', isMale = false })
+        ''')
+        rt.run('tick(5000)')
+        self.assertEqual(rt.eval('added[1].age'), 28)
+        self.assertGreater(rt.eval('added[2].age'), 18)
 
 
 class SpawnTests(unittest.TestCase):

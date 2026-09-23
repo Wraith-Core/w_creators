@@ -16,7 +16,7 @@
 
 WCEditor = {}
 local E = WCEditor
--- WCEditorTree (client/editor/tree.lua) loads after this file: it is always read at call time.
+-- WCEditorTree (client/editor/tree.lua) loads before this file (fxmanifest); it is read at call time.
 
 local current = nil
 local opening = false   -- an open in progress (it can yield while rendering)
@@ -169,6 +169,45 @@ end
 
 local function send(message)
     if type(SendNUIMessage) == 'function' then SendNUIMessage(message) end
+end
+
+-- ---------------------------------------------------------------------
+--  Character card (§8.1 charCard): the selector's info panel
+-- ---------------------------------------------------------------------
+-- The card labels (dictionary keys), sent translated as charCard.strings.
+local CARD_STRINGS = {
+    name = 'الاسم', age = 'العمر', dob = 'تاريخ الميلاد', gender = 'الجنس', lastLocation = 'آخر موقع',
+    job = 'المهنة', cash = 'النقد', bank = 'البنك', gold = 'الذهب',
+}
+E.CARD_STRINGS = CARD_STRINGS
+
+--- The translated card labels.
+function E.cardStrings()
+    local out = {}
+    for key, value in pairs(CARD_STRINGS) do out[key] = L(value) end
+    return out
+end
+
+local CARD_FIELDS = { 'name', 'age', 'dob', 'gender', 'lastLocation', 'job', 'cash', 'bank', 'gold' }
+
+--- The charCard message for a characters:list card ({ name, age, dob, sex|gender, lastLocation,
+--  job, cash, bank, gold }); nil card = hide. lastLocation and a sex are locale keys / values and
+--  are translated here; the NUI only displays.
+function E.cardPayload(card)
+    local msg = { type = 'charCard', show = type(card) == 'table', locale = uiLocale(), dir = uiDir(),
+                  strings = E.cardStrings() }
+    if type(card) ~= 'table' then return msg end
+    for _, key in ipairs(CARD_FIELDS) do msg[key] = card[key] end
+    if msg.gender == nil and (card.sex == 'male' or card.sex == 'female') then
+        msg.gender = L(card.sex == 'male' and 'ذكر' or 'أنثى')
+    end
+    if type(msg.lastLocation) == 'string' then msg.lastLocation = L(msg.lastLocation) end
+    return msg
+end
+
+--- Show (card) or hide (nil) the character card.
+function E.showCard(card)
+    send(E.cardPayload(card))
 end
 
 -- ---------------------------------------------------------------------
@@ -336,7 +375,10 @@ end
 
 --- Open an editor session. Returns true | false, code.
 --  opts: title, subtitle, sections, context, identity (creator), onCommit(working, extra) -> Result,
---        onCancel(), onOutfit(op, id, value) -> Result, onState(group, value) -> Result, camera,
+--        onCancel(), onOutfit(op, id, value, session) -> Result (op 'equip' is a veto hook: nil or
+--        ok applies the owned outfit locally, a failed Result refuses it; 'update' | 'rename' |
+--        'delete' | 'save' call the server and may return data.outfits), onState(group, value) ->
+--        Result, camera,
 --        saveLabel, render (true = render `app` on the ped first).
 function E.open(ped, mode, app, opts)
     if current or opening then return false, 'BUSY' end
@@ -582,10 +624,14 @@ OPS.invoke = function(s, data)
         return result
     end
     if entry.hook then
+        -- a veto hook (onOutfit('equip', ...)): nil or an ok Result lets the local apply run, a
+        -- failed Result stops it, anything else is an INTERNAL_ERROR
         local result = entry.hook(s, value)
-        if not WCResult.is(result) then return WCResult.fail('INTERNAL_ERROR') end
-        if not result.ok then return result end
-        adoptContext(s, result)
+        if result ~= nil then
+            if not WCResult.is(result) then return WCResult.fail('INTERNAL_ERROR') end
+            if not result.ok then return result end
+            adoptContext(s, result)
+        end
     end
     if entry.apply then return mutate(s, { { entry, value } }) end
     return WCResult.ok()

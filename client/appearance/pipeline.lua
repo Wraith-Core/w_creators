@@ -23,14 +23,8 @@ local A = Appearance
 --- The facial hair category: 'mustache' in the catalogue is the beards_complete metaped category.
 A.FACIAL_HAIR_CATEGORY = 0xF8016BCA
 
---- The waist type outfit hashes (body.weight is the 1-based index), as the creator lists them.
-A.WAIST_TYPES = {
-    -2045421226, -1745814259, -325933489, -1065791927, -844699484,
-    -1273449080, 927185840, 149872391, 399015098, -644349862,
-    1745919061, 1004225511, 1278600348, 502499352, -2093198664,
-    -1837436619, 1736416063, 2040610690, -1173634986, -867801909,
-    1960266524,
-}
+--- The waist type outfit hashes (body.weight is the 1-based index): AppearanceSchema.WAIST_TYPES.
+A.WAIST_TYPES = AppearanceSchema.WAIST_TYPES
 
 A.PRESET = 3                -- the MP base outfit preset the resource has always used
 A.READY_TIMEOUT = 10000     -- ms to wait for the metaped to become ready to render

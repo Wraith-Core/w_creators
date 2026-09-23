@@ -60,6 +60,20 @@ native and that every `H.invoke(0x…)` has a documented hash.
 | `0xE9990552DEC71600` | `_UILOG_PRINT_CACHED_OBJECTIVE` | `WCNative.ui.printObjective()` | Verified | creator | — |
 | — | clear / blank objective | `WCNative.ui.clearObjective()`, `WCNative.ui.blankObjective()` | Verified | creator | The two pre-v3 idioms (`0`, and a literal space). |
 
+### Named natives called outside `client/natives/`
+
+Plain named natives are allowed anywhere (§0.4). These are the ones the v3 client infrastructure
+relies on whose argument layouts are **Likely** (community-documented, not yet exercised in game by
+this resource); each call is guarded so a missing or failing native never throws:
+
+| Name | Caller | Arguments used | Notes |
+|---|---|---|---|
+| `EquipMetaPedOutfit` | `client/appearance/pipeline.lua` (waist type) | `(ped, AppearanceSchema.WAIST_TYPES[weight])` | Joins the batched refresh; falls back to `w.component.setWaistType` when the global is missing. |
+| `HidePedWeapons` | `client/scene/environment.lua` (`WCPreviewEnv.enter{holster}`) | `(ped, 2, true)` | `exit()` does not re-draw the weapon. |
+| `SetWeatherType` | `client/scene/environment.lua` (`enter{weather}`) | `(GetHashKey(name), true, true, true, 0.0, true)` | Restored with the two calls below. |
+| `ClearOverrideWeather`, `ClearWeatherTypePersist` | `client/scene/environment.lua` (`exit()`) | `()` | — |
+| `RemoveIplByHash` (fallback `RemoveImap`) | `client/scene/scene.lua` (`CreatorScene.unload()`) | `(hash)` | Unloads only the room maps `load()` requested; `RemoveImap` is what the pre-v3 creator used. |
+
 `WCNative._` holds the shared validation helpers (`entity`, `ped`, `mpPed`, `invoke`, `bool`,
 `float`, `fail`); it is internal to `client/natives/`.
 

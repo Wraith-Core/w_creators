@@ -247,5 +247,101 @@ class SaveOpIdTests(EditorBase):
         self.assertEqual(lua_list(self.rt.eval('SaveOps')), ['a', 'b', 'c'])
 
 
+class StoreServerParityTests(EditorBase):
+    """The store preview follows WCClothingStore.plan: only what changed is priced, and states of a
+    swapped or removed item are reset (WCOwnership.settleStates)."""
+
+    SETUP = r"""
+        H = function(m, v) return WCCatalog.forSex('male').hats.models[m][v or 1].hash end
+        palette = WCCatalog.tintable('hats')[1]
+        savedApp = AppearanceSchema.default('male')
+        savedApp.clothing.equipped.hats = H(1)
+        savedApp.clothing.tints.hats = { palette = palette, tint0 = 1, tint1 = 2, tint2 = 3 }
+        savedApp.clothing.states = { hat = 'off' }
+        ownedTints = { [tostring(WCUtil.u32(H(1)))] = { category = 'hats', palette = palette, tint0 = 9, tint1 = 9, tint2 = 9 } }
+        function session(working)
+            return { mode = 'store', saved = savedApp, working = working or WCUtil.copy(savedApp),
+                     context = { owned = ownedTints, tintPrice = 2.5, prices = {} } }
+        end
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.rt.run(self.SETUP)
+
+    def test_saved_item_with_its_saved_tint_is_free_even_when_the_owned_tint_differs(self):
+        self.assertEqual(self.rt.eval('WCEditorTree.price(session()).total'), 0)
+
+    def test_changing_the_saved_items_tint_is_charged_and_back_to_the_original_is_free(self):
+        self.rt.run("w2 = WCUtil.copy(savedApp); w2.clothing.tints.hats.tint0 = 50")
+        self.assertEqual(self.rt.eval('WCEditorTree.price(session(w2)).total'), 2.5)
+        self.rt.run("w3 = WCUtil.copy(savedApp); w3.clothing.tints.hats = { palette = palette, tint0 = 9, tint1 = 9, tint2 = 9 }")
+        self.assertEqual(self.rt.eval('WCEditorTree.price(session(w3)).total'), 0,
+                         'the owned tint is the baseline of a changed tint')
+
+    def test_store_states_reset_for_a_swapped_item_and_return_with_the_saved_one(self):
+        self.assertTrue(self.rt.eval("openEditor('store', 'male', { app = savedApp, context = { owned = ownedTints, storeProfile = 'general' } })"))
+        self.assertEqual(self.working('.clothing.states.hat'), 'off')
+        self.assertEqual(self.rt.eval("WCEditorTree.storeStates(WCEditor.session(), (function() local a = WCUtil.copy(savedApp); a.clothing.equipped.hats = H(2); return a end)()).hat"), None)
+        s = self.rt.eval("WCEditorTree.storeStates(WCEditor.session(), savedApp)")
+        self.assertEqual(s.hat, 'off')
+        r = self.action(op='invoke', control='clothing.hats.remove')
+        self.assertTrue(r.ok, r.code)
+        self.assertIsNone(self.working('.clothing.states.hat'))
+
+
+class OutfitEquipContractTests(EditorBase):
+    """onOutfit('equip', id, nil, session) is a veto hook: nil or ok applies the outfit locally, a
+    failed Result refuses it (ARCHITECTURE.md §3.2 WCEditor)."""
+
+    def open_wardrobe(self, answer):
+        self.rt.run("""
+            WardrobeApp = AppearanceSchema.default('male')
+            WardrobeOwned = {}
+            for _, h in pairs(WardrobeApp.clothing.equipped) do WardrobeOwned[tostring(h)] = { category = 'x' } end
+            EquipAnswer = %s
+        """ % answer)
+        self.assertTrue(self.rt.eval("""openEditor('wardrobe', 'male', { app = WardrobeApp,
+            context = { owned = WardrobeOwned, maxOutfits = 2, outfits = { { id = 7, name = 'Work', data = { equipped = {} } } } },
+            onOutfit = function(op, id) if op == 'equip' then return EquipAnswer() end return WCResult.ok({}) end })"""))
+
+    def test_a_hook_answering_nothing_lets_the_equip_run(self):
+        self.open_wardrobe('function() return nil end')
+        r = self.action(op='invoke', control='outfit.7.equip')
+        self.assertTrue(r.ok, r.code)
+        self.assertEqual(self.working('.clothing.outfit'), 7)
+
+    def test_a_failed_result_vetoes_the_equip(self):
+        self.open_wardrobe("function() return WCResult.fail('OUTFITS_DISABLED') end")
+        r = self.action(op='invoke', control='outfit.7.equip')
+        self.assertFalse(r.ok)
+        self.assertEqual(r.code, 'OUTFITS_DISABLED')
+        self.assertIsNone(self.working('.clothing.outfit'))
+
+    def test_a_non_result_answer_is_an_internal_error(self):
+        self.open_wardrobe("function() return 'yes' end")
+        self.assertEqual(self.action(op='invoke', control='outfit.7.equip').code, 'INTERNAL_ERROR')
+
+
+class CharCardTests(EditorBase):
+    """§8.1 charCard: the selector sends WCEditor.cardPayload(card) with every label the NUI reads."""
+
+    def test_card_carries_every_label_and_the_translated_values(self):
+        self.rt.run("""card = WCEditor.cardPayload({ name = 'John Smith', age = 30, dob = '1871-04-09', sex = 'male',
+            lastLocation = 'رودز', job = 'Rancher', cash = 10, bank = 5, gold = 1, appearance = {} })""")
+        strings = self.rt.eval('card.strings')
+        for key in ('name', 'age', 'dob', 'gender', 'lastLocation', 'job', 'cash', 'bank', 'gold'):
+            self.assertTrue(strings[key], key)
+        self.assertEqual(self.rt.eval('card.type'), 'charCard')
+        self.assertTrue(self.rt.eval('card.show'))
+        self.assertEqual(self.rt.eval('card.gender'), 'ذكر')
+        self.assertEqual((self.rt.eval('card.name'), self.rt.eval('card.cash')), ('John Smith', 10))
+        self.assertIsNone(self.rt.eval('card.appearance'), 'the appearance never reaches the NUI')
+
+    def test_hiding_the_card(self):
+        self.rt.run('WCEditor.showCard(nil)')
+        self.assertFalse(self.rt.eval('NuiMessages[#NuiMessages].show'))
+
+
 if __name__ == '__main__':
     unittest.main()

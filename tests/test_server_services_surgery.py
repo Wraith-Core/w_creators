@@ -195,10 +195,27 @@ class SurgeryTests(unittest.TestCase):
         self.assertEqual(c.code, 'SURGERY_NOT_ALLOWED')  # recolouring is the store's service
         self.assertEqual(self.e('#MoneyCalls'), 0)
 
-    def test_clothing_ownership_database_failure(self):
+    def test_open_lists_owned_items_only_when_clothing_is_allowed(self):
+        self.assertIsNone(self.e('(function() local r = %s; return r.data.owned end)()'
+                                 % 'WCSurgeryService.grant(1, "valentine_surgery") and WCSurgeryService.open(1, "valentine_surgery")'))
+        self.rt.run('WCSessions.close(1, WCSessions.current(1).token)')
+        self.own()
+        self.rt.run('own("hats", h("male", "hats", 1))')
+        o = self.open()
+        self.assertTrue(o.ok, o.code)
+        self.assertTrue(self.e('WCOwnership.entry(o.data.owned, h("male", "hats", 1)) ~= nil'))
+
+    def test_open_ownership_read_failure_closes_the_session_and_keeps_the_grant(self):
         self.own()
         self.rt.run("FakeDB.fail = 'FROM w_creators_clothes'")
+        self.assertEqual(self.open().code, 'DATABASE_ERROR')
+        self.assertIsNone(self.e('WCSessions.current(1)'))
+        self.assertTrue(self.e('WCSurgeryService.granted(1, "valentine_surgery")'))
+
+    def test_clothing_ownership_database_failure(self):
+        self.own()
         self.open()
+        self.rt.run("FakeDB.fail = 'FROM w_creators_clothes'")
         c = self.commit('app.morph.jawWidth = 0.5')
         self.assertEqual(c.code, 'DATABASE_ERROR')
         self.assertEqual(self.e('#MoneyCalls'), 0)
