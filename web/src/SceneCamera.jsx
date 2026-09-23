@@ -32,13 +32,13 @@ export default function SceneCamera({camera,part,text,disabled}) {
     if(!disabled&&!d.moved)send.current({pick:{x:e.clientX/window.innerWidth,y:e.clientY/window.innerHeight,aspect:window.innerWidth/window.innerHeight}});
   };
   const reset=e=>{e.preventDefault();cancel();if(!disabled)send.current({reset:true});};
-  const label={default:'full',head:'head',eyes:'eyes',body:'torso',pant:'legs',boot:'feet'}[part]||'full';
+  // The camera preset's name comes from the payload strings (view.<preset>).
   return <>
     <div className="scene-touch" aria-label={text.clickZoom} onPointerDown={down} onPointerMove={move}
       onPointerUp={up} onPointerCancel={cancel} onLostPointerCapture={cancel} onContextMenu={reset}
       onWheel={e=>{if(!disabled&&e.deltaY)send.current({zoom:e.deltaY>0?-2:2});}}/>
     <aside className="scene-tools" aria-label={text.camera}>
-      <div className="wst-plate camera-help"><span className="camera-view"><Glyph tex="weapon_kit_camera"/><span aria-live="polite">{text[label]}</span></span>
+      <div className="wst-plate camera-help"><span className="camera-view"><Glyph tex="weapon_kit_camera"/><span aria-live="polite">{text['view.'+part]||text['view.fullBody']}</span></span>
         <span>{text.clickZoom}</span><span>{text.dragRotate}</span><span>{text.rightReset}</span>
       </div>
     </aside>

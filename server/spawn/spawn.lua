@@ -1,19 +1,39 @@
 -- =====================================================================
---  server/spawn/spawn.lua  —  the spawn service (ARCHITECTURE.md §11, §16.3)
---  The spawn grant and the spawn location resolution (moved out of the framework bridge).
---  The client only ever sends a spawn point id ('__last' or a Config.Spawn.points[].id); the
---  server translates it into coordinates. No coordinate ever arrives from the client.
+--  server/spawn/spawn.lua  —  WCSpawnServer, the spawn service (ARCHITECTURE.md §11, §16.3)
+--  The client only ever sends a spawn point id ('__last' or a Config.Spawn.points[].id); the server
+--  resolves the coordinates. No coordinate ever arrives from the client.
 --
---  Last location: read from the framework and rejected when non-finite, all-zero, outside
---  Config.Spawn.bounds or within Config.Spawn.sceneExclusionRadius of the creator scene anchor;
---  a rejected last location falls back to the first enabled point (lowest order first).
+--  The permission to spawn is a one-shot grant (SpawnPending[src]) given when a character finishes
+--  loading (WCSpawnServer.finish) and consumed by the choice. Spawn kinds:
+--  'initial' (new character) | 'login' | 'switch' | 'death' | 'admin'.
+--
+--  Last location (only while Config.Services.lastLocation is on): read from the framework and
+--  rejected when non-finite, all-zero, outside Config.Spawn.bounds or within
+--  Config.Spawn.sceneExclusionRadius of the creator scene anchor; a rejected last location falls
+--  back to the first enabled point (lowest order first).
+--
+--    WCSpawnServer.grant(src, kind)             the one-shot spawn grant
+--    WCSpawnServer.pending(src)                 the granted kind, or nil
+--    WCSpawnServer.cancel(src)                  withdraw a grant
+--    WCSpawnServer.finish(src, kind, isNew)     -> 'selector' | 'direct' | 'event'
+--    WCSpawnServer.resolve(pointId, src)        -> pos, pointId | nil, code
+--    WCSpawnServer.validateLast(pos)            -> { x, y, z, heading } | nil
+--    WCSpawnServer.lastPosition(src)            -> the valid last position | nil
+--    WCSpawnServer.nearestLabel(pos)            -> locale key of the nearest enabled point | nil
+--    WCSpawnServer.points() / pointIds()        enabled points in display order
+--    WCSpawnServer.respawn(src, pointId, kind, extra?) -> Result { pos, kind, point } (client:respawn)
 --
 --  Events (§16.3):
 --    w_creators:client:selectSpawn  { last = {x, y, z, heading, label} | nil, points = { ids }, kind }
 --    w_creators:client:spawn        (pos {x, y, z, heading}, meta {kind})
+--    w_creators:client:respawn      (pos, meta {kind, point})
 --    w_creators:spawn:choose        callback (pointId) -> Result { pos, kind }
---    w_creators:server:spawnAt      legacy net event (pointId) -> same resolution
+--    w_creators:server:spawnAt      legacy net event (pointId) -> same resolution, never refuses a
+--                                   granted player (falls back to the first enabled point)
 -- =====================================================================
+
+WCSpawnServer = {}
+local Spawn = WCSpawnServer
 
 --- The players who are expected to pick a spawn location. The key's presence is the permission:
 --  without it the spawn choice is refused, so an injected client cannot move itself to any town
@@ -22,8 +42,10 @@ SpawnPending = {}
 
 local pendingKind = {} -- [src] = the spawn kind of the grant
 
-local KINDS = { initial = true, login = true, switch = true, death = true, admin = true }
-local LAST_ID = '__last'
+Spawn.KINDS = { initial = true, login = true, switch = true, death = true, admin = true }
+Spawn.LAST_ID = '__last'
+local LAST_ID = Spawn.LAST_ID
+local MAX_ID_LEN = 64
 
 AddEventHandler('playerDropped', function()
     SpawnPending[source] = nil
@@ -51,8 +73,8 @@ local function firstSpawn()
     return position(cfg.coords, cfg.heading) or { x = 0.0, y = 0.0, z = 0.0, heading = 0.0 }
 end
 
--- The enabled spawn points with valid coordinates, sorted by order (then config position).
-local function enabledPoints()
+--- The enabled spawn points with valid coordinates, sorted by order (then config position).
+function Spawn.points()
     local list = {}
     for index, pt in ipairs(Config.Spawn.points or {}) do
         if type(pt) == 'table' and pt.enabled ~= false and type(pt.id) == 'string' and position(pt.coords) then
@@ -69,28 +91,30 @@ local function enabledPoints()
 end
 
 --- The ids of the enabled spawn points, in display order.
-local function pointIds()
+function Spawn.pointIds()
     local ids = {}
-    for i, pt in ipairs(enabledPoints()) do ids[i] = pt.id end
+    for i, pt in ipairs(Spawn.points()) do ids[i] = pt.id end
     return ids
 end
 
 -- The fallback position: the first enabled point, or firstSpawn when none is enabled.
 local function fallback()
-    local pt = enabledPoints()[1]
-    return pt and position(pt.coords, pt.heading) or firstSpawn()
+    local pt = Spawn.points()[1]
+    if pt then return position(pt.coords, pt.heading), pt.id end
+    return firstSpawn(), nil
 end
 
---- Look up an enabled spawn point by its id.
+--- Look up an enabled spawn point (with valid coordinates) by its id.
 function Bridge.FindSpawnPoint(id)
-    for _, pt in ipairs(Config.Spawn.points or {}) do
-        if pt.id == id and pt.enabled ~= false then return pt end
+    if type(id) ~= 'string' then return nil end
+    for _, pt in ipairs(Spawn.points()) do
+        if pt.id == id then return pt end
     end
     return nil
 end
 
 --- Validate a last position (§11). Returns a clean { x, y, z, heading } or nil.
-local function validLast(pos)
+function Spawn.validateLast(pos)
     if type(pos) ~= 'table' then return nil end
     local x, y, z = tonumber(pos.x), tonumber(pos.y), tonumber(pos.z)
     if not (WCUtil.isFinite(x) and WCUtil.isFinite(y) and WCUtil.isFinite(z)) then return nil end
@@ -110,75 +134,150 @@ local function validLast(pos)
         local d2 = WCUtil.dist2({ x, y, z }, anchor)
         if d2 and d2 <= radius * radius then return nil end
     end
-    local heading = tonumber(pos.heading)
+    local heading = tonumber(pos.heading or pos.w)
     return { x = x, y = y, z = z, heading = WCUtil.isFinite(heading) and heading or 0.0 }
 end
 
 --- The character's valid last position (lastLocation service on), or nil.
-local function lastPosition(src)
+function Spawn.lastPosition(src)
     if not lastLocationEnabled() then return nil end
     local ok, pos = pcall(Bridge.GetLastPosition, src)
     if not ok then return nil end
-    return validLast(pos)
+    return Spawn.validateLast(pos)
 end
 
--- The locale key of the enabled spawn point nearest to a position (the region the player left).
-local function nearestLabel(pos)
+--- The locale key of the enabled spawn point nearest to a position (the region the player left).
+function Spawn.nearestLabel(pos)
     local best, bestD
-    for _, pt in ipairs(enabledPoints()) do
+    for _, pt in ipairs(Spawn.points()) do
         local d = WCUtil.dist2(pos, pt.coords)
         if d and (not bestD or d < bestD) then best, bestD = pt, d end
     end
     return best and best.label or nil
 end
 
+--- Resolve a spawn point id to server coordinates.
+--  '__last' needs the lastLocation service; an invalid last position falls back to the first
+--  enabled point (§11). Any other id must be an enabled point.
+--  Returns pos, pointId | nil, 'INVALID_SPAWN' | 'INVALID_PAYLOAD'.
+function Spawn.resolve(pointId, src)
+    if type(pointId) ~= 'string' or #pointId == 0 or #pointId > MAX_ID_LEN then return nil, 'INVALID_PAYLOAD' end
+    if pointId == LAST_ID then
+        if not lastLocationEnabled() then return nil, 'INVALID_SPAWN' end
+        local last = src and Spawn.lastPosition(src)
+        if last then return last, LAST_ID end
+        return fallback()
+    end
+    local pt = Bridge.FindSpawnPoint(pointId)
+    local pos = pt and position(pt.coords, pt.heading)
+    if not pos then return nil, 'INVALID_SPAWN' end
+    return pos, pt.id
+end
+
 --- The character's spawn coordinates: the last saved position when it is valid (and the service
 --  is enabled), otherwise the first enabled spawn point.
 function Bridge.GetSpawnCoords(source)
-    return lastPosition(source) or fallback()
+    return Spawn.lastPosition(source) or (fallback())
 end
 
--- Consume the grant and move the player into the world.
-local function spawnNow(src, pos)
-    local kind = pendingKind[src] or 'login'
+local function activeCharid(src)
+    local active = WCSessions and WCSessions.activeCharacter(src)
+    if active then return active.charid end
+    local ok, charid = pcall(Bridge.GetCharId, src)
+    return ok and charid and tostring(charid) or nil
+end
+
+local function logSpawn(src, kind, point, extra)
+    local payload = { playerSource = src, charid = activeCharid(src), kind = kind, point = point }
+    for k, v in pairs(extra or {}) do payload[k] = v end
+    pcall(CreatorLogs.Emit, 'character_spawned', payload)
+end
+
+local function toWorld(src)
+    if WCScene and WCScene.toWorld then
+        WCScene.toWorld(src)
+    else
+        SetPlayerRoutingBucket(src, 0)
+    end
+end
+
+-- Move the player into the world at pos (the grant, if any, is consumed).
+local function spawnNow(src, pos, point, kind)
     SpawnPending[src] = nil
     pendingKind[src] = nil
-    SetPlayerRoutingBucket(src, 0)
+    toWorld(src)
     TriggerClientEvent('w_creators:client:spawn', src, pos, { kind = kind })
+    logSpawn(src, kind, point)
     return kind
 end
 
+--- Give the one-shot spawn grant.
+function Spawn.grant(src, kind)
+    src = tonumber(src)
+    if not src then return false end
+    SpawnPending[src] = true
+    pendingKind[src] = Spawn.KINDS[kind] and kind or 'login'
+    return true
+end
+
+--- The kind of the player's pending spawn grant, or nil.
+function Spawn.pending(src)
+    return SpawnPending[src] and (pendingKind[src] or 'login') or nil
+end
+
+--- Withdraw a pending grant (character switch, disconnect).
+function Spawn.cancel(src)
+    SpawnPending[src] = nil
+    pendingKind[src] = nil
+end
+
 --- Finish the creation/selection: set the survival metadata, then either open the location
---  selector (the player stays in his isolated bucket until he picks) or spawn directly.
+--  selector (the player stays in his isolated bucket until he picks), hand over to the framework's
+--  spawn event (Config.Creator.spawnEvent), or spawn directly.
 --  isNew = true for a freshly created character (it has no saved position).
---  kind (optional) = 'initial' | 'login' | 'switch' | 'death' | 'admin'; default from isNew.
-function Bridge.FinishCharacter(source, isNew, kind)
-    kind = KINDS[kind] and kind or (isNew and 'initial' or 'login')
-    Bridge.SetSurvival(source)
+--  Returns 'selector' | 'direct' | 'event'.
+function Spawn.finish(src, kind, isNew)
+    kind = Spawn.KINDS[kind] and kind or (isNew and 'initial' or 'login')
+    pcall(Bridge.SetSurvival, src)
 
     local spawnEvent = Config.Creator.spawnEvent
     if selectorEnabled() and not spawnEvent then
-        SpawnPending[source] = true
-        pendingKind[source] = kind
-        local last = (not isNew) and lastPosition(source) or nil
-        if last then last.label = nearestLabel(last) end
-        TriggerClientEvent('w_creators:client:selectSpawn', source, { last = last, points = pointIds(), kind = kind })
-        return
+        Spawn.grant(src, kind)
+        local last = (not isNew) and Spawn.lastPosition(src) or nil
+        if last then last.label = Spawn.nearestLabel(last) end
+        TriggerClientEvent('w_creators:client:selectSpawn', src, { last = last, points = Spawn.pointIds(), kind = kind })
+        return 'selector'
     end
-
-    SetPlayerRoutingBucket(source, 0)
 
     if spawnEvent then
-        TriggerClientEvent(spawnEvent, source)
-        return
+        Spawn.cancel(src)
+        toWorld(src)
+        TriggerClientEvent(spawnEvent, src)
+        logSpawn(src, kind, 'event')
+        return 'event'
     end
 
-    TriggerClientEvent('w_creators:client:spawn', source, isNew and firstSpawn() or Bridge.GetSpawnCoords(source),
-        { kind = kind })
+    if isNew then
+        spawnNow(src, firstSpawn(), 'firstSpawn', kind)
+    else
+        local last = Spawn.lastPosition(src)
+        if last then
+            spawnNow(src, last, LAST_ID, kind)
+        else
+            local pos, id = fallback()
+            spawnNow(src, pos, id, kind)
+        end
+    end
+    return 'direct'
+end
+
+--- Kept bridge entry point: Bridge.FinishCharacter(src, isNew, kind?) = WCSpawnServer.finish.
+function Bridge.FinishCharacter(source, isNew, kind)
+    return Spawn.finish(source, kind, isNew)
 end
 
 local function denied(src, pointId)
-    CreatorLogs.Emit('character_access_denied', {
+    pcall(CreatorLogs.Emit, 'character_access_denied', {
         playerSource = src,
         operation = 'spawn',
         charid = tostring(pointId),
@@ -186,26 +285,16 @@ local function denied(src, pointId)
     })
 end
 
---- The spawn choice (§16.3). '__last' needs the lastLocation service; an invalid last position
---  falls back to the first enabled point. Any other id must be an enabled point.
+--- The spawn choice (§16.3). A refused choice keeps the grant.
 w.callback.register('w_creators:spawn:choose', function(src, pointId)
     if not WCSecurity.rate(src, 'spawn:choose', 5, 5000) then return WCResult.fail('RATE_LIMITED') end
     if not SpawnPending[src] then
         denied(src, pointId)
         return WCResult.fail('SPAWN_NOT_PENDING')
     end
-    if type(pointId) ~= 'string' or #pointId > 64 then return WCResult.fail('INVALID_PAYLOAD') end
-
-    local pos
-    if pointId == LAST_ID then
-        if not lastLocationEnabled() then return WCResult.fail('INVALID_SPAWN') end
-        pos = lastPosition(src) or fallback()
-    else
-        local pt = Bridge.FindSpawnPoint(pointId)
-        pos = pt and position(pt.coords, pt.heading)
-        if not pos then return WCResult.fail('INVALID_SPAWN') end
-    end
-    local kind = spawnNow(src, pos)
+    local pos, point = Spawn.resolve(pointId, src)
+    if not pos then return WCResult.fail(point) end
+    local kind = spawnNow(src, pos, point, pendingKind[src] or 'login')
     return WCResult.ok({ pos = pos, kind = kind })
 end)
 
@@ -213,20 +302,35 @@ end)
 --  enabled point rather than leaving the player hanging (the event cannot answer).
 RegisterNetEvent('w_creators:server:spawnAt', function(pointId)
     local src = source
-
-    -- The permission is one-shot: granted in FinishCharacter and withdrawn as soon as it is used.
+    -- The permission is one-shot: granted in finish() and withdrawn as soon as it is used.
     if not SpawnPending[src] then
         denied(src, pointId)
         return
     end
-
-    local pos
-    if pointId == LAST_ID then
-        pos = lastPosition(src)
-    elseif type(pointId) == 'string' then
-        local pt = Bridge.FindSpawnPoint(pointId)
-        pos = pt and position(pt.coords, pt.heading)
-    end
-
-    spawnNow(src, pos or fallback())
+    if not WCSecurity.rate(src, 'spawn:choose', 5, 5000) then return end
+    local pos, point = Spawn.resolve(pointId, src)
+    if not pos then pos, point = fallback() end
+    spawnNow(src, pos, point, pendingKind[src] or 'login')
 end)
+
+--- Move a player who is already in the world to a spawn point (admin respawn, RespawnPlayer export).
+--  pointId nil = the first enabled point; '__last' = the last location (§11 validation).
+--  The client event w_creators:client:respawn(pos, { kind, point }) performs the move.
+--  extra (optional) = additional fields of the character_spawned log (e.g. { adminSource }).
+function Spawn.respawn(src, pointId, kind, extra)
+    src = tonumber(src)
+    if not src or not GetPlayerName(src) then return WCResult.fail('INVALID_PAYLOAD') end
+    kind = Spawn.KINDS[kind] and kind or 'admin'
+    local active = WCSessions and WCSessions.activeCharacter(src)
+    if not active then return WCResult.fail('NO_CHARACTER') end
+    local pos, point
+    if pointId == nil then
+        pos, point = fallback()
+    else
+        pos, point = Spawn.resolve(pointId, src)
+        if not pos then return WCResult.fail(point) end
+    end
+    TriggerClientEvent('w_creators:client:respawn', src, pos, { kind = kind, point = point })
+    logSpawn(src, kind, point, type(extra) == 'table' and extra or nil)
+    return WCResult.ok({ pos = pos, kind = kind, point = point })
+end
