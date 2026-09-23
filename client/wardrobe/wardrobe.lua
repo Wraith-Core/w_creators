@@ -92,12 +92,20 @@ end
 
 --- Open a wardrobe: a location id, or nil for a remote wardrobe (job resources, housing; the
 --  server decides with Config.Wardrobe.allowRemote). Yields; returns true once the editor is open,
---  or false, code (the failure's message has been shown).
+--  or false, code (the failure's message has been shown, except to a dead player). A refusal
+--  because another flow holds the player is shown here: WCServiceFlow.run only logs it, and on the
+--  remote paths (the OpenWardrobe exports) nothing else would.
 ---@param locationId string|nil
 ---@return boolean ok, string|nil code
 function Wd.open(locationId)
     if locationId ~= nil and (type(locationId) ~= 'string' or locationId == '' or #locationId > MAX_ID) then
+        WCServiceFlow.notify(WCResult.messageKey('INVALID_PAYLOAD'))
         return false, 'INVALID_PAYLOAD'
+    end
+    local why = WCServiceFlow.blocked()
+    if why then
+        if why ~= 'dead' then WCServiceFlow.notify(WCResult.messageKey('BUSY')) end
+        return false, 'BUSY'
     end
     return WCServiceFlow.run({
         kind = 'wardrobe', mode = 'wardrobe', locationId = locationId,

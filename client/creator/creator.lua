@@ -35,7 +35,8 @@ local st = {
     active = false,
     stage = nil,      -- 'starting' | 'gender' | 'waiting' | 'editor' | 'saving'
     token = nil,      -- the server creation grant
-    repair = nil,     -- { token, sex?, charid, appearance? } for the appearance-only path
+    repair = nil,     -- { token, sex?, charid, appearance?, identity? } for the appearance-only path
+    created = nil,    -- { data, working } once characters:create answered ok (render / loaded pending)
     sex = 'male',     -- the gender shown / picked
     peds = {},        -- [sex] = preview ped
     prompts = nil,
@@ -183,7 +184,7 @@ local function teardown()
     WCCamera.close()
     pcall(WCNative.ui.blankObjective)
     releaseLock()
-    st.token, st.repair = nil, nil
+    st.token, st.repair, st.created = nil, nil, nil
 end
 
 local function backToSelection(errorKey)
@@ -317,7 +318,7 @@ end
 --  The editor
 -- ---------------------------------------------------------------------
 
-local openEditor
+local openEditor, finishCreated
 
 --- Save: characters:create → render on the player → loaded (only after the render succeeded).
 local function commit(working, extra)
@@ -336,6 +337,18 @@ local function commit(working, extra)
     end
 
     local data = type(result.data) == 'table' and result.data or {}
+    -- the character exists now: a cancel retries this finish instead of starting a new creation
+    st.created = { data = data, working = working }
+    if not finishCreated(data, working) then
+        st.stage = 'editor'
+        return WCResult.fail('INTERNAL_ERROR')
+    end
+    return result
+end
+
+--- Render the created character on the player, then characters:loaded → spawn. false when the
+--  render failed (the player stays hidden; the creation is kept for a retry).
+finishCreated = function(data, working)
     local app = AppearanceSchema.normalize(data.appearance or working)
     StartFade(300, 'creator')
     local rendered, err = Appearance.SetPlayerModel(app.sex)
@@ -345,8 +358,7 @@ local function commit(working, extra)
         WCDebug.warn('creator', 'the created appearance could not be rendered: %s', tostring(err))
         hidePlayer()
         EndFade(300)
-        st.stage = 'editor'
-        return WCResult.fail('INTERNAL_ERROR')
+        return false
     end
 
     local charid = data.charid ~= nil and tostring(data.charid) or (st.repair and st.repair.charid) or nil
@@ -360,14 +372,38 @@ local function commit(working, extra)
         WCState.clear()
         local key = messageOf(loaded)
         CreateThread(function() backToSelection(key) end)
-        return result
+        return true
     end
     if type(WCSelector) == 'table' and WCSelector.finish then
         WCSelector.finish(type(loaded.data) == 'table' and loaded.data.spawn or nil)
     else
         CreatorScene.release({ keepBucket = true })
     end
-    return result
+    return true
+end
+
+--- Cancel in the editor. After a create the server already answered ok (only the render failed),
+--  the character exists: the finish is retried, never a new creation from the gender scene.
+local function onEditorCancel()
+    local created = st.created
+    if st.active and created then
+        st.stage = 'saving'
+        local ok, done = pcall(finishCreated, created.data, created.working)
+        if ok and done then return end
+        if not ok then WCDebug.warn('creator', 'finishing the created character failed: %s', tostring(done)) end
+        if not st.active then return end
+        st.stage = 'editor'
+    end
+    backToGender()
+end
+
+--- The editor's identity: an editable one for a new character; for the repair path the card's
+--  framework identity, locked (read-only), or nil when the card had no name.
+local function repairIdentity(sex)
+    if not st.repair then return { sex = sex, locked = false } end
+    local id = type(st.repair.identity) == 'table' and st.repair.identity or nil
+    if not id or (type(id.firstname) ~= 'string' and type(id.lastname) ~= 'string') then return nil end
+    return { sex = sex, locked = true, firstname = id.firstname, lastname = id.lastname, dob = id.dob }
 end
 
 openEditor = function(sex)
@@ -393,15 +429,16 @@ openEditor = function(sex)
     local opened, reason = WCEditor.open(ped, 'creator', app, {
         title = TITLE,
         sections = AppearanceSchema.SECTIONS,
-        -- the repair path keeps the framework identity: no identity stage, create(token, nil, app)
-        identity = (not st.repair) and { sex = sex, locked = false } or nil,
+        -- the repair path keeps the framework identity: shown read-only when the card had one
+        -- (identity.locked), never submitted: create(token, nil, app)
+        identity = repairIdentity(sex),
         context = {
             startingClothing = Config.Creator.startingClothing,
             presets = (Config.StartingOutfits and Config.StartingOutfits[sex]) or {},
         },
         render = render,
         onCommit = commit,
-        onCancel = function() CreateThread(backToGender) end,
+        onCancel = function() CreateThread(onEditorCancel) end,
     })
     if not opened then error({ key = WCResult.messageKey(reason or 'INTERNAL_ERROR') }, 0) end
     st.stage = 'editor'
@@ -426,6 +463,12 @@ accept = function()
             return
         end
         if type(result.data) == 'table' and type(result.data.token) == 'string' then st.token = result.data.token end
+        -- the server's sex wins (locked once the framework character exists)
+        local granted = type(result.data) == 'table' and validSex(result.data.sex) or nil
+        if granted and granted ~= sex then
+            sex = granted
+            st.sex = granted
+        end
     end
     openEditor(sex)
 end
@@ -447,7 +490,7 @@ local function prepareRoom()
     WCCamera.close()
 end
 
---- Start the creator. opts.repair = { token, sex?, charid, appearance? } for the appearance-only
+--- Start the creator. opts.repair = { token, sex?, charid, appearance?, identity? } for the appearance-only
 --  path (the token comes from characters:select). Returns true | false, code.
 function C.start(opts)
     opts = type(opts) == 'table' and opts or {}
@@ -457,6 +500,7 @@ function C.start(opts)
     st.generation = st.generation + 1
     st.repair = type(opts.repair) == 'table' and type(opts.repair.token) == 'string' and opts.repair or nil
     st.token = st.repair and st.repair.token or nil
+    st.created = nil
     st.sex = (st.repair and validSex(st.repair.sex)) or 'male'
     st.peds = {}
     takeLock()

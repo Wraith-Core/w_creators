@@ -115,9 +115,26 @@ Config.Characters = {
 --  The creator
 -- ---------------------------------------------------------------------
 Config.Creator = {
-    -- The optional first-spawn wagon scene.
+    -- The optional first-spawn wagon scene (client/creator/cutscene.lua). The spawn module raises
+    -- W:CREATOR:FirstSpawn for a new character's first spawn when this is on.
     enableCutscene = false,
-    -- nil = the built-in spawn. Or your framework's own spawn event, e.g. 'rsg-multicharacter:client:spawnDefault'
+    -- The wagon scene. Any field may be changed or left out (the built-in value is used then);
+    -- coordinates may be { x, y, z[, heading] } or vector3 / vector4.
+    cutscene = {
+        start          = { 2520.09, -358.05, 41.61, 268.89169 }, -- the wagon and the player start here
+        arrival        = { 2539.83, -1129.33, 50.03 },           -- Saint Denis: the ride ends here
+        departure      = { 2600.436, -1205.932, 53.323 },        -- the driver takes the empty wagon here
+        wagon          = 'STAGECOACH001X',
+        driver         = 'CS_BivCoachDriver',
+        arriveRadius   = 5.0,
+        speed          = 10.0,
+        drivingStyle   = 67633207,
+        maxDuration    = 600000, -- ms; a wagon that never arrives: the player is placed at the arrival
+        departureDelay = 10000,  -- ms the empty wagon drives off before it is removed
+    },
+    -- nil = the built-in spawn. Or your framework's own spawn event, e.g. 'rsg-multicharacter:client:spawnDefault'.
+    -- The server fires it on EVERY spawn (login, switch, first spawn). Never set it to
+    -- 'W:CREATOR:FirstSpawn' (the cutscene event): every existing character would take the ride.
     spawnEvent = nil,
     -- The wizard stages, in order. facialHair is shown to male characters only.
     stages = { 'identity', 'body', 'face', 'skin', 'hair', 'facialHair', 'makeup', 'clothing', 'review' },
@@ -185,6 +202,9 @@ Config.Experimental = {
 -- ---------------------------------------------------------------------
 Config.Keys = {
     interact = 'E', -- opens a shop / barber / wardrobe
+    -- The default key of the clothing actions keybind (wc_clothing_actions; players can rebind it in
+    -- the game settings). A key name such as 'K'; nil = unbound (the /clothing command still works).
+    clothingActions = nil,
 }
 
 -- ---------------------------------------------------------------------

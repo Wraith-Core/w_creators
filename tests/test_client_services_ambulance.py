@@ -273,5 +273,46 @@ class ClientTests(unittest.TestCase):
         self.assertTrue(all(self.eval('Prompts[%d].removed' % i) for i in range(1, self.eval('#Prompts') + 1)))
 
 
+
+class ResurrectedListenerTests(unittest.TestCase):
+    """w_ambulancejob clears its downed state when w_creators resurrects the player for another
+    reason (w_creators:client:resurrected), and ignores its own 'hospital' resurrects."""
+
+    def setUp(self):
+        src = ambulance_source('client/main.lua')
+        start = src.index("AddEventHandler('w_creators:client:resurrected'")
+        end = src.index('\nend)', start) + len('\nend)')
+        self.rt = rt = Runtime()
+        rt.run('''isDead = true; InLaststand = false; deathTime = 30; emsNotified = true
+            Sent = {}; Invincible = true; Laststand = {}
+            function TriggerServerEvent(name, value) Sent[#Sent + 1] = { name, value } end
+            function PlayerPedId() return 1 end
+            function SetEntityInvincible(_, v) Invincible = v end
+            function SetLaststand(v) InLaststand = v; Laststand[#Laststand + 1] = v end''')
+        rt.run(src[start:end])
+
+    def test_another_resurrect_clears_the_downed_state(self):
+        self.rt.run('fireEvent("w_creators:client:resurrected", nil, "admin")')
+        e = self.rt.eval
+        self.assertFalse(e('isDead'))
+        self.assertEqual(e('deathTime'), 0)
+        self.assertFalse(e('emsNotified'))
+        self.assertFalse(e('Invincible'))
+        self.assertEqual(e('#Sent'), 2)
+        self.assertEqual(e('Sent[1][1]'), 'hospital:server:SetDeathStatus')
+        self.assertFalse(e('Sent[1][2]'))
+
+    def test_last_stand_is_ended(self):
+        self.rt.run('isDead = false; InLaststand = true; fireEvent("w_creators:client:resurrected", nil, "respawn")')
+        self.assertFalse(self.rt.eval('InLaststand'))
+        self.assertEqual(self.rt.eval('#Laststand'), 1)
+
+    def test_own_hospital_resurrects_and_living_players_are_ignored(self):
+        self.rt.run('fireEvent("w_creators:client:resurrected", nil, "hospital")')
+        self.assertTrue(self.rt.eval('isDead'))
+        self.rt.run('isDead = false; fireEvent("w_creators:client:resurrected", nil, "admin")')
+        self.assertEqual(self.rt.eval('#Sent'), 0)
+
+
 if __name__ == '__main__':
     unittest.main()

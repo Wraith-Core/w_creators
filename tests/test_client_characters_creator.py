@@ -271,13 +271,18 @@ class CreatorRepairTests(unittest.TestCase):
         settle(rt)
         return rt
 
-    def test_repair_with_a_known_sex_opens_the_editor_without_identity(self):
+    def test_repair_with_a_known_sex_opens_the_editor_with_a_locked_identity(self):
         rt = self.make('female')
         e = rt.eval
         self.assertEqual(e('called("w_creators:characters:beginCreate")'), 0)
         self.assertEqual(e('WCCreator.stage()'), 'editor')
         self.assertEqual(e(SESSION + '.saved.sex'), 'female')
-        self.assertIsNone(e(SESSION + '.opts.identity'))
+        # the framework identity is shown read-only (identity.locked) and never submitted
+        self.assertTrue(e(SESSION + '.opts.identity.locked'))
+        self.assertEqual(e(SESSION + '.opts.identity.firstname'), 'Name')
+        self.assertEqual(e(SESSION + '.opts.identity.dob'), '1870-01-01')
+        self.assertTrue(e('(function() for _, f in ipairs(WCEditor.payload().identity.fields) do '
+                              'if f.type ~= "info" then return false end end return true end)()'))
         self.assertIsNone(e(SESSION + '.sections.facialHair'))
         rt.run('''CallbackResults["w_creators:characters:create"] = function(_, token, identity, app)
             return WCResult.ok({ appearance = app, charid = "5" }) end

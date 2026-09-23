@@ -26,6 +26,9 @@ local counter = 0
 local REPLAY_MS = 120000
 local MAX_OP_ID = 64
 local DEFAULT_TTL = 1800 -- seconds
+-- An unused session (no token-bearing call seen) is replaced by a new open of the same kind after
+-- this long: past the w_lib callback timeout (30 s), the client gave up on the lost open reply.
+SS.REPLACE_UNUSED_MS = 35000
 
 -- kind -> service, location type, remote permission, lifetime
 SS.KINDS = {
@@ -76,7 +79,7 @@ end
 local function fail(code, data) return WCResult.fail(code, data) end
 
 --- Register fn(session, reason) called whenever a session closes ('commit'|'close'|'expired'|
---  'dropped'|'stopped'|'character').
+--  'dropped'|'stopped'|'character'|'replaced').
 function SS.onClose(fn)
     closeHooks[#closeHooks + 1] = fn
 end
@@ -101,6 +104,9 @@ local function withinRange(src, loc)
     return loc.preview ~= nil and WCSecurity.near(src, loc.preview, radius)
 end
 
+--- Is the player at the location (its anchor or its fitting stand, interactionRadius + 3)?
+SS.withinRange = withinRange
+
 --- Open a session. opts = { locationId?, remote? }.
 --  Result: ok({ token, session }) or INVALID_PAYLOAD | RATE_LIMITED | *_DISABLED | NO_CHARACTER |
 --  BUSY | LOCATION_NOT_FOUND | LOCATION_DISABLED | TOO_FAR | CHARACTER_NOT_FOUND | DATABASE_ERROR.
@@ -118,6 +124,12 @@ function SS.open(src, kind, opts)
     local current = sessions[src]
     if current then
         if expired(current) and not current.busy then finish(src, 'expired')
+        elseif current.kind == kind and not current.busy and not current.used
+            and GetGameTimer() - (current.openedAt or 0) >= SS.REPLACE_UNUSED_MS then
+            -- The client never used that session (its open reply was lost or timed out, so it has
+            -- no token to close it with): once the client could have given up on that reply, a
+            -- new open replaces it instead of answering BUSY until the TTL.
+            finish(src, 'replaced')
         else return fail('BUSY') end
     end
     if CreatorAppearanceLocks[active.charid] then return fail('BUSY') end
@@ -161,6 +173,7 @@ function SS.open(src, kind, opts)
         remote = remote,
         snapshot = snapshot,
         opened = now(),
+        openedAt = GetGameTimer(),
         expires = now() + ttl,
         busy = false,
     }
@@ -183,6 +196,7 @@ function SS.get(src, token)
         if not s.busy then finish(src, 'character') end
         return nil, 'NO_CHARACTER'
     end
+    s.used = true   -- the client knows this token: a new open no longer replaces the session
     return s
 end
 
@@ -239,14 +253,37 @@ function SS.commit(src, token, opId, fn, opts)
         result = WCResult.ok(result)
     end
     cacheReplay(src, opId, token, result)
-    if result.ok and sessions[src] == s then finish(src, 'commit') end
+    if sessions[src] == s then
+        if result.ok then finish(src, 'commit')
+        elseif s.closeRequested then finish(src, 'close') end   -- the client left meanwhile
+    end
     return result
 end
 
---- Close a session (not while a commit is running). Returns true when closed.
+--- The recorded answer of a commit (read only: nothing is ever executed here), for a client that
+--  gave up on an uncertain commit. Result: the cached answer; BUSY while that session's commit
+--  still runs; SESSION_NOT_FOUND when no answer was recorded (the commit never ran).
+function SS.result(src, token, opId)
+    if type(token) ~= 'string' or (type(opId) ~= 'string' and type(opId) ~= 'number')
+        or #tostring(opId) > MAX_OP_ID then
+        return fail('INVALID_PAYLOAD')
+    end
+    local cached = replayOf(src, tostring(opId), token)
+    if cached then return cached end
+    local s = sessions[src]
+    if s and s.token == token and s.busy then return fail('BUSY') end
+    return fail('SESSION_NOT_FOUND')
+end
+
+--- Close a session. While a commit is running the close is recorded and done by that commit when
+--  it fails (a successful commit closes the session anyway). Returns true when closed now.
 function SS.close(src, token)
     local s = sessions[src]
-    if not s or s.token ~= token or s.busy then return false end
+    if not s or s.token ~= token then return false end
+    if s.busy then
+        s.closeRequested = true
+        return false
+    end
     finish(src, 'close')
     return true
 end
@@ -266,7 +303,7 @@ end)
 --- Forced closes the client did not ask for: tell it, so it restores its snapshot and leaves the
 --  preview (§16.4 w_creators:client:sessionClosed(token, reason)). A drop has nobody to tell; a
 --  commit or a client close already knows.
-SS.NOTIFY_REASONS = { expired = true, stopped = true, character = true }
+SS.NOTIFY_REASONS = { expired = true, stopped = true, character = true, replaced = true }
 
 SS.onClose(function(s, reason)
     if not SS.NOTIFY_REASONS[reason] then return end
@@ -281,6 +318,13 @@ w.callback.register('w_creators:session:close', function(src, token)
     if type(token) ~= 'string' or #token > 128 then return fail('INVALID_PAYLOAD') end
     SS.close(src, token)
     return WCResult.ok()
+end)
+
+--- w_creators:session:result(token, opId): the recorded answer of an uncertain commit (read only).
+w.callback.register('w_creators:session:result', function(src, token, opId)
+    if not WCSecurity.rate(src, 'session:result', 10, 10000) then return fail('RATE_LIMITED') end
+    if type(token) ~= 'string' or #token > 128 then return fail('INVALID_PAYLOAD') end
+    return SS.result(src, token, opId)
 end)
 
 AddEventHandler('onResourceStop', function(resource)
@@ -301,5 +345,30 @@ CreateThread(function()
             end
             if next(list) == nil then replays[src] = nil end
         end
+    end
+end)
+
+-- ---------------------------------------------------------------------
+--  The server clock for the client (§7.2): the client runtime has no os library, so the server
+--  publishes its local date and hour. The service prompts read the hour (opening hours;
+--  WCServicePoints.HOUR_KEY), the creator the date (the date-of-birth window; WCUtil.today).
+-- ---------------------------------------------------------------------
+SS.HOUR_KEY = 'w_creators:hour'
+SS.CLOCK_INTERVAL = 60000
+
+function SS.publishClock()
+    local t = os.date('*t')
+    if type(t) ~= 'table' then return false end
+    local ok = pcall(function()
+        GlobalState[SS.HOUR_KEY] = t.hour
+        GlobalState[WCUtil.TODAY_KEY] = { year = t.year, month = t.month, day = t.day, hour = t.hour }
+    end)
+    return ok
+end
+
+CreateThread(function()
+    while true do
+        SS.publishClock()
+        Wait(SS.CLOCK_INTERVAL)
     end
 end)

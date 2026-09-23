@@ -28,9 +28,9 @@ local MAX_OPID = 64
 
 local MODES = { creator = true, surgery = true, barber = true, store = true, wardrobe = true }
 
--- The chrome strings (all dictionary keys). Sent translated as payload.strings.
+-- The chrome strings (all dictionary keys). Sent translated as payload.strings. The header wordmark
+-- is not one of them: it is a fixed brand mark in the NUI (web/src/brand.js).
 local STRINGS = {
-    brand = 'رايث · استوديو الشخصيات',
     appearance = 'مظهر الشخصية',
     back = 'رجوع',
     close = 'إغلاق',
@@ -252,14 +252,35 @@ local function canSave(s)
     return isDirty(s)
 end
 
+--- A locked identity (identity.locked = true: the repair path of a character whose framework
+--  identity already exists) is shown read-only and never submitted.
+local function identityLocked(s)
+    return type(s.opts.identity) == 'table' and s.opts.identity.locked == true
+end
+
 local function identityPayload(s)
     local id = s.opts.identity
     if type(id) ~= 'table' then return nil end
+    local function text(v) return type(v) == 'string' and v or '' end
+    if id.locked == true then
+        return {
+            locked = true,
+            fields = {
+                { key = 'firstname', label = L('الاسم الأول'), type = 'info', value = text(id.firstname) },
+                { key = 'lastname', label = L('اسم العائلة'), type = 'info', value = text(id.lastname) },
+                { key = 'dob', label = L('تاريخ الميلاد'), type = 'info', value = text(id.dob) },
+                { key = 'sex', label = L('الجنس'), type = 'info',
+                  value = L(s.working.sex == 'male' and 'ذكر' or 'أنثى') },
+            },
+        }
+    end
     local cfg = Config.Characters and Config.Characters.identity or {}
+    -- the client has no os library: the reference year, else the date the server publishes
+    -- (WCUtil.today); unknown -> no min/max on the field (the server validates the age anyway)
     local year = tonumber(cfg.referenceYear)
     if not year then
-        local ok, now = pcall(os.date, '*t')
-        year = ok and type(now) == 'table' and now.year or 1900
+        local today = WCUtil.today()
+        year = today and today.year or nil
     end
     local minAge, maxAge = tonumber(cfg.minAge) or 18, tonumber(cfg.maxAge) or 90
     local nameMax = tonumber(cfg.nameMax) or 25
@@ -270,7 +291,8 @@ local function identityPayload(s)
             { key = 'lastname', label = L('اسم العائلة'), type = 'text', maxLength = nameMax,
               value = type(id.lastname) == 'string' and id.lastname or '' },
             { key = 'dob', label = L('تاريخ الميلاد'), type = 'date',
-              min = ('%04d-01-01'):format(year - maxAge), max = ('%04d-12-31'):format(year - minAge),
+              min = year and ('%04d-01-01'):format(year - maxAge) or nil,
+              max = year and ('%04d-12-31'):format(year - minAge) or nil,
               value = type(id.dob) == 'string' and id.dob or '' },
             { key = 'sex', label = L('الجنس'), type = 'info',
               value = L(s.working.sex == 'male' and 'ذكر' or 'أنثى') },
@@ -681,7 +703,7 @@ OPS.save = function(s, data)
     if type(s.opts.onCommit) ~= 'function' then return WCResult.fail('INTERNAL_ERROR') end
     if not canSave(s) then return WCResult.fail('NO_CHANGES') end
     local extra = {}
-    if type(s.opts.identity) == 'table' then
+    if type(s.opts.identity) == 'table' and not identityLocked(s) then
         local submitted = type(data.identity) == 'table' and data.identity or {}
         local ok, valid, cleaned = pcall(WCIdentity.validate, {
             firstname = submitted.firstname, lastname = submitted.lastname, dob = submitted.dob })

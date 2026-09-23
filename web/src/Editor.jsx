@@ -1,5 +1,6 @@
 import React, {useEffect, useReducer, useRef, useState} from 'react';
 import {nuiSend} from './nui';
+import {BRAND} from './brand';
 import {Frame, Glyph} from './Chrome';
 import SceneCamera from './SceneCamera';
 import {MenuRow, NodeView} from './TreeView';
@@ -139,7 +140,7 @@ export default function Editor({payload, onPayload, onClose}) {
     <SceneCamera camera={camera} part={cameraPart} text={S} disabled={busy || !!confirm}/>
     <section className="wst-panel atelier" aria-label={session.title} aria-busy={busy}>
       <Frame/>
-      <header className="wst-header"><small className="wst-title atelier-brand">{S.brand}</small><h1>{session.title}</h1>{session.subtitle && <small className="wst-title atelier-brand">{session.subtitle}</small>}<span className="wst-rule header-rule" aria-hidden="true"/></header>
+      <header className="wst-header"><small className="wst-title atelier-brand">{BRAND}</small><h1>{session.title}</h1>{session.subtitle && <small className="wst-title atelier-brand">{session.subtitle}</small>}<span className="wst-rule header-rule" aria-hidden="true"/></header>
       {stages && <nav className="atelier-sections" aria-label={S.appearance}>{stages.map((s, i) => <button key={s.id} type="button" disabled={busy || s.disabled} className={`wst-tab ${stage === s.id ? 'selected' : ''}`} aria-current={stage === s.id ? 'page' : undefined} onClick={() => chooseStage(s.id)}><b>{String(i + 1).padStart(2, '0')}</b>{s.label}{s.id === 'identity' && missing && <i/>}</button>)}</nav>}
       <div className="wst-plate menu-heading">
         {!atRoot && <button className="wst-button menu-back" aria-label={S.back} disabled={busy} onClick={back}><Glyph tex="selection_arrow_left"/></button>}

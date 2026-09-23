@@ -7,7 +7,7 @@ control ids (§8.4), dirty/loading behaviour (§8.5) and the camera presets (§8
 
 In short: Lua (`client/editor/`) builds a translated tree of semantic nodes; the React NUI
 (`web/src/`) renders it and sends back control ids and values. The NUI never sees a component hash,
-a native, a price formula or untranslated copy. The pre-v3 flat payload (`categories`, `features`,
+a native, a price formula or untranslated copy (the one fixed text is the brand wordmark, §0.7). The pre-v3 flat payload (`categories`, `features`,
 `overlays`, `action:'component'`, `part:'pant'`…) is retired.
 
 Tests: `web/tests/*.test.mjs` render every editor mode, the panel and the character card from the

@@ -163,6 +163,12 @@ function Barber.open(src, locationId)
     local opened = WCSessions.open(src, 'barber', { locationId = locationId })
     if not opened.ok then return opened end
     local s = opened.data.session
+    -- A defaults-filled appearance can never be committed (the repository refuses to save over
+    -- it): refused up front, before any grant is used or anything is charged (§9.3).
+    if WCAppearanceRepo.degraded(s.charid) then
+        WCSessions.close(src, s.token)
+        return fail('INTERNAL_ERROR')
+    end
     local services, sections = Barber.offer(s.location, s.sex)
     if next(sections) == nil then
         WCSessions.close(src, s.token)
@@ -243,6 +249,8 @@ local function commitBarber(src, s, submitted)
 
     local saved, meta = WCAppearanceRepo.load(s.charid)
     if not saved then return fail(type(meta) == 'table' and meta.error or 'CHARACTER_NOT_FOUND') end
+    -- Refused before anything is charged: the save would refuse the degraded character anyway.
+    if type(meta) == 'table' and meta.degraded then return fail('INTERNAL_ERROR') end
 
     local plan, code = Barber.plan(saved, submitted, loc)
     if not plan then

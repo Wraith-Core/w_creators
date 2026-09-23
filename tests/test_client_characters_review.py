@@ -57,6 +57,18 @@ class SwitchGuardTests(unittest.TestCase):
         self.assertTrue(self.rt.eval(REFUSED))
         self.assertEqual(self.rt.eval('called("w_creators:scene:prepare")'), 0)
 
+    def test_refused_during_a_service_visit(self):
+        # the 'service' lock covers the opening and leave phases; the preview environment the rest
+        self.rt.run('WCState.busy("service", true)')
+        self.assertFalse(self.rt.eval('(WCSelector.canSwitch())'))
+        self.command()
+        self.assertTrue(self.rt.eval(REFUSED))
+        self.assertEqual(self.rt.eval('called("w_creators:scene:prepare")'), 0)
+        self.rt.run('WCState.busy("service", false); WCPreviewEnv.enter({})')
+        self.assertFalse(self.rt.eval('(WCSelector.canSwitch())'))
+        self.rt.run('WCPreviewEnv.exit()')
+        self.assertTrue(self.rt.eval('(WCSelector.canSwitch())'))
+
     def test_allowed_once_those_flows_ended(self):
         self.rt.run('WCSpawnSelector = { active = function() return false end }; '
                     'WCSpawn = { busy = function() return false end }')
@@ -177,8 +189,9 @@ class CutsceneReviewTests(unittest.TestCase):
                 return rawtype(v)
             end
             Config.Creator.enableCutscene = true
-            Config.Creator.cutscene = { start = vector4(10.0, 20.0, 30.0, 90.0),
-                                        arrival = vector3(11.0, 21.0, 31.0), speed = "12" }''')
+            Config.Creator.cutscene.start = vector4(10.0, 20.0, 30.0, 90.0)
+            Config.Creator.cutscene.arrival = vector3(11.0, 21.0, 31.0)
+            Config.Creator.cutscene.speed = "12"''')
         self.rt.run('clearLog()')
         self.fire()
         e = self.e
@@ -190,7 +203,7 @@ class CutsceneReviewTests(unittest.TestCase):
 
     def test_invalid_overrides_fall_back_to_the_defaults(self):
         self.rt.run('''Config.Creator.enableCutscene = true
-            Config.Creator.cutscene = { start = "nowhere", wagon = 5, speed = "fast", bogus = 1 }
+            for k, v in pairs({ wagon = 5, speed = "fast", bogus = 1 }) do Config.Creator.cutscene[k] = v end
             clearLog()''')
         self.fire()
         e = self.e
@@ -198,6 +211,14 @@ class CutsceneReviewTests(unittest.TestCase):
         self.assertEqual(e('GetEntityModel(createdEntities()[1]) == GetHashKey("STAGECOACH001X")'), True)
         self.assertAlmostEqual(e('Log[indexOf("TaskVehicleDriveToCoord")].args[6]'), 10.0)
         self.assertTrue(e('WCCutscene.active()'))
+
+    def test_an_invalid_coordinate_skips_the_ride(self):
+        self.rt.run('''Config.Creator.enableCutscene = true
+            Config.Creator.cutscene.start = "nowhere"
+            clearLog()''')
+        self.fire()
+        self.assertFalse(self.e('WCCutscene.active()'))
+        self.assertEqual(self.e('#createdEntities()'), 0)
 
     def test_a_new_ride_during_the_departure_removes_the_old_wagon(self):
         self.rt.run('Config.Creator.enableCutscene = true; clearLog()')

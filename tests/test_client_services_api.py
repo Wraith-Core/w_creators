@@ -157,8 +157,6 @@ class LocaleTests(unittest.TestCase):
         import re
         from harness import RESOURCE, read
         keys = set(json.loads(read(RESOURCE / 'locales' / 'en.json')))
-        for path in sorted((RESOURCE / 'locales' / 'pending').glob('*.json')):
-            keys |= set(json.loads(read(path)))
         arabic = re.compile(r"'([^'\n]*[؀-ۿ][^'\n]*)'|\"([^\"\n]*[؀-ۿ][^\"\n]*)\"")
         missing = []
         for rel in ('client/barber/barber.lua', 'client/surgery/surgery.lua', 'client/api.lua',

@@ -85,9 +85,18 @@ class CutsceneTests(unittest.TestCase):
 
     def test_config_overrides_the_scene(self):
         self.run('''Config.Creator.enableCutscene = true
-            Config.Creator.cutscene = { start = { 10.0, 20.0, 30.0, 90.0 }, wagon = "CART01" }''')
+            Config.Creator.cutscene.start = { 10.0, 20.0, 30.0, 90.0 }; Config.Creator.cutscene.wagon = "CART01"''')
         self.fire()
         self.assertAlmostEqual(self.e('Peds[MyPed].coords.x'), 10.0)
+
+    def test_a_ride_without_its_coordinates_is_skipped(self):
+        # the coordinates live only in Config.Creator.cutscene: without them the new character is
+        # placed at Config.Spawn.firstSpawn as without the cutscene
+        self.run('Config.Creator.enableCutscene = true; Config.Creator.cutscene = { wagon = "CART01" }')
+        self.fire()
+        self.assertFalse(self.e('WCCutscene.active()'))
+        self.assertFalse(self.e('WCCutscene.configured()'))
+        self.assertAlmostEqual(self.e('Peds[MyPed].coords.x'), self.e('Config.Spawn.firstSpawn.coords.x'), places=2)
 
     def test_resource_stop_mid_ride_cleans_up(self):
         self.run('Config.Creator.enableCutscene = true')
@@ -136,8 +145,6 @@ class StaticRulesTests(unittest.TestCase):
 
     def test_locale_keys_are_known(self):
         keys = set(json.loads(read(RESOURCE / 'locales' / 'en.json')))
-        for path in sorted((RESOURCE / 'locales' / 'pending').glob('*.json')):
-            keys |= set(json.loads(read(path)))
         arabic = re.compile(r"'([^'\n]*[؀-ۿ][^'\n]*)'")
         missing = []
         for path in FILES:

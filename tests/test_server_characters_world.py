@@ -275,6 +275,11 @@ class RespawnTests(Base):
         self.command(0, '1')
         self.assertEqual(len(self.events()), 0)                               # no active character
         self.activate()
+        # still choosing the login spawn (the client ignores world respawns in the scene): refused
+        self.command(0, '1')
+        self.assertEqual(len(self.events()), 0)
+        self.assertEqual(self.e('WCSpawnServer.pending(1)'), 'login')
+        self.assertTrue(self.call('spawn:choose', 1, 'valentine').ok)
         self.command(0, '1')
         ev = self.events()[-1]
         self.assertEqual(ev.player, 1)

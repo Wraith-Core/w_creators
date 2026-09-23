@@ -488,8 +488,11 @@ local function play(card)
         leaveSelection()
         releaseLock()
         st.busy = false
-        local started, code = WCCreator.start({ repair = { token = data.token, sex = data.sex or card.sex,
-                                                           charid = card.charid, appearance = card.appearance } })
+        local started, code = WCCreator.start({ repair = {
+            token = data.token, sex = data.sex or card.sex, charid = card.charid, appearance = card.appearance,
+            -- shown read-only by the creator (the framework identity is kept)
+            identity = { firstname = card.firstname, lastname = card.lastname, dob = card.dob },
+        } })
         if not started then reopenAfterCreator(code) end
         return
     end
@@ -645,8 +648,10 @@ function Sel.finish(spawnMode)
     releaseLock()
     CreatorScene.release({ keepBucket = true })
     if spawnMode == 'event' then
-        -- a framework spawn event (Config.Creator.spawnEvent) owns the next screen; the HUD
-        -- comes back now and the screen is faded in if that event does not do it
+        -- a framework spawn event (Config.Creator.spawnEvent) owns the next screen; the server
+        -- already put the player in bucket 0; the HUD comes back now and the screen is faded in
+        -- if that event does not do it
+        if CreatorScene.forgetIsolation then CreatorScene.forgetIsolation() end
         SetCustomHudVisible(true)
         CreateThread(function()
             local shown = WCUtil.waitUntil(function()
@@ -658,15 +663,22 @@ function Sel.finish(spawnMode)
         end)
     end
     -- the final exit: the maps are unloaded (and a bucket still held released) once the player
-    -- stands outside the room and the spawn flow is over
+    -- stands outside the room and the spawn flow is over. No deadline: a player idling in the
+    -- spawn selector for a long time must still get the isolation flag cleared when he leaves
+    -- (it would otherwise block every service); only a new selection generation ends the wait.
     CreateThread(function()
-        local left = WCUtil.waitUntil(function()
-            if gen ~= st.generation then return true end
-            return (not inRoom() and not WCState.busy('spawn')) or nil
-        end, FINAL_EXIT_TIMEOUT, FINAL_EXIT_STEP)
-        if gen ~= st.generation or not left or inRoom() then return end
-        CreatorScene.release({ unload = true })
-        WCDebug.log('characters', 'creator room unloaded')
+        while gen == st.generation do
+            local left = WCUtil.waitUntil(function()
+                if gen ~= st.generation then return true end
+                return (not inRoom() and not WCState.busy('spawn')) or nil
+            end, FINAL_EXIT_TIMEOUT, FINAL_EXIT_STEP)
+            if gen ~= st.generation then return end
+            if left and not inRoom() then
+                CreatorScene.release({ unload = true })
+                WCDebug.log('characters', 'creator room unloaded')
+                return
+            end
+        end
     end)
 end
 
@@ -676,17 +688,34 @@ function Sel.active() return st.inSelection end
 --- Is an open or an action running?
 function Sel.busy() return st.busy end
 
+-- The death system's own down state (WCSpawn.DEATH_OWNER): dead or in last stand while the ped
+-- is alive (hospital bed heal timer, a dead character logging in). The server checks it as well.
+local function deathOwnerSaysDead()
+    local owner = type(WCSpawn) == 'table' and WCSpawn.DEATH_OWNER or nil
+    if type(owner) ~= 'table' or type(owner.resource) ~= 'string' or type(owner.isDead) ~= 'string' then
+        return false
+    end
+    local okState, state = pcall(GetResourceState, owner.resource)
+    if not okState or state ~= 'started' then return false end
+    local done, dead = pcall(function() return exports[owner.resource][owner.isDead]() end)
+    return done and dead ~= nil and dead ~= false
+end
+
 --- May the player open the selection mid-game? true | false, localeKey. The server validates
 --  again (scene:prepare → WCCharacters.beginSwitch).
 function Sel.canSwitch()
     if Config.Characters.allowSwitch ~= true then return false, WCResult.messageKey('SERVICE_DISABLED') end
     local ped = PlayerPedId()
-    if IsEntityDead(ped) or WCState.busy('respawn') then return false, MSG_SWITCH_REFUSED end
+    if IsEntityDead(ped) or WCState.busy('respawn') or deathOwnerSaysDead() then return false, MSG_SWITCH_REFUSED end
     if WCState.inEditor() or WCEditor.isOpen() or (type(WCPanel) == 'table' and WCPanel.isOpen()) then
         return false, MSG_SWITCH_REFUSED
     end
     if st.busy or st.inSelection or WCState.busy('selection') or WCState.busy('spawn')
         or WCState.busy('clothingAction') or (type(WCCreator) == 'table' and WCCreator.active()) then
+        return false, MSG_SWITCH_REFUSED
+    end
+    -- a store / wardrobe / barber / surgery visit, from its opening phase to the walk back
+    if WCState.busy('service') or (type(WCPreviewEnv) == 'table' and WCPreviewEnv.active()) then
         return false, MSG_SWITCH_REFUSED
     end
     -- the first-spawn ride and the spawn selector / respawn flow own the player until they end

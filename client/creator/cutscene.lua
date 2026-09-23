@@ -11,23 +11,24 @@
 --  With the cutscene disabled the event places the player at Config.Spawn.firstSpawn and plays the
 --  notices only.
 --
---  The scene values live in Config.Creator.cutscene when it exists (any field may be overridden);
---  otherwise the constants below (the pre-v3 coordinates) are used.
+--  The scene values live in Config.Creator.cutscene (config/main.lua; the coordinates only there,
+--  the other fields default to the constants below). WCCutscene.configured() is false without the
+--  three coordinates: the ride is skipped and the character placed as without the cutscene.
 --  The arrival is checked by a 250 ms loop that only runs during the cutscene; the input and the
 --  cinematic bars need a per-frame request (DisableAllControlActions, _REQUEST_LETTER_BOX_NOW), so
 --  a presentation loop runs every frame, also only during the cutscene.
 --
---  Public: WCCutscene.active(), WCCutscene.stop(); net event W:CREATOR:FirstSpawn.
+--  Public: WCCutscene.active(), WCCutscene.stop(), WCCutscene.configured(); net event
+--  W:CREATOR:FirstSpawn.
 -- =====================================================================
 
 WCCutscene = {}
 local Cut = WCCutscene
 
--- The pre-v3 scene (creator/spawn.lua). Config.Creator.cutscene overrides any of these fields.
+-- The pre-v3 scene's settings (creator/spawn.lua). Config.Creator.cutscene overrides any of them
+-- and holds the coordinates (start, arrival, departure: config/main.lua); a ride whose coordinates
+-- are not all configured is not played (the new character is placed as without the cutscene).
 local DEFAULTS = {
-    start        = { 2520.09, -358.05, 41.61, 268.89169 }, -- the wagon and the player start here
-    arrival      = { 2539.83, -1129.33, 50.03 },           -- Saint Denis: the ride ends here
-    departure    = { 2600.436, -1205.932, 53.323 },        -- the driver takes the empty wagon here
     wagon        = 'STAGECOACH001X',
     driver       = 'CS_BivCoachDriver',
     arriveRadius = 5.0,
@@ -64,7 +65,7 @@ local st = {
 -- How an override of each field is accepted: coordinates in any form CreatorScene.coords reads
 -- (vector3 / vector4 at runtime, { x, y, z[, h] } arrays, { x =, y =, z = } tables), finite
 -- numbers, non-empty model names.
-local COORD_KEYS = { start = true, arrival = true, departure = true }
+local COORD_KEYS = { start = true, arrival = true, departure = true } -- config only (no default)
 local MODEL_KEYS = { wagon = true, driver = true }
 
 local function override(k, v)
@@ -86,7 +87,7 @@ local function settings()
     local custom = Config.Creator and Config.Creator.cutscene
     if type(custom) == 'table' then
         for k, v in pairs(custom) do
-            if DEFAULTS[k] == nil then
+            if DEFAULTS[k] == nil and not COORD_KEYS[k] then
                 WCDebug.warn('creator', 'Config.Creator.cutscene.%s is not a cutscene setting; ignored', tostring(k))
             else
                 local accepted = override(k, v)
@@ -300,6 +301,15 @@ end
 --- Is the ride running?
 function Cut.active() return st.active end
 
+--- Are the ride's coordinates (start, arrival, departure) configured?
+function Cut.configured()
+    local s = settings()
+    for key in pairs(COORD_KEYS) do
+        if s[key] == nil then return false end
+    end
+    return true
+end
+
 --- Stop everything the cutscene holds (resource stop, another flow taking over).
 function Cut.stop()
     local held = st.active or st.presenting or st.wagon ~= nil or st.driver ~= nil
@@ -317,9 +327,12 @@ RegisterNetEvent('W:CREATOR:FirstSpawn', function()
     CreateThread(function()
         if st.active then return end -- a second event during the ride is ignored
         local ok, err
-        if Config.Creator.enableCutscene == true then
+        if Config.Creator.enableCutscene == true and Cut.configured() then
             ok, err = pcall(play)
         else
+            if Config.Creator.enableCutscene == true then
+                WCDebug.warn('creator', 'Config.Creator.cutscene needs start, arrival and departure: ride skipped')
+            end
             ok, err = pcall(plain)
         end
         if not ok then

@@ -23,7 +23,9 @@ local function emit(level, domain, text)
         local ok = pcall(printer, '%s', line)
         if ok then return end
     end
-    print(('[w_creators] %s'):format(line))
+    -- no w_lib printer (it failed to load): the runtime's console trace
+    local trace = type(Citizen) == 'table' and Citizen.Trace
+    if type(trace) == 'function' then pcall(trace, ('[w_creators] %s\n'):format(line)) end
 end
 
 --- Is debug output enabled (for this domain)?

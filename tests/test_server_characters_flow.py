@@ -579,10 +579,10 @@ class OptionalLoggingTests(Base):
         self.assertEqual(self.e('Players[1].bucket'), 0)
         self.assertEqual(len(self.rt.client_events('w_creators:client:spawn')), 1)
 
-    def test_locale_key_of_the_admin_feedback_is_queued(self):
+    def test_locale_key_of_the_admin_feedback_is_translated(self):
         import json
         from harness import RESOURCE
-        data = json.loads((RESOURCE / 'locales' / 'pending' / 'server-characters.json').read_text(encoding='utf-8'))
+        data = json.loads((RESOURCE / 'locales' / 'en.json').read_text(encoding='utf-8'))
         self.assertIn('تمت إعادة إظهار اللاعب', data)
 
 if __name__ == '__main__':

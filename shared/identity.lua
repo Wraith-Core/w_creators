@@ -75,7 +75,9 @@ local function isLeap(y)
     return (y % 4 == 0 and y % 100 ~= 0) or y % 400 == 0
 end
 
---- Validate a date of birth. Returns true, 'YYYY-MM-DD', age | false, 'INVALID_DOB'.
+--- Validate a date of birth. Returns true, 'YYYY-MM-DD', age | false, 'INVALID_DOB'. The age is nil
+--  (and not checked) only when no referenceYear is set and the date is unknown (a client the
+--  server has not published its date to).
 function WCIdentity.validateDob(s)
     if type(s) ~= 'string' then return false, 'INVALID_DOB' end
     local ys, ms, ds = WCUtil.trim(s):match('^(%d%d%d%d)%-(%d%d)%-(%d%d)$')
@@ -90,11 +92,16 @@ function WCIdentity.validateDob(s)
     if cfg.referenceYear then
         age = cfg.referenceYear - y
     else
-        local now = os.date('*t')
-        age = now.year - y
-        if now.month < m or (now.month == m and now.day < d) then age = age - 1 end
+        -- the real date (WCUtil.today: os on the server, the server's published date on the
+        -- client); unknown on a client the server has not told yet: the age window is left to the
+        -- server, which always knows the date
+        local now = WCUtil.today()
+        if now then
+            age = now.year - y
+            if now.month < m or (now.month == m and now.day < d) then age = age - 1 end
+        end
     end
-    if age < cfg.minAge or age > cfg.maxAge then return false, 'INVALID_DOB' end
+    if age and (age < cfg.minAge or age > cfg.maxAge) then return false, 'INVALID_DOB' end
     return true, ('%04d-%02d-%02d'):format(y, m, d), age
 end
 

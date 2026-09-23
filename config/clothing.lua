@@ -278,11 +278,18 @@ Config.ClothingStates = {
     -- EXPERIMENTAL (Config.Experimental.clothingAnimations): short upper-body clips played while a
     -- state changes. The dictionary/clip names come from community research and are not verified
     -- on every game build; a missing clip is skipped and the state still changes.
+    --   clips     target state value -> clip (read first; `up` / `down` are the fallback by direction)
+    --   duration  ms the clip plays; midpoint = ms at which the state changes (default duration / 2)
     animations = {
-        hat     = { dict = 'mech_inventory@clothing@hat',     up = 'hat_off',     down = 'hat_on',     duration = 1200 },
-        mask    = { dict = 'mech_inventory@clothing@bandana', up = 'neck_2_face', down = 'face_2_neck', duration = 1000 },
-        bandana = { dict = 'mech_inventory@clothing@bandana', up = 'neck_2_face', down = 'face_2_neck', duration = 1000 },
-        sleeves = { dict = 'mech_inventory@clothing@sleeves', up = 'roll_up',     down = 'roll_down',   duration = 1500 },
-        gloves  = { dict = 'mech_inventory@clothing@gloves',  up = 'gloves_off',  down = 'gloves_on',   duration = 1500 },
+        hat     = { dict = 'mech_inventory@clothing@hat', duration = 1200, midpoint = 600,
+                    clips = { off = 'hat_off', on = 'hat_on' } },
+        mask    = { dict = 'mech_inventory@clothing@bandana', duration = 1000, midpoint = 500,
+                    clips = { on = 'neck_2_face', off = 'face_2_neck' } },
+        bandana = { dict = 'mech_inventory@clothing@bandana', duration = 1000, midpoint = 500,
+                    clips = { up = 'neck_2_face', down = 'face_2_neck' } },
+        sleeves = { dict = 'mech_inventory@clothing@sleeves', duration = 1500, midpoint = 750,
+                    clips = { rolled = 'roll_up', down = 'roll_down' } },
+        gloves  = { dict = 'mech_inventory@clothing@gloves', duration = 1500, midpoint = 750,
+                    clips = { off = 'gloves_off', on = 'gloves_on' } },
     },
 }

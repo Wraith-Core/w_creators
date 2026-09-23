@@ -77,10 +77,10 @@ function WCLocations.byType(locationType)
 end
 
 --- The current hour (0..23) for opening hours: the server's local time (the server has no game
---  clock). The client uses the same rule; the server decides.
+--  clock; WCUtil.today). The client reads the hour the server publishes; the server decides.
 function WCLocations.hour()
-    local t = os.date('*t')
-    return type(t) == 'table' and tonumber(t.hour) or 0
+    local t = WCUtil.today()
+    return t and WCUtil.int(t.hour, 0, 23, 0) or 0
 end
 
 --- Is the location open at `hour` (default WCLocations.hour())? No hours = always open.

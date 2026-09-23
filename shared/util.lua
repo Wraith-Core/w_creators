@@ -195,3 +195,25 @@ function U.set(list)
     end
     return out
 end
+
+--- The key of the server's published date (GlobalState): { year, month, day, hour }. The server
+--  publishes it (server/core/sessions.lua) because the client runtime has no os library.
+U.TODAY_KEY = 'w_creators:today'
+
+--- The current real date { year, month, day, hour } (numbers), or nil when it is unknown.
+--  The os library when this runtime has one (the server); otherwise the date the server publishes
+--  in GlobalState[U.TODAY_KEY] (the client). Never throws.
+function U.today()
+    local osLib = rawget(_G, 'os')
+    if type(osLib) == 'table' and type(osLib.date) == 'function' then
+        local ok, t = pcall(osLib.date, '*t')
+        if ok and type(t) == 'table' and tonumber(t.year) then
+            return { year = t.year, month = t.month, day = t.day, hour = t.hour }
+        end
+    end
+    local ok, t = pcall(function() return GlobalState[U.TODAY_KEY] end)
+    if not ok or type(t) ~= 'table' then return nil end
+    local year, month, day = U.int(t.year, 1, 9999, nil), U.int(t.month, 1, 12, nil), U.int(t.day, 1, 31, nil)
+    if not year or not month or not day then return nil end
+    return { year = year, month = month, day = day, hour = U.int(t.hour, 0, 23, 0) }
+end

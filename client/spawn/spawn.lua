@@ -51,7 +51,7 @@ Sp.REVIVE_START_TIMEOUT = 3000 -- ms for the death system's revive to start
 Sp.REVIVE_TIMEOUT = 30000      -- ms for that revive to finish (resurrect + appearance)
 -- The death system that owns the dead / last-stand state: a respawn revives through it so that
 -- state is cleared (nil = always WCRespawn.resurrect).
-Sp.DEATH_OWNER = { resource = 'w_ambulancejob', revive = 'hospital:client:Revive' }
+Sp.DEATH_OWNER = { resource = 'w_ambulancejob', revive = 'hospital:client:Revive', isDead = 'IsDead' }
 
 local LOGIN_KINDS = { initial = true, login = true, switch = true }
 local WORLD_KINDS = { admin = true, death = true }
@@ -89,7 +89,13 @@ end
 local function firstSpawn()
     local cfg = (Config.Spawn and Config.Spawn.firstSpawn) or {}
     local x, y, z = WCUtil.xyz(cfg.coords)
-    if not x then x, y, z = -274.09, 785.36, 119.29 end
+    if not x then
+        -- a broken Config.Spawn.firstSpawn (the dev tool wc_catalog_validate reports it): the
+        -- player stays where the ped is rather than at a position this file would have to invent
+        WCDebug.warn('spawn', 'Config.Spawn.firstSpawn.coords is invalid: the player stays in place')
+        x, y, z = WCUtil.xyz(GetEntityCoords(PlayerPedId()))
+        x, y, z = x or 0.0, y or 0.0, z or 0.0
+    end
     return x, y, z, headingOf({ heading = cfg.heading }) or 0.0
 end
 
@@ -216,6 +222,17 @@ local function closeSelector()
     local holding = sel.holding and sel.holding() or false
     pcall(sel.close)
     return holding
+end
+
+-- The in-world spawn selector (admin / death) still holds the player (frozen, hidden, invincible,
+-- world UI off, screen faded out by its confirm) and the respawn gives up before placing him:
+-- give him back where he stands. true when a hold was released.
+local function releaseSelectorHold()
+    local sel = selector()
+    if not sel or not sel.holding or not sel.holding() then return false end
+    local ok, err = pcall(sel.close, { restore = true })
+    if not ok then WCDebug.warn('spawn', 'releasing the spawn selector hold failed: %s', tostring(err)) end
+    return true
 end
 
 -- Give the player the world: unfrozen, and (full) visible, vulnerable, networked for all.
@@ -398,6 +415,7 @@ function Sp.respawn(pos, meta)
             aborted = true
             WCDebug.warn('spawn', '%s respawn aborted: an editor / service visit did not end within %d ms',
                 kind, Sp.FLOW_TIMEOUT)
+            releaseSelectorHold()
             return
         end
         stopCutscene()
@@ -414,6 +432,8 @@ function Sp.respawn(pos, meta)
     end)
     if not ok then
         WCDebug.warn('spawn', 'respawn failed: %s', tostring(err))
+        -- a throw before closeSelector() leaves the selector's hold in place
+        if releaseSelectorHold() then fromSelector = true end
         releasePed(fromSelector)
         if fromSelector then restoreUi() end
         pcall(WCurtain.restore, true)
@@ -424,6 +444,9 @@ end
 
 RegisterNetEvent('w_creators:client:spawn', function(pos, meta)
     received = received + 1
+    -- the server put the player in bucket 0 before sending this (WCScene.toWorld): the private
+    -- scene is over, whatever the room's final exit does later
+    if type(CreatorScene) == 'table' and CreatorScene.forgetIsolation then pcall(CreatorScene.forgetIsolation) end
     CreateThread(function() Sp.spawn(pos, meta) end)
 end)
 

@@ -1,5 +1,5 @@
-"""Every Arabic dictionary key used by the v3 config/shared code is translated in locales/en.json or
-queued in locales/pending/*.json (merged by the release step)."""
+"""Every Arabic dictionary key used by the v3 config/shared code is translated in locales/en.json
+(the per-module locales/pending/*.json queues were merged by the release step and removed)."""
 import json
 import re
 import unittest
@@ -10,17 +10,17 @@ ARABIC = re.compile(r"'([^'\n]*[؀-ۿ][^'\n]*)'|\"([^\"\n]*[؀-ۿ][^\"\n]*)\"")
 
 
 def known_keys():
-    keys = set(json.loads(read(RESOURCE / 'locales' / 'en.json')))
-    for path in sorted((RESOURCE / 'locales' / 'pending').glob('*.json')):
-        keys |= set(json.loads(read(path)))
-    return keys
+    return set(json.loads(read(RESOURCE / 'locales' / 'en.json')))
 
 
 class LocaleKeyTests(unittest.TestCase):
-    def test_pending_files_are_flat_string_maps(self):
-        for path in sorted((RESOURCE / 'locales' / 'pending').glob('*.json')):
-            data = json.loads(read(path))
-            self.assertTrue(all(isinstance(k, str) and isinstance(v, str) and v for k, v in data.items()), path.name)
+    def test_no_pending_queue_is_left(self):
+        self.assertFalse((RESOURCE / 'locales' / 'pending').exists())
+
+    def test_dictionaries_are_flat_string_maps(self):
+        for name in ('en.json', 'ar.json'):
+            data = json.loads(read(RESOURCE / 'locales' / name))
+            self.assertTrue(all(isinstance(k, str) and isinstance(v, str) and v for k, v in data.items()), name)
 
     def test_config_and_shared_keys_are_translated(self):
         keys = known_keys()

@@ -132,6 +132,12 @@ function Surgery.open(src, clinicId)
     local opened = WCSessions.open(src, 'surgery', { locationId = clinicId })
     if not opened.ok then return opened end
     local s = opened.data.session
+    -- A defaults-filled appearance can never be committed (the repository refuses to save over
+    -- it): refused up front, before any grant is used or anything is charged (§9.3).
+    if WCAppearanceRepo.degraded(s.charid) then
+        WCSessions.close(src, s.token)
+        return fail('INTERNAL_ERROR')
+    end
     local grantNeeded = needsGrant(clinicId)
     if grantNeeded and not Surgery.granted(src, clinicId) then
         WCDebug.log('surgery', '%s requested %s without a grant', tostring(src), clinicId)
@@ -241,6 +247,8 @@ local function commitSurgery(src, s, submitted)
 
     local saved, meta = WCAppearanceRepo.load(s.charid)
     if not saved then return fail(type(meta) == 'table' and meta.error or 'CHARACTER_NOT_FOUND') end
+    -- Refused before anything is charged: the save would refuse the degraded character anyway.
+    if type(meta) == 'table' and meta.degraded then return fail('INTERNAL_ERROR') end
 
     local owned
     if Surgery.sections(saved.sex).clothing then

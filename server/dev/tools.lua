@@ -10,6 +10,9 @@
 --    * Config.Admin.spawnProp = true registers
 --        spawnprop <model>     the pre-v3 prop spawner: an ACE-restricted command (command.spawnprop)
 --                              that sends W:ADMIN:SpawnObject to the caller's client (client dev tools).
+--  The callback w_creators:dev:allowed(command) is always registered: it answers SERVICE_DISABLED
+--  unless Config.Admin.devTools is on, and otherwise lets a player holding Config.Admin.devAce run
+--  the client dev commands (wc_inspect, wc_apply, wc_remove, wc_restore; client/dev/tools.lua).
 --  The console command wc_migrate_appearances (§6.2) is always available: it is registered by
 --  server/appearance/repository.lua (console only, batches of 100) and is not duplicated here.
 --
@@ -371,6 +374,33 @@ if Config.Admin and Config.Admin.devTools == true then
         if src ~= 0 then Bridge.Notify(src, 'تقرير فحص الكتالوج في وحدة تحكم الخادم', 'inform') end
     end, false)
 end
+
+-- w_creators:dev:allowed(command) -> Result: may this player run a client dev command
+-- (client/dev/tools.lua asks before each one)? SERVICE_DISABLED unless Config.Admin.devTools is on;
+-- only the four client dev commands; the player must hold Config.Admin.devAce. A refusal of an
+-- enabled tool is logged as a security violation.
+Dev.CLIENT_COMMANDS = { wc_inspect = true, wc_apply = true, wc_remove = true, wc_restore = true }
+Dev.DENIED = 'هذا الأمر مخصص للمطورين'
+
+function Dev.clientAllowed(src, command)
+    if not (Config.Admin and Config.Admin.devTools == true) then return WCResult.fail('SERVICE_DISABLED') end
+    if not WCSecurity.rate(src, 'dev:allowed', 10, 10000) then return WCResult.fail('RATE_LIMITED') end
+    if type(command) ~= 'string' or not Dev.CLIENT_COMMANDS[command] then
+        WCSecurity.violation(src, 'dev_tools', { command = tostring(command) })
+        return WCResult.fail('INVALID_PAYLOAD')
+    end
+    if src == 0 or not allowed(src, Config.Admin.devAce) then
+        WCSecurity.violation(src, 'dev_tools', { command = command })
+        local refused = WCResult.fail('SERVICE_DISABLED')
+        refused.message = Dev.DENIED
+        return refused
+    end
+    return WCResult.ok()
+end
+
+w.callback.register('w_creators:dev:allowed', function(src, command)
+    return Dev.clientAllowed(tonumber(src) or 0, command)
+end)
 
 if Config.Admin and Config.Admin.spawnProp == true then
     -- Restricted: only holders of the command.spawnprop ACE (group.admin has 'command') may use it.

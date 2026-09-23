@@ -73,6 +73,18 @@ this resource); each call is guarded so a missing or failing native never throws
 | `SetWeatherType` | `client/scene/environment.lua` (`enter{weather}`) | `(GetHashKey(name), true, true, true, 0.0, true)` | Restored with the two calls below. |
 | `ClearOverrideWeather`, `ClearWeatherTypePersist` | `client/scene/environment.lua` (`exit()`) | `()` | — |
 | `RemoveIplByHash` (fallback `RemoveImap`) | `client/scene/scene.lua` (`CreatorScene.unload()`) | `(hash)` | Unloads only the room maps `load()` requested; `RemoveImap` is what the pre-v3 creator used. |
+| `GetGroundZAndNormalFor_3dCoord` | `client/spawn/spawn.lua` (ground probe), `client/dev/tools.lua` (`W:ADMIN:SpawnObject`) | `(x, y, z)` → `found, groundZ, normal` | Spawn: a probe more than 20 m from the target is rejected (§11); dev tools place the prop at `groundZ + 0.02`. |
+| `IsModelValid` | `client/dev/tools.lua`, `client/creator/cutscene.lua` | `(hash)` | Invalid prop / wagon / driver models are ignored. |
+| `LoadSceneStart`, `IsLoadSceneLoaded`, `LoadSceneStop` | `client/spawn/selector.lua` | `(x, y, z, 0.0, 0.0, 0.0, 50.0, 0)`, `()`, `()` | Streams the spawn point shown by the selector; looked up by name and pcall'd. |
+| `IsEntityDead`, `IsPedDeadOrDying` | respawn, spawn, selector, service flows, clothing states, cutscene | `(ped)`, `(ped, true)` | Death detection; last stand counts as dying. |
+| `IsPedRagdoll`, `IsPedInCombat`, `IsPedInMeleeCombat`, `IsPedOnMount`, `IsPedInAnyVehicle`, `IsPedGettingIntoAVehicle` | `client/clothing/states.lua` (ped guard) | `(ped)` / `(ped, 0)` / `(ped, false)` | Looked up by name: a missing native reads as false (that check is skipped). |
+| `StopAnimTask` | `client/clothing/states.lua` | `(ped, dict, clip, 1.0)` | Stops an interrupted clothing animation (`Config.Experimental.clothingAnimations`). |
+| `ClearPedTasksImmediately` | environment, scene, spawn, cutscene | `(ped)` | Leaves the wagon before it is deleted; clears preview-ped tasks. |
+| `NetworkSetEntityOnlyExistsForParticipants` | selector, creator, cutscene, spawn | `(entity, bool)` | Preview peds and the ride stay local to the player. |
+| `PlaySoundFrontend` | `client/creator/creator.lua` | `(name, set, true, 0)` | Gender-scene sounds. |
+| `TriggerMusicEvent`, `SetCinematicModeActive` | `client/creator/cutscene.lua` | `(name)`, `(bool)` | The first-spawn ride's music and cinematic mode. |
+| `SetVehicleOnGroundProperly`, `SetPedIntoVehicle`, `IsPedInVehicle`, `TaskVehicleDriveToCoord`, `TaskLeaveVehicle` | `client/creator/cutscene.lua` | — | The wagon ride (passenger seat `1`, driver `-1`). |
+| `RemovePedFromGroup`, `GetPedGroupIndex`, `SetPedAsGroupMember`, `GetPedRelationshipGroupHash`, `SetRelationshipBetweenGroups`, `SetEntityNoCollisionEntity`, `SetEntityCanBeDamaged` | `client/creator/cutscene.lua` (driver), `client/services/locations.lua` (NPCs) | — | The driver and the tailor NPCs cannot be hurt or pushed. |
 
 `WCNative._` holds the shared validation helpers (`entity`, `ped`, `mpPed`, `invoke`, `bool`,
 `float`, `fail`); it is internal to `client/natives/`.

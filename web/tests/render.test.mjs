@@ -74,7 +74,9 @@ for (const mode of ['creatorMale', 'creatorFemale', 'surgery', 'surgeryHair', 'b
     const html = R.editor(p);
     assert.match(html, /class="wst-panel atelier"/);
     assert.ok(html.includes(`<h1>${p.session.title}</h1>`));
-    assert.ok(html.includes(p.strings.brand));
+    // the wordmark is the fixed Latin brand mark in both languages, never a translated string
+    assert.ok(html.includes('WRAITH · CHARACTER STUDIO'));
+    assert.ok(!html.includes('رايث'));
     const rows = p.tree.children.filter(c => ['group', 'identity', 'review', 'action'].includes(c.kind)).length + (p.canRandom ? 1 : 0);
     assert.equal(count(html, 'class="wst-card menu-row"'), rows);
     if (p.stages) assert.equal(count(html, 'wst-tab'), p.stages.length);
@@ -158,6 +160,7 @@ test('panel: tree, heading and Close button', () => {
   const html = R.panel(copy(p));
   assert.match(html, /class="wst-panel atelier"/);
   assert.ok(html.includes(p.strings.close));
+  assert.ok(html.includes('WRAITH · CHARACTER STUDIO'));
   assert.equal(count(html, 'scene-touch'), 0);
   const first = p.tree.children[0];
   const inner = R.panel(copy(p), [first.id, first.children[0].id]);

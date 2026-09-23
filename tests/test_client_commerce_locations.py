@@ -240,8 +240,6 @@ class SourceRulesTests(unittest.TestCase):
 
     def test_locale_keys_are_translated(self):
         keys = set(json.loads(read(RESOURCE / 'locales' / 'en.json')))
-        for path in sorted((RESOURCE / 'locales' / 'pending').glob('*.json')):
-            keys |= set(json.loads(read(path)))
         pattern = re.compile(r"'([^'\n]*[؀-ۿ][^'\n]*)'")
         for name in self.FILES:
             code = re.sub(r'--[^\n]*', '', read(RESOURCE / name))

@@ -333,6 +333,12 @@ function Spawn.respawn(src, pointId, kind, extra)
     kind = Spawn.KINDS[kind] and kind or 'admin'
     local active = WCSessions and WCSessions.activeCharacter(src)
     if not active then return WCResult.fail('NO_CHARACTER') end
+    -- A pending login grant belongs to the character scene, where the client ignores world
+    -- respawns: refused. An in-world grant ('admin' / 'death' spawn selector) is withdrawn: the
+    -- client respawn closes that selector without a spawn:choose, and a grant left behind would
+    -- let the client move itself later and keep OpenSpawnSelector BUSY.
+    local pendingNow = Spawn.pending(src)
+    if pendingNow and not IN_WORLD[pendingNow] then return WCResult.fail('BUSY') end
     local pos, point
     if pointId == nil then
         pos, point = fallback()
@@ -340,6 +346,7 @@ function Spawn.respawn(src, pointId, kind, extra)
         pos, point = Spawn.resolve(pointId, src)
         if not pos then return WCResult.fail(point) end
     end
+    if pendingNow then Spawn.cancel(src) end
     TriggerClientEvent('w_creators:client:respawn', src, pos, { kind = kind, point = point })
     logSpawn(src, kind, point, type(extra) == 'table' and extra or nil)
     return WCResult.ok({ pos = pos, kind = kind, point = point })

@@ -73,7 +73,7 @@ local function blocked()
         return 'BUSY'
     end
     if type(WCClientApi) == 'table' and WCClientApi.inCharacterScene() then return 'BUSY' end
-    for _, lock in ipairs({ 'selection', 'spawn', 'respawn', 'clothingAction' }) do
+    for _, lock in ipairs({ 'selection', 'spawn', 'respawn', 'clothingAction', 'service' }) do
         if WCState.busy(lock) then return 'BUSY' end
     end
     return nil

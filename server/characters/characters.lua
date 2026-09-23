@@ -210,12 +210,34 @@ local function findOwned(src, charid)
     return nil, 'NOT_CHARACTER_OWNER'
 end
 
+-- The death system (mirrors the client WCSpawn.DEATH_OWNER): it keeps its own dead / last-stand
+-- state while the ped is alive (the hospital bed heal timer, a dead character logging in), so its
+-- answer counts as dead too. Its IsDead(src) export answers metadata isdead or inlaststand.
+Chars.DEATH_OWNER = { resource = 'w_ambulancejob', export = 'IsDead' }
+
+local function deathOwnerSaysDead(src)
+    local owner = Chars.DEATH_OWNER
+    if type(owner) ~= 'table' or type(owner.resource) ~= 'string' or type(owner.export) ~= 'string' then
+        return false
+    end
+    local okState, state = pcall(GetResourceState, owner.resource)
+    if not okState or state ~= 'started' then return false end
+    local done, dead = pcall(function() return exports[owner.resource][owner.export](src) end)
+    if not done then
+        WCDebug.warn('characters', 'the death state of %s could not be read: %s', tostring(src), tostring(dead))
+        return false
+    end
+    return dead ~= nil and dead ~= false
+end
+
 local function isDead(src)
     local ped = GetPlayerPed(src)
-    if not ped or ped == 0 then return false end
-    local done, health = pcall(GetEntityHealth, ped)
-    health = done and tonumber(health) or nil
-    return health ~= nil and health <= 0
+    if ped and ped ~= 0 then
+        local done, health = pcall(GetEntityHealth, ped)
+        health = done and tonumber(health) or nil
+        if health ~= nil and health <= 0 then return true end
+    end
+    return deathOwnerSaysDead(src)
 end
 
 --- Can the player leave his active character now (§9.1)? ok | false, code.
@@ -600,10 +622,18 @@ function Chars.beginCreate(src, sex)
     if sex ~= nil and not sexOf(sex) then return fail('INVALID_PAYLOAD') end
     if busy[src] then return fail('BUSY') end
 
+    -- A creation that already completed (its answer or its render was lost on the client) is never
+    -- started over: the same token replays the stored create result, so no second framework
+    -- character is registered and the first one is not orphaned.
+    local done = pending[src]
+    if done and done.isNew and done.token then return ok({ token = done.token, sex = done.sex }) end
+
     local g = grantValid(src)
     if g and g.kind == 'create' then
+        -- The sex is locked once the framework character exists (a half-finished creation): the
+        -- answer carries the server's sex, which the creator opens the editor with.
         if sex and not g.provisioned then g.sex = sex end
-        return ok({ token = g.token })
+        return ok({ token = g.token, sex = g.sex })
     end
     local allowed, code = ensureSelecting(src)
     if not allowed then return fail(code) end
@@ -617,7 +647,7 @@ function Chars.beginCreate(src, sex)
         local token = newToken(src)
         grants[src] = { token = token, kind = 'create', sex = sex, expires = now() + GRANT_TTL_MS }
         pending[src] = nil
-        return ok({ token = token })
+        return ok({ token = token, sex = sex })
     end)
 end
 
@@ -630,6 +660,9 @@ local function createNew(src, g, identity, raw)
     if not valid then return fail(ident) end
     local sex = g.sex or sexOf(raw.sex)
     if not sex then return fail('INVALID_PAYLOAD') end
+    -- A design for the other sex after the framework character exists would be force-sanitised
+    -- into a default look of the locked sex: refused instead of saved silently.
+    if g.provisioned and raw.sex ~= nil and sexOf(raw.sex) ~= sex then return fail('INVALID_PAYLOAD') end
     local app, code = prepareAppearance(raw, sex)
     if not app then return fail(code) end
 

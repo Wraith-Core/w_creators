@@ -509,7 +509,7 @@ function Bridge.GetCharacters(source)
             ('SELECT citizenid, charinfo, job FROM %s WHERE license = ?'):format(table_),
             { license })
         if not ok or type(rows) ~= 'table' then
-            print(('^1[w_creators] Bridge.GetCharacters query failed: %s^0'):format(tostring(rows)))
+            WCDebug.warn('bridge', 'Bridge.GetCharacters query failed: %s', tostring(rows))
             return {}
         end
         local list = {}

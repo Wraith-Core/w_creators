@@ -12,8 +12,9 @@
 --  and the game clock is not the server's, so without a published hour the prompt shows and the
 --  server's <kind>:open decides. Labels follow a language switch; everything is removed on stop.
 --
---  WCServiceFlow: the client half of one WCSessions preview transaction, shared by the store and
---  the wardrobe: <kind>:open -> (store: private fitting room, teleport) -> WCPreviewEnv -> WCEditor
+--  WCServiceFlow: the client half of one WCSessions preview transaction, shared by the store, the
+--  wardrobe, the barber and the surgery clinic (the last two seat the player through WCServiceSeat,
+--  client/barber/barber.lua): <kind>:open -> (store: private fitting room, teleport) -> WCPreviewEnv -> WCEditor
 --  -> <kind>:commit. Every way out (commit, cancel, death, a server-forced close, an editor closed
 --  elsewhere) restores the snapshot when needed, closes the server session and undoes the preview:
 --  coordinates, routing bucket, environment, fade. A running flow holds the WCState lock 'service'
@@ -29,6 +30,8 @@ F.FADE_KEY = 'wardrobe'          -- the w_loading curtain text of a fitting-room
 F.COLLISION_TIMEOUT = 8000       -- ms for the collision around the player after a move
 F.WATCH_MS = 250                 -- the death / forced-close watcher period
 F.FINISH_TIMEOUT = 10000         -- ms a committed flow waits for its editor to close
+F.RECONCILE_TRIES = 3            -- asks for the recorded answer of an uncertain commit
+F.RECONCILE_WAIT = 1000          -- ms between those asks while the server commit still runs
 
 F.LOCK = 'service'               -- the WCState lock a running service flow holds
 
@@ -177,6 +180,7 @@ local function leave(flow)
         local c, ped = flow.saved, PlayerPedId()
         SetEntityCoords(ped, c[1], c[2], c[3], false, false, false, false)
         SetEntityHeading(ped, c[4])
+        flow.returnHeading = c[4]
         waitCollision(ped, c[1], c[2], c[3])
     end
     if flow.isolated then
@@ -187,12 +191,81 @@ local function leave(flow)
     if flow.env then
         flow.env = false
         WCPreviewEnv.exit()
+        -- the environment was entered on the fitting stand and restores that stand's heading:
+        -- the player faces the way he stood on the shop floor again
+        if flow.returnHeading then SetEntityHeading(PlayerPedId(), flow.returnHeading) end
     end
+    flow.returnHeading = nil
     if flow.faded then
         flow.faded = false
         EndFade(F.FADE_MS)
     end
 end
+
+--- A flow that ends without a commit after an uncertain commit answer (a lost reply, a w_lib
+--  timeout, BUSY): the server may have committed (charged, saved, broadcast). Its recorded answer
+--  (w_creators:session:result, read only) decides: ok → the committed look is taken and rendered;
+--  a recorded refusal or no record → nothing was committed; still unknown → the saved look is
+--  reloaded. Runs after the session close, so nothing can commit any more.
+local function reconcile(flow)
+    local pending = flow.pending
+    flow.pending = nil
+    if type(pending) ~= 'table' or not flow.token then return end
+    local answer
+    for attempt = 1, F.RECONCILE_TRIES do
+        answer = call('w_creators:session:result', flow.token, pending.opId)
+        if not UNCERTAIN[answer.code] then break end
+        if attempt < F.RECONCILE_TRIES then Wait(F.RECONCILE_WAIT) end
+    end
+    if answer.ok then
+        local data = type(answer.data) == 'table' and answer.data or {}
+        local app = type(data.appearance) == 'table' and data.appearance or pending.app
+        flow.reconciled = 'committed'
+        WCState.set(app)
+        restore(app, 'reconcile')
+        return
+    end
+    if not UNCERTAIN[answer.code] then
+        flow.reconciled = 'refused'
+        return
+    end
+    flow.reconciled = 'reload'
+    local reloaded = call('w_creators:appearance:reload')
+    local data = reloaded.ok and type(reloaded.data) == 'table' and reloaded.data or nil
+    if data and type(data.appearance) == 'table' then
+        WCState.set(data.appearance)
+        restore(data.appearance, 'reload')
+    else
+        WCDebug.warn('services', 'reconciling an uncertain %s commit failed: %s', tostring(flow.kind),
+            tostring(reloaded.code))
+    end
+end
+
+--- The non-persisting clothing states of the local character (e.g. the bandana raised) live only in
+--  WCState.appearance and the server's runtime table: the visit's snapshot (the stored look) does
+--  not carry them, so a visit that ended by restoring it draws them on the ped again. Returns the
+--  count drawn.
+local function reapplyRuntimeStates()
+    local app = WCState.appearance
+    local states = type(app) == 'table' and type(app.clothing) == 'table' and app.clothing.states or nil
+    if type(states) ~= 'table' or type(WCClothingStates) ~= 'table' then return 0 end
+    local ped, drawn = PlayerPedId(), 0
+    for group, value in pairs(states) do
+        local def = WCClothingStates.byId[group]
+        if def and def.persist ~= true and value ~= def.default and WCClothingStates.applicable(app, group) then
+            local ok, done, err = pcall(Appearance.ApplyClothingState, ped, app, group, value)
+            if ok and done then
+                drawn = drawn + 1
+            else
+                WCDebug.log('services', 'state %s=%s not drawn again: %s', tostring(group), tostring(value),
+                    tostring(ok and err or done))
+            end
+        end
+    end
+    if drawn > 0 then pcall(Appearance.Refresh, ped) end
+    return drawn
+end
+F.reapplyRuntimeStates = reapplyRuntimeStates
 
 --- End a flow once (idempotent). reason: 'commit' (the committed appearance is rendered),
 --  'cancel' (the editor already restored the snapshot), anything else (the snapshot is restored
@@ -213,6 +286,15 @@ function F.finish(flow, reason)
         flow.closeSent = true
         local closed = call('w_creators:session:close', flow.token)
         if not closed.ok then WCDebug.warn('services', 'session close: %s', closed.code) end
+    end
+    if flow.pending and not flow.committed then
+        local okSync, errSync = pcall(reconcile, flow)
+        if not okSync then WCDebug.warn('services', 'reconcile failed: %s', tostring(errSync)) end
+    end
+    -- the snapshot was rendered (cancel, death, forced close): the runtime-only states come back
+    -- (a commit replaced the look and the server forgot them; a reload replaced WCState)
+    if not flow.committed and flow.editorId and flow.reconciled ~= 'committed' and flow.reconciled ~= 'reload' then
+        pcall(reapplyRuntimeStates)
     end
     local ok, err = pcall(leave, flow)
     if not ok then WCDebug.warn('services', 'leaving the %s failed: %s', tostring(flow.kind), tostring(err)) end

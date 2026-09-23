@@ -161,6 +161,12 @@ end
 function S.isLoaded() return loaded end
 function S.isIsolated() return isolated end
 
+--- The server already moved the player out of the private scene (the spawn into the world, a
+--  framework spawn event: WCScene.toWorld): forget the isolation without another release call.
+function S.forgetIsolation()
+    isolated = false
+end
+
 --- Ask the server for the private scene (routing bucket). The server grants it only for a
 --  player without an active character, one switching characters, or one in a store fitting room.
 ---@return boolean ok, string|nil code

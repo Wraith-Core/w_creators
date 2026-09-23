@@ -48,11 +48,15 @@ local function logBucket(src, scope, after, reason, extra)
     pcall(CreatorLogs.Emit, 'routing_bucket_set', payload)
 end
 
---- The store session that justifies a fitting-room isolation, or nil.
+--- The store session that justifies a fitting-room isolation, or nil. The player must be at that
+--  store: its anchor (the client isolates before the teleport) or its fitting stand.
 local function fittingSession(src)
     local session = WCSessions and WCSessions.current(src)
     if type(session) ~= 'table' or session.kind ~= 'store' then return nil end
     if type(session.location) ~= 'table' or session.location.preview == nil then return nil end
+    if type(WCSessions.withinRange) ~= 'function' or not WCSessions.withinRange(src, session.location) then
+        return nil
+    end
     return session
 end
 
@@ -201,6 +205,32 @@ RegisterNetEvent('PersonaCreatorHandler.setRoutingBucket', function(netId)
     CreateThread(function() Scene.registerPed(src, netId) end)
 end)
 RegisterNetEvent('w_creators:server:rejoinWorld', function() releaseRequest(source) end)
+
+--- A fitting-room isolation lasts only while its store session is open and the player stays at
+--  that store: a player found elsewhere (or without the session) is released. Returns the count.
+Scene.FITTING_CHECK_MS = 5000
+
+function Scene.checkFitting()
+    local released = 0
+    for src, entry in pairs(tracked) do
+        if entry.reason == 'fitting' and GetPlayerName(src) and not fittingSession(src) then
+            local result = Scene.release(src)
+            if result.ok and result.data and result.data.released then
+                released = released + 1
+                WCDebug.log('scene', 'fitting isolation of %s released: away from the store', tostring(src))
+            end
+        end
+    end
+    return released
+end
+
+CreateThread(function()
+    while true do
+        Wait(Scene.FITTING_CHECK_MS)
+        local ok, err = pcall(Scene.checkFitting)
+        if not ok then WCDebug.warn('scene', 'fitting check failed: %s', tostring(err)) end
+    end
+end)
 
 -- A fitting-room isolation ends with its store session (expiry, cancel, commit, death).
 if WCSessions and WCSessions.onClose then

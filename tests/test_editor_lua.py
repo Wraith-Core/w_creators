@@ -159,8 +159,7 @@ class TreeTests(EditorBase):
         self.rt.eval("openEditor('creator', 'male', { identity = {} })")
         colour = self.rt.g.findNode(self.payload().tree, 'hair.color')
         labels = [o.label for o in lua_list(colour.options)]
-        known = set(json.loads(read(RESOURCE / 'locales' / 'en.json'))) | set(
-            json.loads(read(RESOURCE / 'locales' / 'pending' / 'phase1.json')))
+        known = set(json.loads(read(RESOURCE / 'locales' / 'en.json')))
         self.assertTrue(any(label in known for label in labels), labels)
 
     def test_surgery_only_allowed_sections(self):
@@ -523,10 +522,33 @@ class OperationTests(EditorBase):
         self.assertEqual(dob.min, '1809-01-01')
         self.assertEqual(dob.max, '1881-12-31')
 
+    def test_identity_payload_without_os(self):
+        # the client runtime has no os library: without a reference year the window comes from the
+        # date the server publishes, and without one the field has no min / max (the server checks)
+        self.rt.run("os = nil; GlobalState = {}")
+        self.open_creator()
+        dob = lua_list(self.payload().identity.fields)[2]
+        self.assertIsNone(dob.min)
+        self.assertIsNone(dob.max)
+        self.rt.run("GlobalState[WCUtil.TODAY_KEY] = { year = 1900, month = 1, day = 1 }; WCEditor.refresh()")
+        dob = lua_list(self.payload().identity.fields)[2]
+        self.assertEqual(dob.min, '1810-01-01')
+        self.assertEqual(dob.max, '1882-12-31')
+
+    def test_locked_identity_is_read_only_and_never_submitted(self):
+        self.rt.eval("openEditor('creator', 'male', { identity = { locked = true, firstname = 'John', "
+                     "lastname = 'Marston', dob = '1873-05-01' } })")
+        identity = self.payload().identity
+        self.assertTrue(identity.locked)
+        fields = lua_list(identity.fields)
+        self.assertEqual([f.type for f in fields], ['info'] * 4)
+        self.assertEqual(fields[0].value, 'John')
+        r = self.action(op='save', opId='lock-1', identity={'firstname': '', 'lastname': '', 'dob': 'x'})
+        self.assertTrue(r.ok)
+        self.assertIsNone(self.rt.eval('Commits[1].extra.identity'))
+
     def test_chrome_strings_are_locale_keys(self):
         known = set(json.loads(read(RESOURCE / 'locales' / 'en.json')))
-        for path in sorted((RESOURCE / 'locales' / 'pending').glob('*.json')):
-            known |= set(json.loads(read(path)))
         strings = self.rt.eval('WCEditor.STRINGS')
         for key, value in strings.items():
             self.assertIn(value, known, key)
@@ -594,8 +616,6 @@ class LocaleKeyTests(unittest.TestCase):
         import re
         arabic = re.compile(r"'([^'\n]*[؀-ۿ][^'\n]*)'|\"([^\"\n]*[؀-ۿ][^\"\n]*)\"")
         known = set(json.loads(read(RESOURCE / 'locales' / 'en.json')))
-        for path in sorted((RESOURCE / 'locales' / 'pending').glob('*.json')):
-            known |= set(json.loads(read(path)))
         missing = []
         for name in ('editor.lua', 'tree.lua', 'panel.lua'):
             code = re.sub(r'--[^\n]*', '', read(RESOURCE / 'client' / 'editor' / name))

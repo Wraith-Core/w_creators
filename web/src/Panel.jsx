@@ -1,5 +1,6 @@
 import React, {useEffect, useReducer, useRef, useState} from 'react';
 import {nuiSend} from './nui';
+import {BRAND} from './brand';
 import {Frame, Glyph} from './Chrome';
 import {NodeView} from './TreeView';
 import {
@@ -78,7 +79,7 @@ export default function Panel({payload, onPayload, onClose}) {
   return <div className="editor-shell" dir={session.dir || (session.locale === 'ar' ? 'rtl' : 'ltr')}>
     <section className="wst-panel atelier" aria-label={session.title} aria-busy={busy}>
       <Frame/>
-      <header className="wst-header"><small className="wst-title atelier-brand">{S.brand}</small><h1>{session.title}</h1><span className="wst-rule header-rule" aria-hidden="true"/></header>
+      <header className="wst-header"><small className="wst-title atelier-brand">{BRAND}</small><h1>{session.title}</h1><span className="wst-rule header-rule" aria-hidden="true"/></header>
       <div className="wst-plate menu-heading">
         {validPath.length > 0 && <button className="wst-button menu-back" aria-label={S.back} disabled={busy} onClick={back}><Glyph tex="selection_arrow_left"/></button>}
         <h2>{headingFor(nodes)}</h2>

@@ -1,8 +1,8 @@
 -- =====================================================================
 --  client/core/state.lua  —  WCState (ARCHITECTURE.md §3.2)
 --  The local client's character state: the active character, its saved v3 appearance, and the
---  named client locks that keep two flows (editor, selection, spawn, respawn, clothing action)
---  from running at the same time.
+--  named client locks that keep two flows (editor, selection, spawn, respawn, clothing action,
+--  service visit) from running at the same time.
 -- =====================================================================
 
 WCState = {
@@ -11,7 +11,10 @@ WCState = {
 }
 
 --- The named client locks. Any string is accepted; these are the ones the contract names.
-WCState.LOCKS = { editor = true, selection = true, spawn = true, respawn = true, clothingAction = true }
+WCState.LOCKS = {
+    editor = true, selection = true, spawn = true, respawn = true, clothingAction = true,
+    service = true, -- a store / wardrobe / barber / surgery visit (WCServiceFlow.LOCK)
+}
 
 local locks = {}
 

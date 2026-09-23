@@ -39,11 +39,21 @@ local function options(_, data, loc)
 end
 
 --- Open the clothing store of a location. Yields (call it from a thread); returns true once the
---  editor is open, or false, code (the failure's message has been shown).
+--  editor is open, or false, code (the failure's message has been shown, except to a dead player).
+--  A refusal because another flow holds the player is shown here: WCServiceFlow.run only logs it,
+--  and on the server-opened path (the OpenClothingStore export) nothing else would.
 ---@param locationId string
 ---@return boolean ok, string|nil code
 function St.open(locationId)
-    if not validId(locationId) then return false, 'INVALID_PAYLOAD' end
+    if not validId(locationId) then
+        WCServiceFlow.notify(WCResult.messageKey('INVALID_PAYLOAD'))
+        return false, 'INVALID_PAYLOAD'
+    end
+    local why = WCServiceFlow.blocked()
+    if why then
+        if why ~= 'dead' then WCServiceFlow.notify(WCResult.messageKey('BUSY')) end
+        return false, 'BUSY'
+    end
     return WCServiceFlow.run({
         kind = 'store', mode = 'store', locationId = locationId,
         open = 'w_creators:store:open', commit = 'w_creators:store:commit',
