@@ -37,6 +37,8 @@ w.prompt = {
         function rec.remove() rec.removed = true end
         function rec.setTitle(t) rec.title = t end
         function rec.setLabel(key, label) rec.labels[key] = label end
+        rec.enabled = {}
+        function rec.setEnabled(key, on) rec.enabled[key] = on end
         Walkups[#Walkups + 1] = rec
         return rec
     end,

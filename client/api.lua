@@ -147,12 +147,14 @@ function Api.refresh()
             local result = call(RELOAD)
             local data = result.ok and type(result.data) == 'table' and result.data or nil
             if data and type(data.appearance) == 'table' then
-                Appearance.Sync.applyOwn(data.appearance)
+                -- the reload answers the saved look; the runtime states (the raised bandana) the
+                -- server keeps and broadcasts to the others stay on our ped as well
+                Appearance.Sync.applyOwn(data.appearance, { keepRuntime = true })
                 return
             end
             WCDebug.log('api', 'appearance reload refused (%s): re-rendering the local copy', tostring(result.code))
             local saved = WCState.get()
-            if saved then Appearance.Sync.applyOwn(saved) end
+            if saved then Appearance.Sync.applyOwn(saved, { keepRuntime = true }) end
         end)
         if not ok then WCDebug.warn('api', 'appearance refresh failed: %s', tostring(err)) end
         refreshing = false

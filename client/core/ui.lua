@@ -94,6 +94,18 @@ function SuppressGameHud()
     DisplayHud(false)
 end
 
+--- Is the native radar on screen right now? Read before a flow hides the HUD so it only gives back
+--  what it hid: a player who hid his HUD / radar (w_hud hides the radar with its HUD) keeps it
+--  hidden afterwards. IS_RADAR_HIDDEN is optional here: without it the radar counts as shown
+--  (the previous behaviour: hide, then show again).
+---@return boolean
+function IsRadarShown()
+    if type(IsRadarHidden) ~= 'function' then return true end
+    local ok, hidden = pcall(IsRadarHidden)
+    if not ok then return true end
+    return hidden ~= true and hidden ~= 1
+end
+
 --- Show/hide the w_hud HUD (money, gold, needs). Once on enter/leave, not per frame.
 --  The events come from w_hud; with w_hud stopped there is no listener and they are dropped.
 ---@param visible boolean

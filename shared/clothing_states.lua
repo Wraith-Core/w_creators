@@ -70,12 +70,19 @@ function CS.current(app, groupId)
     return group.default
 end
 
+--- Do the clothing actions run (Config.ClothingStates.enabled and the clothingActions service)?
+--  When off, no state a client submits is persisted anywhere (wardrobe, outfits, creation): every
+--  writer keeps the saved states that still apply.
+function CS.enabled()
+    local cfg = Config and Config.ClothingStates or {}
+    return cfg.enabled ~= false and WCServices.enabled('clothingActions')
+end
+
 --- The ordered actions available now: { group, parent, label, current, targets = { values } }.
 --  Empty when the clothingActions service or Config.ClothingStates is disabled.
 function CS.actions(app)
     local out = {}
-    local cfg = Config and Config.ClothingStates or {}
-    if cfg.enabled == false or not WCServices.enabled('clothingActions') then return out end
+    if not CS.enabled() then return out end
     for _, group in ipairs(CS.groups) do
         if CS.applicable(app, group.id) then
             local current = CS.current(app, group.id)

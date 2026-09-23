@@ -6,7 +6,7 @@ import SceneCamera from './SceneCamera';
 import {MenuRow, NodeView} from './TreeView';
 import {
   backAction, cameraFor, createMemory, filterChildren, formatMoney, headingFor, identityDirty, idleRequest, initialIdentity,
-  isPending, priceLines, LEAVE_SAVE_NEXT, missingIdentity, modalFor, confirmRequest, nextOpId, openPath, popPath, recall, remember, requestReducer, resolvePath, selectedStage,
+  isPending, priceLines, LEAVE_SAVE_NEXT, missingIdentity, modalFor, confirmRequest, nextOpId, openPath, popTarget, recall, searchOrigin, remember, requestReducer, resolvePath, selectedStage,
 } from './treeState';
 
 // Navigation memory per editor session id (same id = same path/search/identity after an update).
@@ -22,6 +22,8 @@ export default function Editor({payload, onPayload, onClose}) {
   const saved = recall(memory, sessionId) || {};
   const [path, setPath] = useState(saved.path || []);
   const [search, setSearch] = useState(saved.search || '');
+  // the search result list a row was opened from: Back returns to it (treeState.popTarget)
+  const [origin, setOrigin] = useState(saved.origin || null);
   const [identity, setIdentity] = useState(saved.identity || initialIdentity(payload.identity));
   const [request, dispatch] = useReducer(requestReducer, idleRequest);
   const [confirm, setConfirm] = useState(null);
@@ -36,7 +38,7 @@ export default function Editor({payload, onPayload, onClose}) {
   const stage = selectedStage(validPath, stages);
   const missing = missingIdentity(payload.identity, identity);
 
-  useEffect(() => { remember(memory, sessionId, {path: validPath, search, identity}); }, [sessionId, validPath.join('/'), search, identity]);
+  useEffect(() => { remember(memory, sessionId, {path: validPath, search, identity, origin}); }, [sessionId, validPath.join('/'), search, identity, origin]);
   useEffect(() => { if (validPath.length !== path.length) setPath(validPath); }, [validPath.join('/'), path.length]);
 
   const camera = async data => {
@@ -71,6 +73,7 @@ export default function Editor({payload, onPayload, onClose}) {
     open: node => {
       returnRow.current = null;
       const next = openPath(validPath, node);
+      setOrigin(searchOrigin(validPath, next, search));
       setPath(next); setSearch('');
       focusCamera(resolvePath(payload.tree, next).nodes);
     },
@@ -83,6 +86,7 @@ export default function Editor({payload, onPayload, onClose}) {
 
   const chooseStage = id => {
     returnRow.current = null;
+    setOrigin(null);
     setPath([id]); setSearch('');
     focusCamera(resolvePath(payload.tree, [id]).nodes);
   };
@@ -92,13 +96,15 @@ export default function Editor({payload, onPayload, onClose}) {
     if (lock.current) return;
     // a typed creator identity is unsaved input too: leaving asks Save / Discard / Stay
     const dirty = !!payload.dirty || identityDirty(payload.identity, identity);
-    const next = backAction({confirm, pathLength: validPath.length, dirty});
+    const next = backAction({confirm, pathLength: validPath.length, dirty, search});
     if (next === 'dismiss') setConfirm(null);
+    else if (next === 'clearSearch') setSearch('');
     else if (next === 'pop') {
       returnRow.current = validPath[validPath.length - 1];
-      const up = popPath(validPath);
-      setPath(up); setSearch('');
-      focusCamera(resolvePath(payload.tree, up).nodes);
+      const up = popTarget(validPath, origin);
+      setOrigin(null);
+      setPath(up.path); setSearch(up.search);
+      focusCamera(resolvePath(payload.tree, up.path).nodes);
     } else if (next === 'confirmLeave') setConfirm('leave');
     else action({op: 'cancel'});
   };

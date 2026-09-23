@@ -551,6 +551,7 @@ P.TYPES = { 'clothing', 'wardrobe', 'barber', 'surgery' }
 P.HOUR_KEY = 'w_creators:hour' -- the GlobalState key holding the server's current hour (0..23)
 
 local OPEN_LABEL = 'فتح'
+local CLOSED_TITLE = 'مغلق · يفتح الساعة %s'
 local TYPE_LABELS = { clothing = 'متجر الملابس', wardrobe = 'الخزانة', barber = 'الحلاق', surgery = 'عيادة التجميل' }
 local DEFAULT_SPRITE = 'blip_shop_clothing'
 
@@ -609,6 +610,34 @@ function P.canInteract(loc)
     return P.isOpen(loc) and F.blocked() == nil
 end
 
+--- The prompt title while the location is closed: "<label> · <town> · Closed · opens at 06:00".
+function P.closedTitle(loc)
+    local open = type(loc) == 'table' and type(loc.hours) == 'table' and tonumber(loc.hours.open) or 0
+    return P.title(loc) .. ' · ' .. locale(CLOSED_TITLE):format(('%02d:00'):format(math.floor(open) % 24))
+end
+
+--- Keep a built prompt in step with the opening hours: outside them the prompt stays (the player
+--  who followed the blip sees the location is closed and when it opens) with its action disabled.
+--  Only a change of state touches the prompt.
+local function syncHours(point)
+    local rec = point and point.prompt
+    if type(rec) ~= 'table' then return end
+    local closed = not P.isOpen(point.loc)
+    if point.closed == closed then return end
+    point.closed = closed
+    if type(rec.setEnabled) == 'function' then pcall(rec.setEnabled, interactKey(), not closed) end
+    if type(rec.setTitle) == 'function' then
+        pcall(rec.setTitle, closed and P.closedTitle(point.loc) or P.title(point.loc))
+    end
+end
+
+--- The walk-up prompt's canInteract: shown whenever no flow blocks it; its action is disabled
+--  (and its title says so) while the location is closed. The action itself re-checks the hours.
+function P.promptAllowed(point)
+    syncHours(point)
+    return F.blocked() == nil
+end
+
 --- Open the service of a location (the prompt's action; runs in the prompt's thread).
 ---@return boolean dispatched
 function P.dispatch(loc)
@@ -631,14 +660,15 @@ local function listed(loc)
     return service ~= nil and WCServices.enabled(service)
 end
 
-local function createPrompt(loc, anchor)
+local function createPrompt(point, anchor)
+    local loc = point.loc
     local ok, rec = pcall(w.prompt.at, {
         coords = anchor,
         distance = loc.interactionRadius,
         title = P.title(loc),
         prompts = { { key = interactKey(), label = locale(OPEN_LABEL), hold = false,
                       onComplete = function() P.dispatch(loc) end } },
-        canInteract = function() return P.canInteract(loc) end,
+        canInteract = function() return P.promptAllowed(point) end,
     })
     if not ok or type(rec) ~= 'table' then
         WCDebug.warn('services', 'prompt of %s failed: %s', loc.id, tostring(rec))
@@ -702,7 +732,8 @@ function P.build()
             local anchor = loc.prompt ~= false and listed(loc) and WCLocations.anchor(loc) or nil
             if anchor then
                 local point = { loc = loc }
-                point.prompt = createPrompt(loc, anchor)
+                point.prompt = createPrompt(point, anchor)
+                syncHours(point)
                 if type(loc.blip) == 'table' then point.blip = createBlip(loc, anchor) end
                 if type(loc.npc) == 'table' then point.npc = createNpc(loc) end
                 if point.prompt or point.blip or point.npc then points[#points + 1] = point end
@@ -717,7 +748,7 @@ end
 function P.relabel()
     for _, point in ipairs(points) do
         if point.prompt then
-            pcall(point.prompt.setTitle, P.title(point.loc))
+            pcall(point.prompt.setTitle, point.closed and P.closedTitle(point.loc) or P.title(point.loc))
             pcall(point.prompt.setLabel, interactKey(), locale(OPEN_LABEL))
         end
         if point.blip then

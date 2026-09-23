@@ -19,7 +19,9 @@
 --
 --  Callbacks (all answer a WCResult):
 --    w_creators:characters:list          -> { characters = [card], slots, canCreate, deletion }
---    w_creators:characters:select        (charid) -> { appearance } | { needsAppearance, token, sex? }
+--    w_creators:characters:select        (charid) -> { appearance } | { needsAppearance, token, sex?,
+--                                        appearance?, degraded?, repairSections? (degraded: the only
+--                                        sections the repair saves; no clothing stage) }
 --    w_creators:characters:loaded        -> { spawn = 'selector' | 'direct' | 'event' }
 --    w_creators:characters:beginCreate   (sex?) -> { token }
 --    w_creators:characters:create        (token, identity, app) -> { appearance, charid }
@@ -45,6 +47,15 @@ local busy = {}      -- [src] = operation name (one character operation per play
 -- there after DELETE_CONFIRM_MS (an asynchronous core): the w_creators data is kept until a retry
 -- finds the row gone.
 local cleanup = {}
+-- [src] = ms: a switch of this player lapsed outside the character scene; no new switch starts
+-- before then (a lapse is a client that left the flow: repeating it kept him character-less).
+local lapsed = {}
+
+-- The sections the degraded repair takes from the creator; the clothing (owned, tinted, with its
+-- states and outfit) and the server-owned grooming stay as saved. characters:select hands them to
+-- the client (repairSections) so the repair editor offers these sections only — never a clothing
+-- stage whose edits the save would drop.
+local REPAIR_SECTIONS = { 'body', 'face', 'eyebrows', 'skin', 'eyes', 'hair', 'facialHair', 'makeup' }
 
 local GRANT_TTL_MS = 30 * 60 * 1000
 -- A character adopted after a resource restart may re-enter the selection (the restarted client
@@ -56,6 +67,7 @@ local MAX_CHARID = 64
 local MAX_APP_BYTES = 65536
 local MAX_IDENTITY_BYTES = 1024
 local MAX_CONFIRM = 128
+Chars.SWITCH_LAPSE_COOLDOWN_MS = 5 * 60 * 1000
 local tokenCounter = 0
 
 local fail, ok = WCResult.fail, WCResult.ok
@@ -197,6 +209,19 @@ local function guarded(src, name, fn)
     return result
 end
 
+--- The player dropped while a call yielded (a database read / write, the framework login): the
+--  playerDropped handlers already ran and found nothing, so what the call cached for these
+--  characters is released here and nothing is written for the player. true when gone.
+local function dropped(src, ...)
+    if GetPlayerName(src) ~= nil then return false end
+    for i = 1, select('#', ...) do
+        local charid = select(i, ...)
+        if charid ~= nil and not Chars.ownerOf(charid) then WCAppearanceRepo.invalidate(charid) end
+    end
+    grants[src], pending[src] = nil, nil
+    return true
+end
+
 --- The player's characters from the framework (array) or nil when the listing failed.
 local function ownedCharacters(src)
     local done, list = pcall(Bridge.GetCharacters, src)
@@ -298,6 +323,10 @@ local function ensureSelecting(src)
     end
     local allowed, code = canSwitch(src)
     if not allowed then return false, code end
+    if lapsed[src] then
+        if lapsed[src] > now() then return false, 'BUSY' end
+        lapsed[src] = nil
+    end
     switching[src] = { from = current.charid, at = now(), seen = now() }
     if WCSpawnServer then WCSpawnServer.cancel(src) end
     Chars.clear(src, 'switch')
@@ -324,22 +353,55 @@ local function inScene(src)
     return type(WCScene) == 'table' and type(WCScene.isIsolated) == 'function' and WCScene.isIsolated(src) == true
 end
 
+local restoreSwitch
+
+--- A lapsed switch whose logged-in framework character has no usable look (a provisioned creation,
+--  a repair never finished): the flow is cancelled and the character switched away from is logged
+--  in again (tried once per grace period). true when restored.
+local function relogSwitch(src, s)
+    local nowMs = now()
+    if s.relogAt and nowMs - s.relogAt < switchGraceMs() then return false end
+    s.relogAt = nowMs
+    if Chars.ownerOf(s.from) then return false end
+    local p, g = pending[src], grants[src]
+    busy[src] = 'switchLapsed'
+    local called, loggedIn = pcall(Bridge.LoginCharacter, src, s.from)
+    local ready = called and loggedIn ~= false and WCUtil.waitUntil(function()
+        return GetPlayerName(src) ~= nil and frameworkCharid(src) == s.from
+    end, LOGIN_TIMEOUT_MS, 100)
+    busy[src] = nil
+    if not ready then
+        WCDebug.warn('characters', 'the lapsed switch of %s could not log %s in again: %s', tostring(src), s.from,
+            tostring(called and loggedIn or 'timeout'))
+        return false
+    end
+    if switching[src] ~= s or active[src] then return false end
+    for _, charid in ipairs({ p and p.charid or false, g and (g.charid or g.provisioned) or false }) do
+        if charid and charid ~= s.from and not Chars.ownerOf(charid) then WCAppearanceRepo.invalidate(charid) end
+    end
+    if pending[src] == p then pending[src] = nil end
+    if grants[src] == g then grants[src] = nil end
+    return restoreSwitch(src, s)
+end
+
 --- End a lapsed switch: the framework character becomes active again. true when restored.
-local function restoreSwitch(src, s)
+--  Every switch lapses: a character selected, created or repaired but never loaded is finished
+--  (active + broadcast, as loaded does, without a spawn); a creation / repair grant still open is
+--  cancelled (the character switched away from comes back, logged in again when needed). A lapse
+--  is logged as a security_violation and no new switch starts for SWITCH_LAPSE_COOLDOWN_MS.
+restoreSwitch = function(src, s)
     if busy[src] or active[src] then return false end
     local fw = frameworkCharid(src)
     local p = pending[src]
     local target, app
-    if p and p.selected and fw == p.charid then
-        -- a character selected (logged in) but never loaded
+    if p and fw ~= nil and fw == p.charid and type(p.app) == 'table' then
+        -- a character selected / created / repaired (logged in) but never loaded
         target, app = p.charid, p.app
-    elseif not p and fw == s.from then
-        -- still the character switched away from; a provisioned creation / a repair keeps the flow
-        local g = grantValid(src)
-        if g and (g.provisioned or g.kind == 'repair') then return false end
+    elseif fw ~= nil and fw == s.from then
+        -- still the character switched away from: an open creation / repair grant is cancelled
         target = s.from
     else
-        return false
+        return relogSwitch(src, s)
     end
     if Chars.ownerOf(target) then return false end
     local done, meta = true, nil
@@ -358,9 +420,17 @@ local function restoreSwitch(src, s)
             tostring(done and (type(meta) == 'table' and meta.error) or app))
         return false
     end
+    local g = grants[src]
+    if g and (g.charid or g.provisioned) and (g.charid or g.provisioned) ~= target
+        and not Chars.ownerOf(g.charid or g.provisioned) then
+        WCAppearanceRepo.invalidate(g.charid or g.provisioned)
+    end
     pending[src], grants[src] = nil, nil
     Chars.setActive(src, target, app.sex)
     WCSync.broadcast(src, app)
+    lapsed[src] = now() + (tonumber(Chars.SWITCH_LAPSE_COOLDOWN_MS) or 0)
+    WCSecurity.violation(src, 'character_switch_lapsed', { charid = target, from = s.from,
+                                                           pending = p ~= nil and p.charid or nil })
     WCDebug.warn('characters', 'player %s: a switch outside the character scene lapsed - %s is active again',
         tostring(src), target)
     return true
@@ -593,8 +663,10 @@ local function restrictClothing(app, sex)
     for category in pairs(clothing.tints) do
         if not clothing.equipped[category] then clothing.tints[category] = nil end
     end
+    local statesOn = WCClothingStates.enabled()
     for group, _ in pairs(clothing.states) do
-        if not WCClothingStates.applicable(app, group) then clothing.states[group] = nil end
+        -- the clothing actions off: a creation never starts with a state the player cannot undo
+        if not statesOn or not WCClothingStates.applicable(app, group) then clothing.states[group] = nil end
     end
     return app
 end
@@ -695,20 +767,25 @@ function Chars.select(src, charid)
             WCAppearanceRepo.invalidate(previous.charid)
         end
         pending[src] = nil
-        local called, loggedIn = pcall(Bridge.LoginCharacter, src, charid)
-        if not called or loggedIn == false then
-            WCDebug.warn('characters', 'login of %s for %s failed: %s', charid, tostring(src), tostring(loggedIn))
-            return fail('INTERNAL_ERROR')
-        end
-        local ready = WCUtil.waitUntil(function()
-            return GetPlayerName(src) ~= nil and frameworkCharid(src) == charid
-        end, LOGIN_TIMEOUT_MS, 100)
-        if not ready then
-            WCDebug.warn('characters', 'the framework did not log %s into %s in time', tostring(src), charid)
-            return fail('INTERNAL_ERROR')
+        -- The character the framework already has logged in (re-selected after a switch) is never
+        -- logged out and in again: a reload reads the players row as last saved (§9.1).
+        if frameworkCharid(src) ~= charid then
+            local called, loggedIn = pcall(Bridge.LoginCharacter, src, charid)
+            if not called or loggedIn == false then
+                WCDebug.warn('characters', 'login of %s for %s failed: %s', charid, tostring(src), tostring(loggedIn))
+                return fail('INTERNAL_ERROR')
+            end
+            local ready = WCUtil.waitUntil(function()
+                return GetPlayerName(src) ~= nil and frameworkCharid(src) == charid
+            end, LOGIN_TIMEOUT_MS, 100)
+            if not ready then
+                WCDebug.warn('characters', 'the framework did not log %s into %s in time', tostring(src), charid)
+                return fail('INTERNAL_ERROR')
+            end
         end
 
         local app, meta = WCAppearanceRepo.load(charid)
+        if dropped(src, charid) then return fail('NO_CHARACTER') end
         meta = type(meta) == 'table' and meta or {}
         local kind = switching[src] and 'switch' or 'login'
         log('character_selected', { playerSource = src, charid = charid, appearanceFound = app ~= nil,
@@ -730,7 +807,7 @@ function Chars.select(src, charid)
             grants[src] = { token = token, kind = 'repair', charid = charid, sex = app.sex, degraded = true,
                             expires = now() + GRANT_TTL_MS }
             return ok({ needsAppearance = true, token = token, sex = app.sex, appearance = WCUtil.copy(app),
-                        degraded = WCUtil.copy(meta.defaultsUsed) })
+                        degraded = WCUtil.copy(meta.defaultsUsed), repairSections = WCUtil.copy(REPAIR_SECTIONS) })
         end
         pending[src] = { charid = charid, sex = app.sex, app = app, kind = kind, isNew = false, selected = true }
         return ok({ appearance = WCUtil.copy(app) })
@@ -837,10 +914,23 @@ local function createNew(src, g, identity, raw)
             return fail('INTERNAL_ERROR')
         end
         charid = tostring(registered)
+        -- A registration that answers a character the player already had (a framework that handed
+        -- back an existing row) is never bound to this creation: its look and ownership stay his.
+        for _, row in ipairs(list) do
+            if type(row) == 'table' and tostring(row.charid) == charid then
+                WCDebug.warn('characters', 'registering a character for %s answered the existing %s: refused',
+                    tostring(src), charid)
+                log('character_create_failed', { playerSource = src, charid = charid, stage = 'register_existing',
+                                                framework = Bridge.Name, detail = 'existing charid' })
+                return fail('INTERNAL_ERROR')
+            end
+        end
         g.provisioned, g.identity, g.sex = charid, ident, sex
+        if dropped(src) then return fail('NO_CHARACTER') end
     end
 
     local saved, result = WCAppearanceRepo.create(charid, ident, app, starterQueries(charid, app))
+    if dropped(src, charid) then return fail('NO_CHARACTER') end
     if not saved then
         log('character_create_failed', { playerSource = src, charid = charid, stage = 'appearance',
                                         framework = Bridge.Name, detail = tostring(result) })
@@ -855,9 +945,6 @@ local function createNew(src, g, identity, raw)
     return ok({ appearance = WCUtil.copy(result), charid = charid })
 end
 
--- The sections the degraded repair takes from the creator; the clothing (owned, tinted, with its
--- states and outfit) and the server-owned grooming stay as saved.
-local REPAIR_SECTIONS = { 'body', 'face', 'eyebrows', 'skin', 'eyes', 'hair', 'facialHair', 'makeup' }
 
 --- The explicit repair of a degraded character (its stored look needed essential defaults): the
 --  creator's look replaces the defaults-filled one (Repo.save with replaceDegraded).
@@ -869,6 +956,7 @@ local function repairDegraded(src, g, charid, existing, raw, kind)
         WCGrooming.cut(merged, existing)
     end
     local saved, result = WCAppearanceRepo.save(charid, merged, nil, { replaceDegraded = true })
+    if dropped(src, charid) then return fail('NO_CHARACTER') end
     if not saved then
         log('character_create_failed', { playerSource = src, charid = charid, stage = 'repair',
                                         framework = Bridge.Name, detail = tostring(result) })
@@ -890,6 +978,7 @@ local function createRepair(src, g, raw)
     end
     local kind = switching[src] and 'switch' or 'login'
     local existing, meta = WCAppearanceRepo.load(charid)
+    if dropped(src, charid) then return fail('NO_CHARACTER') end
     if existing and type(meta) == 'table' and meta.degraded then
         return repairDegraded(src, g, charid, existing, raw, kind)
     end
@@ -906,8 +995,10 @@ local function createRepair(src, g, raw)
     local app, code = prepareAppearance(raw, sex)
     if not app then return fail(code) end
     local card = buildCard(row, frameworkDetails(src)[charid], false)
+    if dropped(src, charid) then return fail('NO_CHARACTER') end
     local ident = { firstname = card.firstname or card.name, lastname = card.lastname, age = card.age }
     local saved, result = WCAppearanceRepo.create(charid, ident, app, starterQueries(charid, app))
+    if dropped(src, charid) then return fail('NO_CHARACTER') end
     if not saved then
         log('character_create_failed', { playerSource = src, charid = charid, stage = 'repair',
                                         framework = Bridge.Name, detail = tostring(result) })
@@ -1079,7 +1170,7 @@ AddEventHandler('playerDropped', function()
     for _, charid in ipairs({ pending[src] and pending[src].charid, grants[src] and grants[src].charid }) do
         if charid and not Chars.ownerOf(charid) then WCAppearanceRepo.invalidate(charid) end
     end
-    busy[src], grants[src], pending[src], switching[src] = nil, nil, nil, nil
+    busy[src], grants[src], pending[src], switching[src], lapsed[src] = nil, nil, nil, nil, nil
     -- Appearance cleanups the player did not retry: one last attempt in the background.
     local owed = cleanup[src]
     cleanup[src] = nil

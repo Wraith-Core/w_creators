@@ -33,6 +33,22 @@ local function usable(ped)
     return w and w.pedTexture and w.pedTexture.overwriteBodyPart ~= nil
 end
 
+--- The layers w.pedTexture draws with blend type 1 (w_lib ped-texture applyLayer): it never
+--  applies a palette / tint to them, so their colour has no visible effect. Keyed by library name.
+O.UNTINTED = { scar = true, spots = true, disc = true, complex = true, acne = true, ageing = true,
+               moles = true, freckles = true }
+
+--- Does the colour of a layer show? layer.tint = false (shared/overlays.lua) marks a layer as not
+--  tintable; otherwise the renderer's blend-type-1 list decides.
+---@param layer table|string a WCOverlays layer or its id
+---@return boolean
+function O.tintable(layer)
+    if type(layer) == 'string' then layer = WCOverlays.byId[layer] end
+    if type(layer) ~= 'table' then return false end
+    if layer.tint ~= nil then return layer.tint ~= false end
+    return not O.UNTINTED[layer.library]
+end
+
 --- The w.pedTexture payload of one stored layer: layerName, payload (nil when not renderable).
 ---@param layerId string WCOverlays id (e.g. 'blush')
 ---@param o table { style, color, opacity }
@@ -50,7 +66,7 @@ function O.payload(layerId, o, sex)
     local opacity = tonumber(o.opacity)
     payload.opacity = (opacity and opacity >= 0.0 and opacity <= 1.0) and (opacity + 0.0) or 1.0
     local color = math.tointeger(tonumber(o.color))
-    if color and color >= 1 then
+    if color and color >= 1 and O.tintable(layer) then
         payload.palette = layer.palette
         payload.tint0 = color - 1
     end

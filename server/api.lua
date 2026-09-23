@@ -351,7 +351,8 @@ local function overlayOf(layer, value)
     if type(value) ~= 'table' then return nil end
     local opacity = value.opacity == nil and 1.0 or WCUtil.number(value.opacity, nil, nil, nil)
     if opacity == nil then return nil end
-    if opacity > 1 then opacity = opacity / 100 end
+    if opacity > 1 then opacity = opacity / 100 end -- the bridge's percent convention
+    if opacity > 1 then return nil end              -- refused, never capped (§13)
     if opacity <= 0 then return false end
     local style
     if value.style ~= nil then
@@ -373,7 +374,7 @@ local function overlayOf(layer, value)
         color = 1
     end
     if not color then return nil end
-    return { style = style, color = color, opacity = math.min(opacity, 1.0) + 0.0 }
+    return { style = style, color = color, opacity = opacity + 0.0 }
 end
 
 -- Build the v3 draft of a standard skin over the saved appearance. draft | nil, code, detail.
@@ -413,7 +414,10 @@ local function skinDraft(saved, skin, overwrite)
 
     if skin.bodyScale ~= nil then
         local v = skin.bodyScale
-        if type(v) ~= 'number' or not WCUtil.isFinite(v) then return nil, 'INVALID_PAYLOAD', 'bodyScale' end
+        -- the v3 height range (as v3Invalid): refused, never clamped (§13)
+        if type(v) ~= 'number' or not WCUtil.isFinite(v) or v < 0.9 or v > 1.1 then
+            return nil, 'INVALID_PAYLOAD', 'bodyScale'
+        end
         draft.body.height = v
     end
     if skin.bodyWeight ~= nil then
@@ -432,7 +436,8 @@ local function skinDraft(saved, skin, overwrite)
             local n = tonumber(value)
             if n == nil or not WCUtil.isFinite(n) then return nil, 'INVALID_PAYLOAD', 'expressions.' .. id end
             if n > 1 or n < -1 then n = n / 100 end -- the bridge's percent convention
-            draft.morph[id] = WCUtil.number(n, -1, 1, 0)
+            if n > 1 or n < -1 then return nil, 'INVALID_PAYLOAD', 'expressions.' .. id end
+            draft.morph[id] = n + 0.0
         end
     elseif overwrite == true then
         draft.morph = {}
@@ -461,7 +466,7 @@ local V3_IGNORED = { 'clothing.', 'tint.', 'state.' }
 
 -- Validate a v3 appearance submitted to SetSkin for `sex` without repairing anything: every value
 -- sanitize would replace or clamp is refused. nil (valid) | code, field.
-local function v3Invalid(sex, skin)
+local function v3Invalid(sex, skin, saved)
     local _, violations = AppearanceSchema.sanitize(skin, { sex = sex, rules = false, grooming = false })
     for _, v in ipairs(violations) do
         local field = tostring(v.field)
@@ -491,6 +496,12 @@ local function v3Invalid(sex, skin)
     for id, o in pairs(skin.overlays or {}) do
         local layer = WCOverlays.byId[id]
         local field = 'overlay.' .. tostring(id)
+        if not layer or type(o) ~= 'table' then return 'INVALID_COMPONENT', field end
+        -- a layer of the other sex: only the stored one sent back unchanged (pre-v3 data)
+        if not layer.sexes[sex] and not (type(saved) == 'table' and type(saved.overlays) == 'table'
+            and WCUtil.deepEqual(saved.overlays[id], o)) then
+            return 'INVALID_COMPONENT', field
+        end
         if not exactInt(o.style, 1, layer.styles) then return 'INVALID_COMPONENT', field end
         if o.color ~= nil and not exactInt(o.color, 1, WCOverlays.COLORS) then return 'INVALID_COMPONENT', field end
         if o.opacity ~= nil then
@@ -499,6 +510,28 @@ local function v3Invalid(sex, skin)
         end
     end
     return nil
+end
+
+-- Build the draft of a v3 SetSkin payload over the saved appearance: only what the payload carries
+-- replaces the saved values (a body / head / hair field, a morph id, an overlay layer); a section or
+-- field left out keeps the saved one, never a sanitize default (§13). overwrite = true replaces the
+-- morphology and the overlays (cleared when left out), as for a standard skin.
+local function v3Draft(saved, skin, overwrite)
+    local draft = WCUtil.copy(saved)
+    for _, key in ipairs({ 'body', 'head', 'hair' }) do
+        if type(skin[key]) == 'table' then
+            draft[key] = type(draft[key]) == 'table' and draft[key] or {}
+            for field, value in pairs(skin[key]) do draft[key][field] = WCUtil.copy(value) end
+        end
+    end
+    for _, key in ipairs({ 'morph', 'overlays' }) do
+        if overwrite == true then draft[key] = {} end
+        if type(skin[key]) == 'table' then
+            draft[key] = type(draft[key]) == 'table' and draft[key] or {}
+            for id, value in pairs(skin[key]) do draft[key][id] = WCUtil.copy(value) end
+        end
+    end
+    return draft
 end
 
 --- Set the skin (body, face, eyes, skin tone, hair, facial hair, overlays) from a framework-bridge
@@ -512,9 +545,9 @@ function Api.SetSkin(src, skin, overwrite)
         local draft, code, detail
         if tonumber(skin.version) == AppearanceSchema.VERSION then
             if skin.sex ~= saved.sex then return fail('INVALID_PAYLOAD', { field = 'sex' }) end
-            code, detail = v3Invalid(saved.sex, skin)
+            code, detail = v3Invalid(saved.sex, skin, saved)
             if code then return fail(code, { field = detail }) end
-            draft = skin
+            draft = v3Draft(saved, skin, overwrite)
         else
             draft, code, detail = skinDraft(saved, skin, overwrite)
             if not draft then return fail(code, { field = detail }) end

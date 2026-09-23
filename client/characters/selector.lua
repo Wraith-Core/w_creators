@@ -99,6 +99,42 @@ local function pedExists(ped)
     return type(ped) == 'number' and ped ~= 0 and DoesEntityExist(ped) == true
 end
 
+-- characters:loaded answers after which the server may have loaded the character anyway (it
+-- activates it and sends the spawn before it answers): a w_lib timeout, a lost reply.
+local LOADED_UNCERTAIN = { INTERNAL_ERROR = true, TIMEOUT = true }
+Sel.LOADED_HANDOFF_TIMEOUT = 15000 -- ms to wait for the spawn hand-off after an uncertain answer
+
+local function spawnEvents()
+    return (type(WCSpawn) == 'table' and type(WCSpawn.count) == 'function') and WCSpawn.count() or 0
+end
+local function handedOff(before)
+    if spawnEvents() > before then return true end
+    if type(WCSpawnSelector) == 'table' and type(WCSpawnSelector.active) == 'function' and WCSpawnSelector.active() then
+        return true
+    end
+    return type(WCSpawn) == 'table' and type(WCSpawn.busy) == 'function' and WCSpawn.busy() == true
+end
+
+--- w_creators:characters:loaded, safe against an uncertain answer: the server activates the
+--  character and hands the spawn off (selectSpawn / client:spawn) before it replies, so a timed-out
+--  reply is not "not loaded". The spawn hand-off decides (the character was loaded: ok); without
+--  it, one retry (a repeat after a real load answers NO_CHARACTER: loaded as well). Only a
+--  certain refusal comes back as a failure.
+---@return table Result
+function Sel.awaitLoaded()
+    local before = spawnEvents()
+    local loaded = await('w_creators:characters:loaded')
+    if loaded.ok or not LOADED_UNCERTAIN[loaded.code] then return loaded end
+    WCDebug.warn('characters', 'characters:loaded answered %s: waiting for the spawn hand-off', tostring(loaded.code))
+    if WCUtil.waitUntil(function() return handedOff(before) or nil end, Sel.LOADED_HANDOFF_TIMEOUT, 100) then
+        return WCResult.ok({ uncertain = true })
+    end
+    local again = await('w_creators:characters:loaded')
+    if again.ok then return again end
+    if again.code == 'NO_CHARACTER' or handedOff(before) then return WCResult.ok({ uncertain = true }) end
+    return again
+end
+
 local function takeLock()
     if st.ownsLock then return end
     st.ownsLock = WCState.busy('selection', true) == true
@@ -280,9 +316,22 @@ local function buildRetryPrompt()
     st.inputReadyAt = GetGameTimer() + INPUT_BARRIER_MS
 end
 
+-- Another group displayed over ours (a w_lib walk-up prompt, a death prompt re-displayed by its
+-- owner) hides it, and w_lib only reports completions of the visible group: ours is displayed
+-- again (checked every PROMPT_REASSERT_MS), or the screen could never be left.
+local PROMPT_REASSERT_MS = 250
+local function reassertPrompts(group)
+    local now = GetGameTimer()
+    if st.promptCheckAt and now < st.promptCheckAt then return end
+    st.promptCheckAt = now + PROMPT_REASSERT_MS
+    local ok, visible = pcall(group.isVisible)
+    if ok and visible == false then pcall(group.display) end
+end
+
 local function isCompleted(key)
     local group = st.prompts
     if not group or key == nil then return false end
+    reassertPrompts(group)
     local ok, done = pcall(group.isCompleted, key)
     return ok and done == true
 end
@@ -581,7 +630,7 @@ local function play(card)
 
     leaveSelection()
     restorePlayer()
-    local loaded = await('w_creators:characters:loaded')
+    local loaded = Sel.awaitLoaded()
     if not loaded.ok then
         WCState.clear()
         notify(messageOf(loaded))

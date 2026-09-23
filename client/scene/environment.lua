@@ -34,7 +34,7 @@ local function controlLoop()
     thread = true
     while active do
         if changed and changed.controls then DisableAllControlActions(0) end
-        if changed and changed.hud then SuppressGameHud() end
+        if changed and changed.suppress then SuppressGameHud() end
         Wait(0)
     end
     thread = nil
@@ -88,9 +88,15 @@ function Env.enter(opts)
     end
 
     if opts.hud ~= false then
-        SetCustomHudVisible(false)
-        pcall(w.setRadarVisible, false)
-        c.hud = true
+        -- the game HUD is muted per frame either way; the w_hud HUD and the radar wish are
+        -- turned off (and back on at exit) only when they were on: a player who had hidden
+        -- them keeps them hidden after the visit
+        c.suppress = true
+        if IsRadarShown() then
+            SetCustomHudVisible(false)
+            pcall(w.setRadarVisible, false)
+            c.hud = true
+        end
     end
     if opts.worldUi then
         SetWorldUiVisible(false)
@@ -109,7 +115,7 @@ function Env.enter(opts)
 
     changed = c
     active = true
-    if (c.controls or c.hud) and not thread then CreateThread(controlLoop) end
+    if (c.controls or c.suppress) and not thread then CreateThread(controlLoop) end
     return true
 end
 
@@ -130,10 +136,11 @@ function Env.exit()
     if c.hud then
         SetCustomHudVisible(true)
         -- w_lib is the one radar authority (HUD wish, radar mode, custom minimap): never
-        -- DisplayRadar(true) directly. The game HUD was suppressed per frame, so it comes back.
+        -- DisplayRadar(true) directly.
         pcall(w.setRadarVisible, true)
-        DisplayHud(true)
     end
+    -- the game HUD was suppressed per frame, so it comes back
+    if c.suppress then DisplayHud(true) end
     if pedExists(ped) then
         if c.invincible then SetEntityInvincible(ped, false) end
         if c.freeze then FreezeEntityPosition(ped, false) end

@@ -32,6 +32,8 @@
 --    w_creators:spawn:choose        callback (pointId) -> Result { pos, kind }
 --    w_creators:server:spawnAt      legacy net event (pointId) -> same resolution, never refuses a
 --                                   granted player (falls back to the first enabled point)
+--    w_creators:server:spawnCancel  net event: the client cancelled an in-world ('admin') selector;
+--                                   that grant is withdrawn
 -- =====================================================================
 
 WCSpawnServer = {}
@@ -343,6 +345,18 @@ RegisterNetEvent('w_creators:server:spawnAt', function(pointId)
     local pos, point = Spawn.resolve(pointId, src)
     if not pos then pos, point = fallback() end
     spawnNow(src, pos, point, pendingKind[src] or 'login')
+end)
+
+--- The client handed back an in-world selector it cancelled (or refused while the death system
+--  holds the player): its one-shot 'admin' grant is withdrawn. A login-kind or death grant is never
+--  withdrawn from here (the character scene / the death flow own them).
+RegisterNetEvent('w_creators:server:spawnCancel', function()
+    local src = source
+    if not WCSecurity.rate(src, 'spawn:cancel', 5, 5000) then return end
+    if Spawn.pending(src) == 'admin' then
+        Spawn.cancel(src)
+        WCDebug.log('spawn', 'the admin spawn grant of %s was handed back', tostring(src))
+    end
 end)
 
 --- Move a player who is already in the world to a spawn point (admin respawn, RespawnPlayer export).

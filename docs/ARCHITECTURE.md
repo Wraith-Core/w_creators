@@ -716,7 +716,17 @@ resource still runs every step once (a no-op on a fresh install, the missing col
 The v3 appearance is stored in `characters_appearence.appearance` (JSON) with `appearance_version = 3`.
 The legacy columns `isMale / components / faceFeatures / overlays` are rewritten in the same `UPDATE`
 from `AppearanceSchema.toLegacy(app)` as a **derived compatibility projection** (so a rollback to the
-previous release still loads the character). They are never read when `appearance_version >= 3`.
+previous release still loads the character). At v3 they are **read only as a fingerprint**: every v3
+write stores, inside the JSON (top-level key `projection`, never part of the returned appearance), a
+fingerprint of the legacy columns as the row holds them after that write. On every v3 load the
+columns are fingerprinted again; when they differ (an older release — a rollback — wrote them after
+the last v3 write) the appearance is **rebuilt** from them with `fromLegacy`, keeping the v3-only data
+that still applies (tints of the items still worn, states of unchanged items, the outfit id when the
+worn set is unchanged), written back with the new fingerprint and logged. A column that is NULL,
+empty or undecodable is ignored (the v3 JSON is kept, fingerprint unchanged), and so is a rebuild that
+would need essential defaults. JSON written before the fingerprint existed carries none and is trusted.
+**Do not edit a v3 row's legacy columns by hand expecting them to be inert**: a valid edit replaces
+the v3 JSON on the next load (and drops the tints of the items it changed).
 
 ### 6.2 Lazy upgrade
 `WCAppearanceRepo.load(charid)` reads the newest row for the charid. If `appearance_version < 3` or
@@ -724,6 +734,11 @@ previous release still loads the character). They are never read when `appearanc
 essential parts, the upgraded v3 is written back (plus `legacy` ownership grants for the equipped
 clothing, `INSERT IGNORE`) in one transaction. If defaults were needed the row is **not** written
 (data is never silently replaced); the in-memory appearance uses the defaults and a warning is logged.
+A row already at `appearance_version >= 3` whose JSON is unreadable is **recovered** from the projection
+the same way but **without** `legacy` grants (its ownership is already authoritative; the projection
+may hold clothing applied through `SetClothes`) and logged as a recovery (`meta.recovered`).
+Cache: every write / invalidation bumps a per-character generation; a load caches what it read only
+when the generation did not move while it yielded (a pre-save read never replaces what a save cached).
 Console command `wc_migrate_appearances` upgrades all rows in batches (console only).
 
 ### 6.3 Identity
@@ -899,6 +914,18 @@ metadata, also while the ped is alive: the hospital-bed heal timer, a dead chara
 in a session or while a commit holds the character lock). The client mirrors the death-owner check
 in `WCSelector.canSwitch` (`WCSpawn.DEATH_OWNER.isDead`, the w_ambulancejob client export `IsDead`). The leaving character is cleared (`characterCleared`, reason `switch`) and its spawn
 grant withdrawn.
+A switch the player is not isolated in the character scene for **lapses** after
+`WCScene.ROOM_GRACE_MS` (`WCCharacters.checkSwitches`): a character selected, created or repaired but
+never loaded is finished (active + broadcast, no spawn grant); an open creation / repair grant is
+cancelled and the character switched away from comes back (logged in again when the framework holds
+a character without a usable look — a provisioned creation). A lapse is a `security_violation`
+(`character_switch_lapsed`) and no new switch starts for `WCCharacters.SWITCH_LAPSE_COOLDOWN_MS`
+(5 min; `BUSY`).
+Re-selecting the character the framework already has logged in never logs it out and in again. On
+rsg / qbr a login over a logged-in character first saves it on the server (`Player.Functions.Save`)
+and waits until the players row holds what was saved (`job`, `gang`, `metadata`, plus `money` without
+w_core; `Bridge.SAVE_CONFIRM_MS`, 3 s); an unconfirmed save refuses the login (the character stays).
+VORP keeps every character of the user in memory, so its `setUsedCharacter` loses nothing.
 
 Resource restart: players whose framework character is still logged in are **adopted** as active
 again once the database is ready (only if they are still connected, still logged into that character
@@ -916,7 +943,16 @@ event → `Bridge.RegisterCharacter` → appearance row + starter ownership (one
 renders on the player ped → `characters:loaded` (legacy net event `creationReady`) → spawn. Creation is
 free. A repeated `create` with the same token returns the same result without a second registration.
 Repair path: `select` answers `{needsAppearance, token, sex?}` for a character without an appearance
-row → creator in appearance-only mode → `create(token, nil, app)` → `loaded`.
+row → creator in appearance-only mode → `create(token, nil, app)` → `loaded`. A **degraded** character
+(its stored look needed essential defaults) gets `{needsAppearance, token, sex, appearance, degraded,
+repairSections}`: the save takes `repairSections` only (body, face, eyebrows, skin, eyes, hair,
+facialHair, makeup) and keeps the saved clothing, so the repair editor offers those sections and no
+clothing stage.
+Registration never binds a creation to a character the player already had: VORP's asynchronous
+`addCharacter` is resolved by reading the account's ids first and accepting only a **new** id (none
+within 4 s → `nil`), and `createNew` refuses a registered charid that was in the list read before it.
+A player who drops while `select` / `create` yields leaves nothing behind (no pending / grant, the
+repository entry released).
 
 ### 9.3 Service editors (store, wardrobe, barber, surgery)
 ```
@@ -1050,8 +1086,12 @@ Server exports (`WCApi`, `server/api.lua`):
 - Writing: `SetClothes(src, clothes, overwrite)`, `SetSkin(src, skin, overwrite)` → Result
   `{appearance, changed, sections}`. Every value is validated for the character's sex and **refused,
   never repaired** (`INVALID_COMPONENT`, `INVALID_TINT`, `CONFLICTING_ITEMS`, `INVALID_PAYLOAD`);
-  `bodyWeight` accepts a waist hash (signed or unsigned) or an index 1..21; `SetSkin` also accepts a
-  full v3 appearance (its clothing is ignored; only a missing part is kept from the saved one). `BUSY`
+  `bodyWeight` accepts a waist hash (signed or unsigned) or an index 1..21; `bodyScale` must be within
+  0.9..1.1, an expression within -1..1 and an overlay opacity within 0..1 (after the bridge's percent
+  convention: a value above 1 is divided by 100) — never clamped. `SetSkin` also accepts a v3
+  appearance (its clothing is ignored): only what it carries replaces the saved values (a body / head /
+  hair field, a morph id, an overlay layer); a section or field it leaves out keeps the saved one
+  (`overwrite = true` replaces the morphology and overlays, as for a standard skin). `BUSY`
   while a session is open or the character is locked. On success: save (with the folded grooming
   growth), `w_creators:client:applyAppearance` to the owner, broadcast, `appearanceChanged(src, charid,
   'api')`. `ApplyCharacterAppearance(src)` re-sends the saved appearance. Exports that read the
@@ -1160,7 +1200,7 @@ fitting-room bucket; resource stop resets only tracked buckets.
 ### 16.3 Spawn / respawn
 | Name | Kind | Behaviour |
 |---|---|---|
-| `w_creators:spawn:choose` | callback `pointId` | requires `SpawnPending[src]` (else `SPAWN_NOT_PENDING`, logged); `'__last'` needs `lastLocation` service + valid last position; otherwise an enabled point id (`INVALID_SPAWN`; a refused choice keeps the grant). Resolves coords server-side and clears the grant. Kinds `initial`/`login`/`switch`: bucket 0, fires `w_creators:client:spawn(pos, {kind})`. Kinds `admin`/`death`: bucket untouched, fires `w_creators:client:respawn(pos, {kind, point})` (§11). `{pos, kind}`. Legacy event `w_creators:server:spawnAt` → same (an unknown id falls back to the first enabled point) |
+| `w_creators:spawn:choose` | callback `pointId` | requires `SpawnPending[src]` (else `SPAWN_NOT_PENDING`, logged); `'__last'` needs `lastLocation` service + valid last position; otherwise an enabled point id (`INVALID_SPAWN`; a refused choice keeps the grant). Resolves coords server-side and clears the grant. Kinds `initial`/`login`/`switch`: bucket 0, fires `w_creators:client:spawn(pos, {kind})`. Kinds `admin`/`death`: bucket untouched, fires `w_creators:client:respawn(pos, {kind, point})` (§11). `{pos, kind}`. Legacy event `w_creators:server:spawnAt` → same (an unknown id falls back to the first enabled point). Net event `w_creators:server:spawnCancel` (rate-limited): the client cancelled an in-world selector — only an `admin` grant is withdrawn |
 | `w_creators:client:selectSpawn` | server→client | `{last = {x,y,z,heading,label}|nil, points = [enabled point ids in order], kind}` |
 | `w_creators:client:spawn` | server→client | `(pos {x,y,z,heading}, meta {kind = 'initial'|'login'|'switch'})` — w_core listens to this name (a fresh login) |
 | `w_creators:client:respawn` | server→client | `(pos, meta {kind = 'admin'|'death', point})` — a player already in the world is moved (admin respawn, `RespawnPlayer`, an admin spawn choice) |

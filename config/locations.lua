@@ -127,7 +127,7 @@ Config.Locations = {
     },
     {
         id = 'annesburg_barber', type = 'barber', enabled = true,
-        label = 'الحلاق', town = 'أنيسبرغ',
+        label = 'الحلاق', town = 'آنسبرغ',
         coords = vector3(2924.3, 1343.7, 44.4),
     },
     {
@@ -142,7 +142,7 @@ Config.Locations = {
     },
     {
         id = 'strawberry_barber', type = 'barber', enabled = true,
-        label = 'الحلاق', town = 'ستروبري',
+        label = 'الحلاق', town = 'ستروبيري',
         coords = vector3(-1810.92, -372.15, 162.89),
     },
 

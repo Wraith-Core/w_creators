@@ -115,12 +115,25 @@ export function identityDirty(identity, form) {
   return Object.keys(start).some(key => String(form?.[key] ?? '') !== start[key]);
 }
 
-// What Back / Escape does: dismiss the open modal, go up one level, ask to save/discard (root,
-// dirty) or close (root, clean).
-export function backAction({ confirm, pathLength, dirty }) {
+// What Back / Escape does: dismiss the open modal, clear an active search (the search is one
+// navigation level), go up one level, ask to save/discard (root, dirty) or close (root, clean).
+export function backAction({ confirm, pathLength, dirty, search }) {
   if (confirm) return 'dismiss';
+  if (String(search || '').trim() !== '') return 'clearSearch';
   if (pathLength > 0) return 'pop';
   return dirty ? 'confirmLeave' : 'close';
+}
+
+// A row opened from a search result remembers where the search was: { from, path, search }.
+export const searchOrigin = (path, next, search) =>
+  String(search || '').trim() !== '' ? { from: list(path), path: list(next), search: String(search) } : null;
+
+// Where Back goes from `path`: the result list the row was opened from (same path as the origin
+// recorded) or one level up. Returns { path, search }.
+export function popTarget(path, origin) {
+  const here = list(path).join('/');
+  if (origin && list(origin.path).join('/') === here) return { path: list(origin.from), search: origin.search || '' };
+  return { path: popPath(path), search: '' };
 }
 
 // UI memory per session id: the same id keeps its path/search, a new id starts fresh.
@@ -258,4 +271,18 @@ let opCounter = 0;
 export function nextOpId(sessionId) {
   opCounter = (opCounter + 1) % 1e6;
   return `${sessionId}-${Date.now().toString(36)}-${opCounter}`;
+}
+
+// The creator's Review plate: the identity typed in the Identity stage (held here, not in Lua)
+// first, one row per identity field, then the appearance rows Lua built. Without an identity
+// (every other mode) the node's rows unchanged.
+export function reviewItems(node, identity, form) {
+  const rows = list(node?.items);
+  const fields = list(identity?.fields);
+  if (!fields.length) return rows;
+  const typed = fields.map(f => ({
+    label: f?.label || '',
+    value: String((f?.type === 'info' ? f?.value : form?.[f?.key]) ?? '').trim(),
+  }));
+  return [...typed, ...rows];
 }

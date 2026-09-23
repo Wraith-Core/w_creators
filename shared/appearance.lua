@@ -218,6 +218,7 @@ local function tableOr(v) return type(v) == 'table' and v or {} end
 --                stored dye survives Config.Clothing.tints being disabled or narrowed. The live tint
 --                config (WCCatalog.validTint) applies to the default (edit) mode and to changed
 --                tints in mergeSections.
+--                rules = false also keeps a stored overlay layer of the other sex (pre-v3 data).
 --  opts.grooming false = drop the input's grooming (server-owned; client-submitted appearances).
 function S.sanitize(app, opts)
     opts = type(opts) == 'table' and opts or {}
@@ -301,7 +302,10 @@ function S.sanitize(app, opts)
     out.overlays = {}
     for id, o in pairs(tableOr(src.overlays)) do
         local layer = WCOverlays.byId[id]
-        if layer and layer.sexes[sex] and type(o) == 'table' then
+        -- Stored data (rules = false) keeps a layer of the other sex: the pre-v3 creator offered
+        -- every layer to both sexes (a female's beard shadow), and an upgrade never drops it silently.
+        -- The editors never add one (mergeSections keeps such a layer as saved).
+        if layer and (layer.sexes[sex] or opts.rules == false) and type(o) == 'table' then
             local style = WCUtil.int(o.style, nil, nil, nil)
             if style and style >= 1 then
                 out.overlays[id] = {
@@ -630,7 +634,10 @@ function S.mergeSections(saved, submitted, allowed)
     if allowed.hair then out.hair.style = sub.hair.style end
     if allowed.facialHair then out.hair.facial = sub.hair.facial end
     for _, layer in ipairs(WCOverlays.layers) do
-        if allowed[layer.section] then out.overlays[layer.id] = WCUtil.copy(sub.overlays[layer.id]) end
+        -- a layer of the other sex is only ever kept as stored, never taken from a submission
+        if allowed[layer.section] and layer.sexes[base.sex] then
+            out.overlays[layer.id] = WCUtil.copy(sub.overlays[layer.id])
+        end
     end
     if allowed.clothing then
         local equipped = WCUtil.copy(sub.clothing.equipped)

@@ -261,7 +261,7 @@ class NuiWiringTests(unittest.TestCase):
         back = self.editor[self.editor.index('const back = () =>'):]
         back = back[:back.index('};')]
         self.assertRegex(back, r'identityDirty\(payload\.identity,\s*identity\)')
-        self.assertRegex(back, r'backAction\(\{confirm, pathLength: validPath\.length, dirty\}\)')
+        self.assertRegex(back, r'backAction\(\{confirm, pathLength: validPath\.length, dirty(, search)?\}\)')
 
     def test_save_modal_renders_the_price_lines(self):
         self.assertRegex(self.editor, r'priceLines\(price\)')

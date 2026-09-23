@@ -21,7 +21,12 @@
 --  IGNORE) in one transaction. When that write fails, the grants are owed: they join the next
 --  save's transaction (that save makes the row v3, so the upgrade never runs again). When defaults
 --  were needed nothing is written (data is never silently replaced): the in-memory appearance uses
---  the defaults and a warning is logged.
+--  the defaults and a warning is logged. A row already at v3 whose JSON is unreadable is recovered
+--  the same way but without any 'legacy' grant (its ownership is authoritative already; meta.recovered).
+--
+--  Cache generations: every write and invalidation bumps the character's generation; a load caches
+--  what it read only when the generation did not move while it yielded (a pre-save read never
+--  replaces what a save cached after its commit).
 --
 --  Degraded appearances: an appearance that needed essential defaults (legacy or stored v3) is
 --  remembered as degraded; save() refuses to overwrite that character unless the caller passes
@@ -53,9 +58,20 @@ local WRITE_JSON = 'UPDATE characters_appearence SET appearance = ?, appearance_
 
 local function key(charid) return tostring(charid) end
 
+-- [charid] = n: bumped by every write and invalidation. A load remembers what it read only when
+-- no write or invalidation happened while its SELECT (and its own writes) yielded: a pre-save row
+-- read during a save must never replace the entry the save cached after its commit.
+local generation = {}
+
+local function bump(charid)
+    local k = key(charid)
+    generation[k] = (generation[k] or 0) + 1
+end
+
 --- Forget the cached appearance of a character.
 function Repo.invalidate(charid)
     Repo.cache[key(charid)] = nil
+    bump(charid)
 end
 
 local function rowInfo(row)
@@ -235,6 +251,10 @@ function Repo.load(charid, opts)
         return nil, { error = 'DATABASE_ERROR' }
     end
 
+    local gen = generation[key(charid)]
+    local function keep(...)
+        if useCache and generation[key(charid)] == gen then remember(...) end
+    end
     local ok, row = pcall(w.database.single.await, SELECT_LATEST, { key(charid) })
     if not ok then
         WCDebug.warn('appearance', 'reading %s failed: %s', key(charid), tostring(row))
@@ -260,7 +280,7 @@ function Repo.load(charid, opts)
             app, reconciled = reconcile(charid, row, v3, app)
         end
         pendingLegacy[key(charid)] = nil
-        if useCache then remember(charid, app, row.id, defaultsUsed, info) end
+        keep(charid, app, row.id, defaultsUsed, info)
         return app, { version = AppearanceSchema.VERSION, defaultsUsed = defaultsUsed, violations = violations,
                       degraded = #defaultsUsed > 0, upgraded = false, cached = false, reconciled = reconciled,
                       row = info }
@@ -269,6 +289,15 @@ function Repo.load(charid, opts)
     local app, meta = AppearanceSchema.fromLegacy(row)
     meta.upgraded, meta.cached, meta.degraded = false, false, #meta.defaultsUsed > 0
     meta.row = info
+    -- A row already marked v3 whose JSON cannot be read: recovered from its projection, but its
+    -- ownership is authoritative already — no 'legacy' grants (the projection may carry clothing
+    -- applied through SetClothes, a job uniform the character does not own).
+    local recovering = (tonumber(row.appearance_version) or 0) >= AppearanceSchema.VERSION
+    meta.recovered = recovering or nil
+    if recovering then
+        WCDebug.warn('appearance', 'character %s: its v3 appearance JSON is unreadable - recovered from the legacy projection (tints, states and outfit lost; no ownership granted)',
+            key(charid))
+    end
     if meta.dropped and #meta.dropped > 0 then
         WCDebug.warn('appearance', 'character %s: legacy clothing not in the catalogue was left out: %s',
             key(charid), table.concat(meta.dropped, ','))
@@ -277,14 +306,15 @@ function Repo.load(charid, opts)
         -- The legacy columns are not rewritten here: the fingerprint is the one of the row as it is.
         local encoded = encodeWith(app, Repo.fingerprint(row))
         local queries = { { query = WRITE_JSON, values = { encoded, AppearanceSchema.VERSION, row.id } } }
-        for _, q in ipairs(Repo.legacyGrants(charid, app)) do queries[#queries + 1] = q end
+        local owedGrants = recovering and {} or Repo.legacyGrants(charid, app)
+        for _, q in ipairs(owedGrants) do queries[#queries + 1] = q end
         local txOk, done = pcall(w.database.transaction.await, queries)
         meta.upgraded = encoded ~= nil and txOk and done == true
         if meta.upgraded then
             pendingLegacy[key(charid)] = nil
         else
             WCDebug.warn('appearance', 'character %s: v3 upgrade write failed: %s', key(charid), tostring(done))
-            pendingLegacy[key(charid)] = Repo.legacyGrants(charid, app)
+            pendingLegacy[key(charid)] = #owedGrants > 0 and owedGrants or nil
         end
     else
         WCDebug.warn('appearance', 'character %s: legacy appearance needed defaults for %s - not upgraded',
@@ -293,9 +323,9 @@ function Repo.load(charid, opts)
         -- clothing is never an essential section (fromLegacy keeps it as stored) and the explicit
         -- repair (save with replaceDegraded) keeps it, so the grants join that save's transaction —
         -- the one that makes the row v3, after which the lazy upgrade never runs again.
-        pendingLegacy[key(charid)] = Repo.legacyGrants(charid, app)
+        pendingLegacy[key(charid)] = (not recovering) and Repo.legacyGrants(charid, app) or nil
     end
-    if useCache then remember(charid, app, row.id, meta.defaultsUsed, info) end
+    keep(charid, app, row.id, meta.defaultsUsed, info)
     return app, meta
 end
 
@@ -352,6 +382,7 @@ function Repo.save(charid, app, extra, opts)
     end
     if owed and pendingLegacy[key(charid)] == owed then pendingLegacy[key(charid)] = nil end
     if info then info.isMale = legacy.isMale end
+    bump(charid)
     remember(charid, app, id, {}, info)
     return true, app
 end
@@ -379,6 +410,7 @@ function Repo.create(charid, identity, app, extra)
         WCDebug.warn('appearance', 'creating %s failed: %s', key(charid), tostring(done))
         return false, 'DATABASE_ERROR'
     end
+    bump(charid)
     degraded[key(charid)] = nil
     pendingLegacy[key(charid)] = nil
     return true, app
@@ -399,6 +431,7 @@ function Repo.delete(charid)
         WCDebug.warn('appearance', 'deleting %s failed: %s', id, tostring(done))
         return false
     end
+    bump(charid)
     degraded[id] = nil
     pendingLegacy[id] = nil
     return true

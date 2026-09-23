@@ -159,17 +159,23 @@ class HoursTests(LocationsTestCase):
     def tearDown(self):
         self.run('GlobalState = nil')
 
+    def open_now(self):
+        """The prompt shows (no flow blocks it) and its action is enabled."""
+        return self.eval('P.prompt.opts.canInteract() and P.prompt.enabled.E ~= false and WCServicePoints.canInteract(P.loc)')
+
     def test_the_prompt_follows_the_hour_the_server_publishes(self):
         self.rebuild(self.HOURS + 'GlobalState = { [WCServicePoints.HOUR_KEY] = 3 }')
         self.point('valentine_clothing')
-        self.assertIsNotNone(self.eval('P.prompt'))  # built while closed: it shows once open
-        self.assertFalse(self.eval('P.prompt.opts.canInteract()'))
+        self.assertIsNotNone(self.eval('P.prompt'))  # built while closed: shown, action disabled
+        self.assertFalse(self.open_now())
+        self.assertTrue(self.eval('P.prompt.opts.canInteract()'))
+        self.assertFalse(self.eval('P.prompt.enabled.E'))
         self.run('GlobalState[WCServicePoints.HOUR_KEY] = 10')
-        self.assertTrue(self.eval('P.prompt.opts.canInteract()'))
+        self.assertTrue(self.open_now())
         self.run('GlobalState[WCServicePoints.HOUR_KEY] = 23')
-        self.assertFalse(self.eval('P.prompt.opts.canInteract()'))
+        self.assertFalse(self.open_now())
         self.point('saintdenis_clothing')  # no hours: always open
-        self.assertTrue(self.eval('P.prompt.opts.canInteract()'))
+        self.assertTrue(self.open_now())
 
     def test_neither_the_os_clock_nor_the_game_clock_is_read(self):
         self.rebuild(self.HOURS + 'GlobalState = {}; GameHour = 2;'
@@ -188,7 +194,7 @@ class HoursTests(LocationsTestCase):
             n = self.rebuild(self.HOURS + 'GlobalState = { [WCServicePoints.HOUR_KEY] = 23 }')
             self.assertEqual(n, 14)
             self.point('valentine_clothing')
-            self.assertFalse(self.eval('P.prompt.opts.canInteract()'))
+            self.assertFalse(self.open_now())
             self.run('CallbackResults = { ["w_creators:wardrobe:open"] = wardrobeData(),'
                      ' ["w_creators:wardrobe:commit"] = function(_, t, o, app) return okResult({ appearance = app }) end }')
             self.point('rhodes_wardrobe')

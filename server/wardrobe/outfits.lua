@@ -168,6 +168,9 @@ function Outfits.validateData(charid, sex, equipped, states, worn, owned)
     if #violations > 0 then return nil, 'CONFLICTING_ITEMS', violations[1].category end
     local cleanStates = {}
     local app = { clothing = { equipped = resolved } }
+    -- With the clothing actions off no state is stored with an outfit (a later wardrobe commit of
+    -- it would persist a state the player can no longer change).
+    if not WCClothingStates.enabled() then states = nil end
     for group, value in pairs(states or {}) do
         if not WCClothingStates.isValid(group, value) then return nil, 'STATE_NOT_SUPPORTED', tostring(group) end
         -- Only persisting states of items the outfit wears are kept (a state of an item the outfit

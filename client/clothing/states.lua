@@ -209,9 +209,9 @@ end
 local function taxonomyIndex()
     local groups, subs = {}, {}
     for gi, g in ipairs((Config.Clothing and Config.Clothing.taxonomy) or {}) do
-        groups[g.id] = { label = g.label, order = g.order or gi }
+        groups[g.id] = { label = g.label, order = g.order or gi, index = gi }
         for si, sub in ipairs(g.subs or {}) do
-            subs[sub.id] = { label = sub.label, order = sub.order or si, group = g.id }
+            subs[sub.id] = { label = sub.label, order = sub.order or si, index = si, group = g.id }
             if sub.category then subs[sub.category] = subs[sub.category] or subs[sub.id] end
         end
     end
@@ -247,7 +247,7 @@ function C.available(app)
         local g = groupAt[groupId]
         if not g then
             local info = groups[groupId] or {}
-            g = { id = groupId, label = info.label or TITLE, order = info.order or 99, items = {} }
+            g = { id = groupId, label = info.label or TITLE, order = info.order or 99, index = info.index or (1000 + #out), items = {} }
             groupAt[groupId] = g
             out[#out + 1] = g
         end
@@ -255,7 +255,8 @@ function C.available(app)
         local item = itemAt[key]
         if not item then
             local info = subs[itemId] or {}
-            item = { id = itemId, label = info.label or a.label, order = info.order or 99, actions = {}, groups = {} }
+            item = { id = itemId, label = info.label or a.label, order = info.order or 99, index = info.index or (1000 + #g.items),
+                     actions = {}, groups = {} }
             itemAt[key] = item
             g.items[#g.items + 1] = item
         end
@@ -276,10 +277,16 @@ function C.available(app)
             }
         end
     end
-    table.sort(out, function(x, y) return x.order < y.order end)
-    for _, g in ipairs(out) do
-        table.sort(g.items, function(x, y) return x.order < y.order end)
+    -- by `order`, then by the config position (table.sort is not stable): the same deterministic
+    -- order as the editor's taxonomy (WCEditorTree.ordered)
+    local function byOrder(list)
+        table.sort(list, function(x, y)
+            if x.order ~= y.order then return x.order < y.order end
+            return x.index < y.index
+        end)
     end
+    byOrder(out)
+    for _, g in ipairs(out) do byOrder(g.items) end
     return out
 end
 

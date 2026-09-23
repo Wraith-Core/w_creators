@@ -124,8 +124,12 @@ function Wardrobe.plan(saved, submitted, owned, outfitIds)
     local outfit = WCOwnership.exactId(clothing.outfit)
     if outfit and not (outfitIds and outfitIds[outfit]) then outfit = nil end
 
+    -- With the clothing actions off (service or Config.ClothingStates) a submitted state is never
+    -- persisted (an outfit saved earlier with hat = 'off' included): the saved states are kept.
+    local statesOn = WCClothingStates.enabled()
     local draft = WCUtil.copy(saved)
-    draft.clothing = { equipped = resolved, tints = tints, states = validStates(clothing.states), outfit = outfit }
+    draft.clothing = { equipped = resolved, tints = tints, outfit = outfit,
+                       states = statesOn and validStates(clothing.states) or WCUtil.copy(saved.clothing.states) }
     local merged = AppearanceSchema.mergeSections(saved, draft, { clothing = true, states = true })
     for category in pairs(changed) do
         if merged.clothing.equipped[category] ~= resolved[category] then return nil, 'CONFLICTING_ITEMS', category end
@@ -133,7 +137,13 @@ function Wardrobe.plan(saved, submitted, owned, outfitIds)
     -- A state is kept only while its item is worn (a stored 'off' would otherwise hide an item
     -- equipped later). States on swapped items are the player's choice here: the wardrobe edits
     -- them and its preview shows them.
-    merged.clothing.states = validStates(merged.clothing.states, merged)
+    if statesOn then
+        merged.clothing.states = validStates(merged.clothing.states, merged)
+    else
+        -- the saved states whose item is still worn (a swapped item starts visible, as in the store)
+        local swapped = WCOwnership.changedCategories(saved.clothing.equipped, merged.clothing.equipped)
+        merged.clothing.states = WCOwnership.settleStates(merged, saved.clothing.states, WCOwnership.groupsOf(swapped))
+    end
     local changes = AppearanceSchema.changedSections(saved, merged)
     if not changes.clothing and not changes.states then return nil, 'NO_CHANGES' end
     return merged

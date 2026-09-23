@@ -135,13 +135,16 @@ class SyncTests(unittest.TestCase):
         self.run('''Peds[remote].ready = false; clearLog()
             CreateThread(function() fire("w_creators:client:applyRemoteAppearance", 5, app) end)
             fire("w_creators:client:remoteClothingState", 5, "hat", "off")''')
-        self.run('Peds[remote].ready = true; tick(30000); tick(1000); tick(1000)')
-        self.assertEqual(self.renders(), 2)
-        self.assertEqual(self.e('''(function() local n = 0 for i = indexOf("preset", 2) or 1, #Log do
-            local e = Log[i] if e.op == "preset" then n = i end end
-            for i = n, #Log do local e = Log[i]
-                if e.op == "component.apply" and e.args[2] == "hats" then return true end end
-            return false end)()'''), False)
+        self.run('Peds[remote].ready = true; tick(30000)')
+        self.run('Mark = #Log; tick(1000); tick(1000)')
+        # the next pass draws the state on the ped that shows the previous look: incrementally
+        # (review round 3: no second full render), the hat removed and never re-applied
+        self.assertEqual(self.renders(), 1)
+        self.assertEqual(self.e('''(function() local removed, applied = false, false
+            for i = Mark + 1, #Log do local e = Log[i]
+                if e.op == "component.remove" and e.args[2] == "hats" then removed = true end
+                if e.op == "component.apply" and e.args[2] == "hats" then applied = true end end
+            return removed and not applied end)()'''), True)
         self.assertEqual(self.e('Appearance.Sync.get(5).clothing.states.hat'), 'off')
 
 

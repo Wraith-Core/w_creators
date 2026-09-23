@@ -24,8 +24,7 @@ local runtime = {} -- [src] = { charid, states = { [group] = value } }
 local function fail(code, data) return WCResult.fail(code, data) end
 
 local function enabled()
-    local cfg = Config.ClothingStates or {}
-    return cfg.enabled ~= false and WCServices.enabled('clothingActions')
+    return WCClothingStates.enabled()
 end
 
 local function runtimeOf(src, charid)
@@ -130,6 +129,12 @@ end)
 
 AddEventHandler('w_creators:server:appearanceChanged', function(src, _, kind)
     if kind ~= 'clothingState' and src ~= nil then Actions.forget(src) end
+end)
+
+-- A character change (switch, any clear): the leaving character's runtime states go with it, so a
+-- raised bandana never comes back on its own when the same character is picked again.
+AddEventHandler('w_creators:server:characterCleared', function(src)
+    if src ~= nil then Actions.forget(tonumber(src) or src) end
 end)
 
 AddEventHandler('playerDropped', function()

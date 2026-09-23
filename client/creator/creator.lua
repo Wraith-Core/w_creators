@@ -153,9 +153,22 @@ local function relabelPrompts()
     end)
 end
 
+-- Another group displayed over ours (a w_lib walk-up prompt, a death prompt re-displayed by its
+-- owner) hides it, and w_lib only reports completions of the visible group: ours is displayed
+-- again (checked every PROMPT_REASSERT_MS), or the screen could never be left.
+local PROMPT_REASSERT_MS = 250
+local function reassertPrompts(group)
+    local now = GetGameTimer()
+    if st.promptCheckAt and now < st.promptCheckAt then return end
+    st.promptCheckAt = now + PROMPT_REASSERT_MS
+    local ok, visible = pcall(group.isVisible)
+    if ok and visible == false then pcall(group.display) end
+end
+
 local function isCompleted(key)
     local group = st.prompts
     if not group or key == nil then return false end
+    reassertPrompts(group)
     local ok, done = pcall(group.isCompleted, key)
     return ok and done == true
 end
@@ -367,7 +380,9 @@ finishCreated = function(data, working)
     teardown()
     restorePlayer()
 
-    local loaded = await('w_creators:characters:loaded')
+    -- an uncertain answer (a timed-out reply) is settled by the spawn hand-off (WCSelector.awaitLoaded)
+    local loaded = (type(WCSelector) == 'table' and type(WCSelector.awaitLoaded) == 'function')
+        and WCSelector.awaitLoaded() or await('w_creators:characters:loaded')
     if not loaded.ok then
         WCState.clear()
         local key = messageOf(loaded)

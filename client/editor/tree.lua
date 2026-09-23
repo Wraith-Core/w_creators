@@ -77,7 +77,7 @@ local K = {
     outfits = 'الأطقم', outfitEquip = 'ارتداء الطقم', outfitUpdate = 'تحديث بالملابس الحالية',
     outfitRename = 'إعادة التسمية', outfitDelete = 'حذف الطقم',
     outfitDeleteBody = 'سيُحذف هذا الطقم نهائيًا ولا يمكن التراجع عن ذلك.', outfitNew = 'حفظ الطقم الحالي',
-    outfitName = 'اسم الطقم', outfitSave = 'حفظ', apply = 'تطبيق', items = 'القطع الفردية',
+    outfitName = 'اسم الطقم', outfitSave = 'حفظ', apply = 'تطبيق',
     outfitLimit = 'وصلت إلى الحد الأقصى من الأطقم',
     sex = 'الجنس', male = 'ذكر', female = 'أنثى', clothingCount = 'قطع الملابس', changed = 'الأقسام المعدّلة',
     noChanges = 'لا توجد تغييرات', price = 'السعر', free = 'مجاني',
@@ -201,12 +201,16 @@ local function ownedEntry(s, hash)
 end
 
 --- The owned tint of an item ({ palette, tint0..2 }) or nil.
+--  An owned dye is stored data (§5.4): it is checked structurally (WCCatalog.validStoredTint, as
+--  the server's WCOwnership.tintOf does), never against the live Config.Clothing.tints, so an item
+--  whose palette the config no longer offers is put on with its paid dye (the renderer skips the
+--  forbidden dye; the store sees the item as undyed). Only newly chosen tints use validTint.
 local function ownedTint(s, category, hash)
     local entry = ownedEntry(s, hash)
     local tints = s.context.ownedTints
     local t = entry
     if type(tints) == 'table' then t = tints[tostring(WCUtil.u32(hash))] or entry end
-    if type(t) == 'table' and t.palette and WCCatalog.validTint(category, t) then
+    if type(t) == 'table' and t.palette and WCCatalog.validStoredTint(category, t) then
         return { palette = t.palette, tint0 = math.tointeger(t.tint0), tint1 = math.tointeger(t.tint1),
                  tint2 = math.tointeger(t.tint2) }
     end
@@ -349,6 +353,16 @@ end
 -- ---------------------------------------------------------------------
 --  Overlays
 -- ---------------------------------------------------------------------
+--- Does a layer's Color show on the ped (Appearance.Overlays.tintable)? A layer drawn without its
+--  palette (blend type 1: complexion, discolouration, wrinkles, freckles, moles, spots, acne,
+--  scars) gets no Color control, so a colour-only change can never be priced.
+local function overlayTintable(layer)
+    local O = type(Appearance) == 'table' and Appearance.Overlays or nil
+    if type(O) == 'table' and type(O.tintable) == 'function' then return O.tintable(layer) == true end
+    return layer.tint ~= false
+end
+T.overlayTintable = overlayTintable
+
 local function overlayControls(reg, s, layer)
     local o = s.working.overlays[layer.id]
     local id = 'overlay.' .. layer.id
@@ -364,13 +378,15 @@ local function overlayControls(reg, s, layer)
                                        opacity = cur and cur.opacity or 1.0 }
         end)
     local off = o == nil
-    nodes[2] = rangeChoice(reg, id .. '.color', L(K.color), o and o.color or 1, 1, WCOverlays.COLORS, false,
-        function(app, value)
-            local cur = app.overlays[layer.id]
-            if not cur then return 'INVALID_COMPONENT' end
-            cur.color = value
-        end, { disabled = off or nil })
-    nodes[3] = slider(reg, id .. '.opacity', L(K.opacity), o and o.opacity or 1.0, 0, 1, 0.01,
+    if overlayTintable(layer) then
+        nodes[#nodes + 1] = rangeChoice(reg, id .. '.color', L(K.color), o and o.color or 1, 1, WCOverlays.COLORS, false,
+            function(app, value)
+                local cur = app.overlays[layer.id]
+                if not cur then return 'INVALID_COMPONENT' end
+                cur.color = value
+            end, { disabled = off or nil })
+    end
+    nodes[#nodes + 1] = slider(reg, id .. '.opacity', L(K.opacity), o and o.opacity or 1.0, 0, 1, 0.01,
         { scale = 100, decimals = 0 }, function(app, value)
             local cur = app.overlays[layer.id]
             if not cur then return 'INVALID_COMPONENT' end
@@ -766,46 +782,75 @@ local function startingCategories(s)
     return WCUtil.set(list), cfg
 end
 
---- The taxonomy groups -> subcategories for the clothing of a mode.
-function T.taxonomy(reg, s)
-    local only
-    if s.mode == 'creator' then only = startingCategories(s) end
+--- A config list in its deterministic order (§5.3): by `order`, then by position (a stable tie-break,
+--  the same comparator as WCClothing.available). Entries that are not tables are skipped.
+local function ordered(list)
     local out = {}
-    for _, g in ipairs(Config.Clothing.taxonomy or {}) do
-        local subs = {}
-        for _, sub in ipairs(g.subs or {}) do
-            local category = sub.category or sub.id
-            if not only or only[category] then add(subs, clothingSub(reg, s, sub)) end
-        end
-        add(out, group('tax.' .. g.id, L(g.label), subs, { camera = g.camera, searchable = #subs > 6 or nil }))
+    for i, entry in ipairs(type(list) == 'table' and list or {}) do
+        if type(entry) == 'table' then out[#out + 1] = { entry = entry, index = i } end
     end
+    table.sort(out, function(a, b)
+        local oa, ob = tonumber(a.entry.order) or a.index, tonumber(b.entry.order) or b.index
+        if oa ~= ob then return oa < ob end
+        return a.index < b.index
+    end)
+    for i, e in ipairs(out) do out[i] = e.entry end
     return out
 end
+T.ordered = ordered
 
-local function presetItems(sex, preset)
+local function presetItems(sex, preset, only)
     local equipped = {}
     for _, item in ipairs(preset.items or {}) do
         local hash = WCCatalog.resolve(sex, item.category, { item.model, item.variant })
-        if hash and WCCatalog.offered(sex, item.category) then equipped[item.category] = hash end
+        if hash and WCCatalog.offered(sex, item.category) and (not only or only[item.category]) then
+            equipped[item.category] = hash
+        end
     end
     return WCRules.normalize(equipped)
 end
 
-local function starterPresets(reg, s)
+--- The starting outfit presets (Config.StartingOutfits) as one choice. `only` (free mode) keeps
+--  the items of the allowed starting categories (the server's restrictClothing drops the others).
+local function starterPresets(reg, s, only)
     local presets = Config.StartingOutfits and Config.StartingOutfits[s.working.sex] or {}
     local options = { { value = 0, label = L('بدون') } }
     local current = 0
     for i, preset in ipairs(presets) do
         options[#options + 1] = { value = i, label = L(preset.label) }
-        if next(s.working.clothing.equipped) and WCUtil.deepEqual(presetItems(s.working.sex, preset), s.working.clothing.equipped) then
+        if next(s.working.clothing.equipped) and WCUtil.deepEqual(presetItems(s.working.sex, preset, only), s.working.clothing.equipped) then
             current = i
         end
     end
     return choice(reg, 'starter.preset', L(K.starter), current, options, function(app, value)
         local preset = presets[value]
-        app.clothing.equipped = preset and presetItems(app.sex, preset) or {}
+        app.clothing.equipped = preset and presetItems(app.sex, preset, only) or {}
         app.clothing.tints, app.clothing.outfit = {}, nil
     end)
+end
+
+--- The taxonomy groups -> subcategories for the clothing of a mode, in their `order` (§5.3).
+--  The creator (free mode) adds the 8th group, Outfits: the Config.StartingOutfits presets of the
+--  character's sex. (The wardrobe adds its saved outfits there; stores sell items only.)
+function T.taxonomy(reg, s)
+    local only
+    if s.mode == 'creator' then only = startingCategories(s) end
+    local out = {}
+    for _, g in ipairs(ordered(Config.Clothing.taxonomy)) do
+        local subs = {}
+        for _, sub in ipairs(ordered(g.subs)) do
+            local category = sub.category or sub.id
+            if not only or only[category] then add(subs, clothingSub(reg, s, sub)) end
+        end
+        add(out, group('tax.' .. g.id, L(g.label), subs, { camera = g.camera, searchable = #subs > 6 or nil }))
+    end
+    if s.mode == 'creator' then
+        local presets = Config.StartingOutfits and Config.StartingOutfits[s.working.sex]
+        if type(presets) == 'table' and #presets > 0 then
+            add(out, group('tax.outfits', L(K.outfits), { starterPresets(reg, s, only) }, { camera = 'fullBody' }))
+        end
+    end
+    return out
 end
 
 -- ---------------------------------------------------------------------
@@ -822,12 +867,16 @@ local function availableActions(app)
         local ok, list = pcall(WCClothing.available, app)
         if ok and type(list) == 'table' then return list end
     end
-    local groupLabels, subLabels = {}, {}
-    for _, g in ipairs(Config.Clothing.taxonomy or {}) do
-        groupLabels[g.id] = g.label
-        for _, sub in ipairs(g.subs or {}) do
+    local groupLabels, subLabels, groupRank, subRank = {}, {}, {}, {}
+    for gi, g in ipairs(ordered(Config.Clothing.taxonomy)) do
+        groupLabels[g.id], groupRank[g.id] = g.label, gi
+        for si, sub in ipairs(ordered(g.subs)) do
             subLabels[sub.id] = sub.label
-            if sub.category then subLabels[sub.category] = subLabels[sub.category] or sub.label end
+            subRank[sub.id] = subRank[sub.id] or si
+            if sub.category then
+                subLabels[sub.category] = subLabels[sub.category] or sub.label
+                subRank[sub.category] = subRank[sub.category] or si
+            end
         end
     end
     local valueLabels = Config.ClothingStates and Config.ClothingStates.valueLabels or {}
@@ -852,6 +901,13 @@ local function availableActions(app)
             item.actions[#item.actions + 1] = { group = a.group, value = value, label = valueLabels[value] or value,
                                                 control = 'state.' .. a.group .. '.' .. value }
         end
+    end
+    -- the taxonomy order, as WCClothing.available sorts it (stable: first seen wins a tie)
+    for i, g in ipairs(out) do g.order = groupRank[g.id] or (1000 + i) end
+    out = ordered(out)
+    for _, g in ipairs(out) do
+        for i, item in ipairs(g.items) do item.order = subRank[item.id] or (1000 + i) end
+        g.items = ordered(g.items)
     end
     return out
 end
@@ -1153,9 +1209,38 @@ local function clothingStage(reg, s)
     return group('clothing', L(K.clothing), T.taxonomy(reg, s), { camera = 'fullBody', searchable = true })
 end
 
+--- The creator's stages: Config.Creator.stages, with 'identity' first when a new character is
+--  created (s.opts.identity: the names can only be typed there, and Finish needs them) and
+--  'review' last, whenever the config leaves them out (warned once).
+local stagesWarned = false
+function T.creatorStages(s)
+    local configured = (Config.Creator and type(Config.Creator.stages) == 'table') and Config.Creator.stages or {}
+    local stages, seen = {}, {}
+    for _, stage in ipairs(configured) do
+        if type(stage) == 'string' and not seen[stage] then
+            seen[stage] = true
+            stages[#stages + 1] = stage
+        end
+    end
+    local missing = {}
+    if s.opts.identity and not seen.identity then
+        table.insert(stages, 1, 'identity')
+        missing[#missing + 1] = 'identity'
+    end
+    if not seen.review then
+        stages[#stages + 1] = 'review'
+        missing[#missing + 1] = 'review'
+    end
+    if #missing > 0 and not stagesWarned then
+        stagesWarned = true
+        WCDebug.warn('editor', 'Config.Creator.stages has no %s stage: added', table.concat(missing, ' / '))
+    end
+    return stages
+end
+
 local function creatorTree(reg, s)
     local children = {}
-    local stages = (Config.Creator and Config.Creator.stages) or {}
+    local stages = T.creatorStages(s)
     for _, stage in ipairs(stages) do
         if stage == 'identity' then
             if s.opts.identity then
@@ -1216,9 +1301,14 @@ end
 
 local function wardrobeTree(reg, s)
     local children = {}
-    add(children, outfitsNode(reg, s))
+    local outfits = outfitsNode(reg, s)
     if sectionAllowed(s, 'clothing') then
-        add(children, group('items', L(K.items), T.taxonomy(reg, s), { camera = 'fullBody', searchable = true }))
+        -- Outfits is the 8th taxonomy group (§5.3): the saved outfits sit beside Head … Accessories
+        local groups = T.taxonomy(reg, s)
+        add(groups, outfits)
+        add(children, group('items', L(K.clothing), groups, { camera = 'fullBody', searchable = true }))
+    else
+        add(children, outfits)
     end
     if sectionAllowed(s, 'states') then
         -- only the states a wardrobe commit saves (§5.5): a non-persisting state (the bandana) is

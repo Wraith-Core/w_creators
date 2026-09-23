@@ -51,7 +51,10 @@ Sp.REVIVE_START_TIMEOUT = 3000 -- ms for the death system's revive to start
 Sp.REVIVE_TIMEOUT = 30000      -- ms for that revive to finish (resurrect + appearance)
 -- The death system that owns the dead / last-stand state: a respawn revives through it so that
 -- state is cleared (nil = always WCRespawn.resurrect).
-Sp.DEATH_OWNER = { resource = 'w_ambulancejob', revive = 'hospital:client:Revive', isDead = 'IsDead' }
+--  inBed / endBed: the export that reports a hospital bed stay and the one that ends it (bed,
+--  camera, lying animation, invincibility, pending AI heal): a world respawn ends the stay first.
+Sp.DEATH_OWNER = { resource = 'w_ambulancejob', revive = 'hospital:client:Revive', isDead = 'IsDead',
+                   inBed = 'InHospitalBed', endBed = 'EndBedStay' }
 
 local LOGIN_KINDS = { initial = true, login = true, switch = true }
 local WORLD_KINDS = { admin = true, death = true }
@@ -327,6 +330,27 @@ local function ownerRevive(R)
     return back == true
 end
 
+--- A hospital bed stay of the death system (Sp.DEATH_OWNER.inBed) is ended before the player is
+--  moved (Sp.DEATH_OWNER.endBed): otherwise he arrives still lying, invincible and seen through
+--  the bed camera, with the bed reserved, and the pending AI heal re-poses him in the bed later.
+--  true when a stay was ended.
+function Sp.endBedStay()
+    local owner = Sp.DEATH_OWNER
+    if type(owner) ~= 'table' or type(owner.resource) ~= 'string' or type(owner.inBed) ~= 'string'
+        or type(owner.endBed) ~= 'string' then
+        return false
+    end
+    if call('GetResourceState', owner.resource) ~= 'started' then return false end
+    local okBed, inBed = pcall(function() return exports[owner.resource][owner.inBed]() end)
+    if not okBed or inBed ~= true then return false end
+    local okEnd, ended = pcall(function() return exports[owner.resource][owner.endBed]() end)
+    if not okEnd then
+        WCDebug.warn('spawn', '%s could not end the bed stay: %s', owner.resource, tostring(ended))
+        return false
+    end
+    return ended ~= false
+end
+
 --- Revive the player before a world respawn: through the death system when it runs (a down player,
 --  or any player on kind 'death': it also clears its last stand), else WCRespawn.resurrect.
 local function revive(R, pos, kind)
@@ -426,6 +450,8 @@ function Sp.respawn(pos, meta)
         darken()
         fromSelector = closeSelector()
         waitAppearance()
+        -- before the revive: the death system's revive re-poses a patient still in his bed
+        Sp.endBedStay()
         revive(R, pos, kind)
         local placed, fellBack = Sp.place(pos)
         WCDebug.log('spawn', '%s respawn at %.1f %.1f %.1f%s', kind, placed.x, placed.y, placed.z,

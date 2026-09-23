@@ -1,7 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import {Glyph,Choice} from './Chrome';
 import FeaturePad from './FeaturePad';
-import {choiceOptions,formatDisplay,formatMoney,isNavigable,rowValue,segments,textBlocked} from './treeState';
+import {choiceOptions,formatDisplay,formatMoney,isNavigable,reviewItems,rowValue,segments,textBlocked} from './treeState';
 
 // The generic renderer of one node of the Lua tree (§8.2), built from the original components:
 // MenuRow, Choice, Slider, FeaturePad and the wst-plate panels. Every text comes from the node or
@@ -12,9 +12,11 @@ export function Slider({node,disabled,onChange}) {
   const display=node.display||{scale:1,decimals:step<1?2:0};
   const value=Number(node.value)||0;
   const [draft,setDraft]=useState(value);
-  useEffect(()=>setDraft(value),[value]);
-  const commit=()=>{if(Number(draft)!==value)onChange(Number(draft))};
   const off=disabled||node.disabled;
+  // resync when the value changes AND when a request settles (disabled drops): a refused set
+  // (ok=false, same value back) must not keep showing the refused draft (as FeaturePad does)
+  useEffect(()=>{if(!off)setDraft(value);},[value,off]);
+  const commit=()=>{if(Number(draft)!==value)onChange(Number(draft))};
   return <label className="slider-field"><span>{node.label}<output>{formatDisplay(draft,display)}</output></span>
     <span className="range-track" style={{'--range-fill':`${(Number(draft)-min)/((max-min)||1)*100}%`}}>
       <input aria-label={node.label} type="range" min={min} max={max} step={step} value={draft} disabled={off} onChange={e=>setDraft(e.target.value)} onPointerUp={commit} onKeyUp={commit} onBlur={commit}/>
@@ -102,7 +104,7 @@ export function GroupBody({nodes,strings,disabled,handlers}) {
 // The view of the current node: a group's children, the identity form or a review plate.
 export function NodeView({node,nodes,strings,disabled,handlers,identity,identityForm,onIdentity}) {
   if(node?.kind==='identity')return <IdentityForm identity={identity} form={identityForm} onChange={onIdentity} disabled={disabled}/>;
-  if(node?.kind==='review')return <Plate title={node.label} hint={node.hint} items={node.items}/>;
+  if(node?.kind==='review')return <Plate title={node.label} hint={node.hint} items={reviewItems(node,identity,identityForm)}/>;
   return <GroupBody nodes={nodes} strings={strings} disabled={disabled} handlers={handlers}/>;
 }
 

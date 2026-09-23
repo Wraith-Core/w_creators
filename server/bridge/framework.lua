@@ -367,24 +367,95 @@ function Bridge.GetLicense(source)
     return GetPlayerIdentifierByType(source, 'license') or GetPlayerIdentifier(source, 0)
 end
 
+-- A character logged out (switch, re-selection, a creation mid-switch) is saved on the server
+-- first, and the write is confirmed before the next Login reads the players row: the cores'
+-- Logout never saves (w_core asks the client for it and waits 200 ms), so an unsaved logout rolled
+-- the character back to its last periodic save (job / gang / metadata, and on stock rsg-core the
+-- money only Player.Save writes).
+Bridge.SAVE_CONFIRM_MS = 3000
+
+--- A value as it reads back from JSON (the columns are JSON text).
+local function jsonShape(v)
+    if v == nil then return nil end
+    local enc = WCUtil.encode(v)
+    if not enc then return nil end
+    local ok, dec = pcall(json.decode, enc)
+    return ok and dec or nil
+end
+
+local function sameValue(a, b)
+    if type(a) == 'number' and type(b) == 'number' then
+        return math.abs(a - b) <= 1e-6 * math.max(1, math.abs(a), math.abs(b))
+    end
+    if type(a) ~= 'table' or type(b) ~= 'table' then return a == b end
+    for k, v in pairs(a) do if not sameValue(v, b[k]) then return false end end
+    for k in pairs(b) do if a[k] == nil then return false end end
+    return true
+end
+
+--- Save the logged-in rsg / qbr character and wait until the players row holds what was saved.
+--  true | false, reason. A player with no framework character has nothing to save (true).
+local function saveLoggedIn(source, Player)
+    local data = type(Player) == 'table' and Player.PlayerData or nil
+    local citizenid = type(data) == 'table' and data.citizenid or nil
+    local save = type(Player) == 'table' and type(Player.Functions) == 'table' and Player.Functions.Save or nil
+    if not citizenid or type(save) ~= 'function' then return false, 'the core offers no save' end
+    -- w_core keeps money in the central ledger and never writes the players.money projection.
+    local fields = { 'job', 'gang', 'metadata' }
+    if GetResourceState('w_core') ~= 'started' then fields[#fields + 1] = 'money' end
+    local expected = {}
+    -- nil / JSON null reads back as {} (WCUtil.decode)
+    for _, f in ipairs(fields) do expected[f] = jsonShape(data[f]) or {} end
+    local saved, err = pcall(save)
+    if not saved then return false, tostring(err) end
+    local tableName = Bridge.Name == 'rsg' and Config.Characters.tables.rsg or Config.Characters.tables.qbr
+    local sql = ('SELECT %s FROM %s WHERE citizenid = ? LIMIT 1'):format(table.concat(fields, ', '), tableName)
+    local deadline = GetGameTimer() + Bridge.SAVE_CONFIRM_MS
+    repeat
+        local ok, rows = pcall(w.database.query.await, sql, { citizenid })
+        local row = ok and type(rows) == 'table' and rows[1] or nil
+        if type(row) == 'table' then
+            local same = true
+            for _, f in ipairs(fields) do
+                local stored = row[f]
+                if type(stored) == 'string' then stored = WCUtil.decode(stored) end
+                if not sameValue(expected[f], stored) then same = false break end
+            end
+            if same then return true end
+        end
+        Wait(100)
+    until GetGameTimer() >= deadline
+    return false, 'the save was not confirmed in time'
+end
+
 --- Logging in on the citizenid-based cores (rsg / qbr).
 --  citizenid = false with newData to create a new character (the framework generates the citizenid).
+--  A character already logged in on the source is saved (and the write confirmed) first; a save
+--  that cannot be confirmed refuses the login (false) and the character stays logged in.
 local function coreLogin(source, citizenid, newData)
+    if Bridge.Name ~= 'rsg' and Bridge.Name ~= 'qbr' then return false end
+    if Bridge.Name == 'qbr' and GetResourceState('qbr-core') ~= 'started' then return false end
+    local found, Player = pcall(getFrameworkPlayer, source)
+    Player = found and Player or nil
+    if Player then
+        local saved, why = saveLoggedIn(source, Player)
+        if not saved then
+            WCDebug.warn('bridge', 'player %s: the logged-in character was not saved (%s): login refused',
+                tostring(source), tostring(why))
+            return false
+        end
+    end
     if Bridge.Name == 'rsg' then
         -- A re-selection on a source that is still logged in: log the previous character out
         -- first so OnPlayerUnload reaches the bag, the HUD and every job resource.
         local core = rsgCore()
-        if core.Functions.GetPlayer(source) then
+        if Player then
             core.Player.Logout(source)
             Wait(250)
         end
         return core.Player.Login(source, citizenid, newData)
-    elseif Bridge.Name == 'qbr' then
-        if GetResourceState('qbr-core') == 'started' then
-            return exports.w_lib:FwNativeCoreCall('Login',source,citizenid,newData)
-        end
     end
-    return false
+    return exports.w_lib:FwNativeCoreCall('Login', source, citizenid, newData)
 end
 
 --- Deleting a character on the citizenid-based cores (rsg / qbr). Returns true when the core
@@ -558,8 +629,10 @@ function Bridge.GetCharacters(source)
             ('SELECT citizenid, charinfo, job, money FROM %s WHERE license = ?'):format(table_),
             { license })
         if not ok or type(rows) ~= 'table' then
+            -- nil, never {}: a failed listing must not read as 'the player owns nothing' (a
+            -- deletion confirms the row is gone through NOT_CHARACTER_OWNER; §9.2).
             WCDebug.warn('bridge', 'Bridge.GetCharacters query failed: %s', tostring(rows))
-            return {}
+            return nil
         end
         local list = {}
         for _, r in ipairs(rows) do
@@ -616,6 +689,19 @@ function Bridge.DisplayName(data)
     return sanitizeName(data.name, 'Character')
 end
 
+--- The VORP character ids of an account as a set ({ [id] = true }), or nil when the query failed.
+local function vorpCharacterIds(license)
+    local ok, rows = pcall(w.database.query.await,
+        ('SELECT charidentifier FROM %s WHERE identifier = ?'):format(Config.Characters.tables.vorp), { license })
+    if not ok or type(rows) ~= 'table' then return nil end
+    local ids = {}
+    for _, r in ipairs(rows) do
+        local id = tonumber(r.charidentifier)
+        if id then ids[id] = true end
+    end
+    return ids
+end
+
 --- Registering a new character officially in the framework. It returns the charid on success or nil.
 --  data = { firstname, lastname, name, isMale, dob?, age? } — dob (YYYY-MM-DD, validated by
 --  WCIdentity) is the rsg/qbr charinfo.birthdate; VORP stores the age (from data.age or the dob).
@@ -641,7 +727,19 @@ function Bridge.RegisterCharacter(source, data)
         -- VORP: addCharacter takes one data table (as in vorp_character).
         local user = vorpUser(source)
         if not user or not user.addCharacter then return nil end
-        pcall(function()
+        -- SaveNewCharacterInDb is asynchronous and answers nothing: the new row is found by its id.
+        -- The player's existing ids are read first, so only an id that was not there before counts
+        -- (the newest existing row is never taken for the new one on a slow database).
+        local license = Bridge.GetLicense(source)
+        local existing = vorpCharacterIds(license)
+        if not existing then
+            pcall(CreatorLogs.Emit, 'character_create_failed', {
+                playerSource = source, stage = 'vorp_existing_ids', framework = Bridge.Name,
+                reason = 'تعذّرت قراءة شخصيات اللاعب قبل الإنشاء',
+            })
+            return nil
+        end
+        local added, addErr = pcall(function()
             user.addCharacter({
                 firstname = first,
                 lastname = last,
@@ -653,21 +751,25 @@ function Bridge.RegisterCharacter(source, data)
                 comps = '{}',
             })
         end)
-        -- SaveNewCharacterInDb is asynchronous: we wait for the character to really appear rather than
-        -- a fixed timeout that may run ahead of the save on a slow database.
-        local license = Bridge.GetLicense(source)
-        local row
+        if not added then
+            pcall(CreatorLogs.Emit, 'character_create_failed', {
+                playerSource = source, stage = 'vorp_addcharacter_error', framework = Bridge.Name,
+                reason = tostring(addErr),
+            })
+            return nil
+        end
+        local newId
         for _ = 1, 40 do -- up to 4 seconds
             Wait(100)
-            local ok, res = pcall(w.database.query.await,
-                ('SELECT charidentifier FROM %s WHERE identifier = ? ORDER BY charidentifier DESC LIMIT 1'):format(Config.Characters.tables.vorp),
-                { license })
-            if ok and res and res[1] then row = res break end
+            for id in pairs(vorpCharacterIds(license) or {}) do
+                if not existing[id] and (newId == nil or id > newId) then newId = id end
+            end
+            if newId then break end
         end
-        if row and row[1] then
+        if newId then
             -- Activating the new character straight away (loading the money/job)
-            pcall(function() user.setUsedCharacter(row[1].charidentifier) end)
-            return 'vorp:' .. tostring(row[1].charidentifier)
+            pcall(function() user.setUsedCharacter(newId) end)
+            return 'vorp:' .. tostring(newId)
         end
         CreatorLogs.Emit('character_create_failed', {
             playerSource = source,
@@ -679,7 +781,9 @@ function Bridge.RegisterCharacter(source, data)
     else
         -- rsg / qbr: a Login with citizenid=false creates the character
         -- and generates the citizenid internally (as in rsg-multicharacter / qbr-multicharacter).
-        local cid = #Bridge.GetCharacters(source) + 1
+        local listed = Bridge.GetCharacters(source)
+        if type(listed) ~= 'table' then return nil end
+        local cid = #listed + 1
         local newData = {
             cid = cid,
             charinfo = {

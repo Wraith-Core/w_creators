@@ -30,6 +30,12 @@ local Sel = WCSpawnSelector
 Sel.LAST_ID = '__last'           -- the 'the last place you were' option (server id)
 Sel.INPUT_DELAY = 500            -- ms before the first input counts (an ENTER held from the previous screen)
 Sel.UI_REASSERT = 2000           -- ms between two re-hides of the world UI (late HUD resources)
+Sel.PROMPT_REASSERT = 250        -- ms between two checks that the prompt group is still displayed
+-- The kinds opened on a player already in the world (not a login): the player may cancel.
+Sel.CANCELABLE = { admin = true }
+Sel.CANCEL_KEY = 'BACK'          -- [ BACKSPACE ] (Config.Spawn.selector.keys.cancel overrides it)
+local CANCEL_LABEL = 'إلغاء'
+local nextPromptCheck = 0
 Sel.FADE_MARGIN = 2000           -- ms added to a fade's own duration when waiting for it
 Sel.HANDOFF_TIMEOUT = 20000      -- ms to wait for the spawn event after an accepted choice
 Sel.CONFIRM_FADE = 400
@@ -51,6 +57,10 @@ local focused = false   -- the streaming focus was moved by the selector
 local function cfg() return (Config.Spawn and Config.Spawn.selector) or {} end
 local function labels() return cfg().labels or {} end
 local function keys() return cfg().keys or {} end
+local function cancelKey()
+    local key = keys().cancel
+    return (type(key) == 'string' and key ~= '') and key or Sel.CANCEL_KEY
+end
 
 local function pedExists(ped)
     return type(ped) == 'number' and ped ~= 0 and DoesEntityExist(ped) == true
@@ -236,7 +246,9 @@ local function buildPrompts()
     pcall(group.addPrompt, K.select, locale(L.select or ''), false)
     pcall(group.addPrompt, K.prev, locale(L.prev or ''), false)
     pcall(group.addPrompt, K.next, locale(L.next or ''), false)
+    if Sel.CANCELABLE[kind] then pcall(group.addPrompt, cancelKey(), locale(L.cancel or CANCEL_LABEL), false) end
     pcall(group.display)
+    nextPromptCheck = GetGameTimer() + Sel.PROMPT_REASSERT
     inputReadyAt = GetGameTimer() + Sel.INPUT_DELAY
     return true
 end
@@ -247,12 +259,23 @@ local function completed(key)
     return ok and done == true
 end
 
+--- Another group displayed over ours (a w_lib walk-up prompt the player stands at, a death
+--  prompt re-displayed by its owner) hides it, and w_lib only reports completions of the visible
+--  group: display ours again (throttled), or the selector could never be left.
+local function reassertPrompts(now)
+    if not prompts or now < nextPromptCheck then return end
+    nextPromptCheck = now + Sel.PROMPT_REASSERT
+    local ok, visible = pcall(prompts.isVisible)
+    if ok and visible == false then pcall(prompts.display) end
+end
+
 OnLanguageChange(function()
     if not active or not prompts then return end
     local K, L = keys(), labels()
     pcall(prompts.setLabel, K.select, locale(L.select or ''))
     pcall(prompts.setLabel, K.prev, locale(L.prev or ''))
     pcall(prompts.setLabel, K.next, locale(L.next or ''))
+    if Sel.CANCELABLE[kind] then pcall(prompts.setLabel, cancelKey(), locale(L.cancel or CANCEL_LABEL)) end
     pcall(prompts.setTitle, currentTitle())
 end)
 
@@ -342,6 +365,28 @@ function Sel.move(delta)
     return ok
 end
 
+-- The death system's own hold (WCSpawn.DEATH_OWNER.isDead: dead, last stand or a hospital bed).
+local function deathOwnerHolds()
+    if IsEntityDead(PlayerPedId()) then return true end
+    local owner = type(WCSpawn) == 'table' and WCSpawn.DEATH_OWNER or nil
+    if type(owner) ~= 'table' or type(owner.resource) ~= 'string' or type(owner.isDead) ~= 'string' then
+        return false
+    end
+    if call('GetResourceState', owner.resource) ~= 'started' then return false end
+    local done, dead = pcall(function() return exports[owner.resource][owner.isDead]() end)
+    return done and dead ~= nil and dead ~= false
+end
+
+--- Cancel an in-world selector (Sel.CANCELABLE kinds): the player stays where he stood and is given
+--  back; the server is told to withdraw the one-shot grant (w_creators:server:spawnCancel).
+---@return boolean cancelled
+function Sel.cancel()
+    if not active or busy or not Sel.CANCELABLE[kind] then return false end
+    TriggerServerEvent('w_creators:server:spawnCancel')
+    Sel.close({ restore = true })
+    return true
+end
+
 local function spawnCount()
     return (type(WCSpawn) == 'table' and type(WCSpawn.count) == 'function') and WCSpawn.count() or 0
 end
@@ -406,8 +451,11 @@ local function frameLoop(gen)
             SetCamCoord(cam, x, y, z)
             PointCamAtCoord(cam, pt.coords.x, pt.coords.y, pt.coords.z)
         end
+        reassertPrompts(now)
         if not busy and now >= inputReadyAt then
-            if completed(K.prev) then
+            if Sel.CANCELABLE[kind] and completed(cancelKey()) then
+                Sel.cancel()
+            elseif completed(K.prev) then
                 Sel.move(-1)
             elseif completed(K.next) then
                 Sel.move(1)
@@ -434,6 +482,17 @@ function Sel.open(data)
     points = Sel.resolve(data)
     index = 1
     kind = type(data.kind) == 'string' and data.kind or 'login'
+
+    -- an in-world selector on a player the death system holds (dead, last stand, hospital bed):
+    -- the hold, the camera and the prompts would fight its own (its death prompt is re-displayed
+    -- every few hundred ms), so it is refused and the one-shot grant handed back
+    if Sel.CANCELABLE[kind] and deathOwnerHolds() then
+        WCDebug.warn('spawn', '%s spawn selector refused: the death system holds the player', kind)
+        TriggerServerEvent('w_creators:server:spawnCancel')
+        notify(WCResult.fail('BUSY'))
+        kind = nil
+        return false
+    end
 
     if #points == 0 then
         -- nothing to show: never leave the player on an empty screen. The legacy event with a
