@@ -1,0 +1,153 @@
+-- =====================================================================
+--  server/core/migrations.lua  —  WCMigrations (ARCHITECTURE.md §5.7)
+--  Additive, versioned, idempotent schema migrations. Applied ids are stored in
+--  w_creators_migrations; every step also checks information_schema first (ADD COLUMN IF NOT
+--  EXISTS is MariaDB-only), so a partially migrated or hand-edited database converges.
+--  Nothing is ever dropped. run() is called once on w.database.ready.
+-- =====================================================================
+
+WCMigrations = { list = {}, done = false, ok = nil, applied = {} }
+local M = WCMigrations
+
+--- Register a migration (applied in registration order).
+function M.register(id, fn)
+    assert(type(id) == 'string' and type(fn) == 'function', 'WCMigrations.register(id, fn)')
+    for _, m in ipairs(M.list) do
+        if m.id == id then error('duplicate migration id ' .. id) end
+    end
+    M.list[#M.list + 1] = { id = id, fn = fn }
+end
+
+--- Does the table exist in the current database?
+function M.tableExists(t)
+    local n = w.database.scalar.await(
+        'SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?', { t })
+    return (tonumber(n) or 0) > 0
+end
+
+--- Does the column exist in the table?
+function M.columnExists(t, c)
+    local n = w.database.scalar.await(
+        'SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+        { t, c })
+    return (tonumber(n) or 0) > 0
+end
+
+--- Add a column only when it is missing. Returns true when it was added.
+function M.addColumn(t, c, definition)
+    if M.columnExists(t, c) then return false end
+    w.database.query.await(('ALTER TABLE `%s` ADD COLUMN `%s` %s'):format(t, c, definition))
+    return true
+end
+
+--- Wait (with a timeout) until run() has finished. Returns true when every migration applied.
+function M.waitReady(timeoutMs)
+    WCUtil.waitUntil(function() return M.done end, timeoutMs or 30000, 100)
+    return M.done and M.ok == true
+end
+
+--- Apply every registered migration that is not recorded yet. Stops at the first failure (later
+--  migrations may depend on it). Returns ok, appliedIds.
+function M.run()
+    if M.running then return false, {} end
+    M.running = true
+    local applied = {}
+    local ok, err = pcall(function()
+        w.database.query.await([[
+            CREATE TABLE IF NOT EXISTS `w_creators_migrations` (
+                `id` VARCHAR(64) NOT NULL,
+                `applied_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ]])
+        local seen = {}
+        for _, row in ipairs(w.database.query.await('SELECT id FROM w_creators_migrations') or {}) do
+            seen[row.id] = true
+        end
+        for _, m in ipairs(M.list) do
+            if not seen[m.id] then
+                local stepOk, stepErr = pcall(m.fn)
+                if not stepOk then error(('migration %s failed: %s'):format(m.id, tostring(stepErr)), 0) end
+                w.database.insert.await('INSERT INTO w_creators_migrations (id) VALUES (?)', { m.id })
+                applied[#applied + 1] = m.id
+                WCDebug.log('migrations', 'applied %s', m.id)
+            end
+        end
+    end)
+    M.running = false
+    M.done, M.ok, M.applied = true, ok, applied
+    if not ok then
+        print(('^1[w_creators] database migration stopped: %s^0'):format(tostring(err)))
+        return false, applied
+    end
+    if #applied > 0 then
+        print(('^2[w_creators] database migrations applied: %s^0'):format(table.concat(applied, ', ')))
+    end
+    return true, applied
+end
+
+-- ---------------------------------------------------------------------
+--  The migrations
+-- ---------------------------------------------------------------------
+
+M.register('001_base_tables', function()
+    w.database.query.await([[
+        CREATE TABLE IF NOT EXISTS `characters_appearence` (
+            `id` INT NOT NULL AUTO_INCREMENT,
+            `charid` VARCHAR(64) NOT NULL,
+            `isMale` TINYINT(1) NOT NULL DEFAULT 1,
+            `name` VARCHAR(60) DEFAULT NULL,
+            `age` INT DEFAULT NULL,
+            `faceFeatures` LONGTEXT DEFAULT NULL,
+            `overlays` LONGTEXT DEFAULT NULL,
+            `components` LONGTEXT DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            KEY `charid` (`charid`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ]])
+    w.database.query.await([[
+        CREATE TABLE IF NOT EXISTS `w_creators_clothes` (
+            `id` INT NOT NULL AUTO_INCREMENT,
+            `charid` VARCHAR(100) NOT NULL,
+            `hash` BIGINT NOT NULL,
+            `category` VARCHAR(64) NOT NULL,
+            `palette` VARCHAR(64) NULL,
+            `tint0` INT NULL,
+            `tint1` INT NULL,
+            `tint2` INT NULL,
+            PRIMARY KEY (`id`),
+            INDEX `charid_idx` (`charid`),
+            UNIQUE KEY `char_item` (`charid`, `hash`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ]])
+end)
+
+M.register('002_appearance_v3', function()
+    M.addColumn('characters_appearence', 'appearance', 'LONGTEXT NULL')
+    M.addColumn('characters_appearence', 'appearance_version', 'INT NOT NULL DEFAULT 2')
+    M.addColumn('characters_appearence', 'updated_at', 'TIMESTAMP NULL')
+end)
+
+M.register('003_clothes_meta', function()
+    M.addColumn('w_creators_clothes', 'source', 'VARCHAR(16) NULL')
+    M.addColumn('w_creators_clothes', 'acquired_at', 'TIMESTAMP NULL')
+end)
+
+M.register('004_outfits', function()
+    w.database.query.await([[
+        CREATE TABLE IF NOT EXISTS `w_creators_outfits` (
+            `id` INT NOT NULL AUTO_INCREMENT,
+            `charid` VARCHAR(100) NOT NULL,
+            `name` VARCHAR(64) NOT NULL,
+            `data` LONGTEXT NOT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` TIMESTAMP NULL,
+            PRIMARY KEY (`id`),
+            INDEX `charid_idx` (`charid`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ]])
+end)
+
+w.database.ready(function()
+    M.run()
+end)

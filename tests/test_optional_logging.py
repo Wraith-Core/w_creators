@@ -20,11 +20,19 @@ resourceStates, resourceFiles, resourceReadCounts, timers = {}, {}, {}, {}
 buckets = { [7] = 7 }
 source = 7
 Config = {
-    Framework = 'test', Multicharacter = true, EnableDelete = true,
-    CharacterSlots = 3, SpawnSelector = true, SpawnLastOption = true,
-    SetSurvivalMetadata = false,
-    FirstSpawnCoords = { x = 1, y = 2, z = 3 }, FirstSpawnHeading = 4,
-    SpawnPoints = { { id = 'valentine', coords = { x = 10, y = 20, z = 30 }, heading = 40 } },
+    Framework = 'test',
+    Services = { spawnSelector = true, lastLocation = true, characterDeletion = true, characterCreation = true },
+    Characters = { defaultSlots = 3, setSurvivalMetadata = false, deletion = { enabled = true },
+                   tables = { vorp = 'characters', rsg = 'players', qbr = 'players' } },
+    Creator = { spawnEvent = nil },
+    Spawn = {
+        firstSpawn = { coords = { x = 1, y = 2, z = 3 }, heading = 4 },
+        selector = { enabled = true },
+        lastLocation = { enabled = true },
+        points = { { id = 'valentine', enabled = true, order = 1, coords = { x = 10, y = 20, z = 30 }, heading = 40 } },
+    },
+    -- keys still read by the pre-v3 multichar/server.lua and server/server.lua loaded below
+    Multicharacter = true, EnableDelete = true, CharacterSlots = 3,
 }
 function AddEventHandler(name, fn)
     handlers[name] = handlers[name] or {}
@@ -125,8 +133,8 @@ class CreatorHarness:
         self.g.throwEmit = throw_emit
         self.g.badLoader = bad_loader
         if not missing_adapter:
-            self.g.resourceFiles['w_creators/bridge/logging.lua'] = (
-                RESOURCE / 'bridge/logging.lua'
+            self.g.resourceFiles['w_creators/server/bridge/logging.lua'] = (
+                RESOURCE / 'server/bridge/logging.lua'
             ).read_text(encoding='utf-8-sig')
         if logger or bad_loader:
             self.g.resourceStates['w_logs_v2'] = 'started'
@@ -134,11 +142,17 @@ class CreatorHarness:
                 "error('optional bridge failed to initialize')" if bad_loader else LOGGER_SOURCE
             )
         for filename in (
-            'bridge/logging.lua', 'bridge/server.lua',
+            'shared/util.lua', 'shared/result.lua', 'shared/debug.lua', 'shared/services.lua',
+            'server/bridge/logging.lua', 'server/bridge/framework.lua',
             'server/scene.lua', 'server/server.lua', 'multichar/server.lua',
+            'server/spawn/spawn.lua',
         ):
-            if (legacy_manifest or missing_adapter) and filename == 'bridge/logging.lua':
+            if (legacy_manifest or missing_adapter) and filename == 'server/bridge/logging.lua':
                 continue
+            if filename == 'server/spawn/spawn.lua':
+                # The spawn service replaces the pre-v3 spawnAt handler of server/server.lua
+                # (that file is no longer in the manifest; it is loaded here for the selection flow).
+                self.g.handlers['w_creators:server:spawnAt'] = None
             self.lua.execute((RESOURCE / filename).read_text(encoding='utf-8-sig'), name=filename)
         self.g.fire('w_creators:server:logsReady')
         self.lua.execute("""
@@ -201,7 +215,7 @@ class OptionalLoggingTests(unittest.TestCase):
         h.fire('w_creators:server:isolate')
         h.select()
         self.assert_selector_reached(h)
-        self.assertEqual(h.g.resourceReadCounts['w_creators/bridge/logging.lua'], 1)
+        self.assertEqual(h.g.resourceReadCounts['w_creators/server/bridge/logging.lua'], 1)
         self.assertEqual(len(h.g.handlers['w_creators:server:logsReady']), 1)
 
     def test_incomplete_update_without_adapter_still_allows_character_selection(self):
@@ -209,7 +223,7 @@ class OptionalLoggingTests(unittest.TestCase):
         h.fire('w_creators:server:isolate')
         h.select()
         self.assert_selector_reached(h)
-        self.assertEqual(h.g.resourceReadCounts['w_creators/bridge/logging.lua'], 1)
+        self.assertEqual(h.g.resourceReadCounts['w_creators/server/bridge/logging.lua'], 1)
         h.fire('w_creators:server:spawnAt', 'valentine')
         self.assertIsNone(h.g.SpawnPending[7])
         self.assertEqual(h.g.buckets[7], 0)
@@ -217,7 +231,7 @@ class OptionalLoggingTests(unittest.TestCase):
 
     def test_normal_manifest_does_not_load_adapter_or_register_handlers_twice(self):
         h = CreatorHarness(logger=True)
-        self.assertIsNone(h.g.resourceReadCounts['w_creators/bridge/logging.lua'])
+        self.assertIsNone(h.g.resourceReadCounts['w_creators/server/bridge/logging.lua'])
         self.assertEqual(len(h.g.handlers['w_creators:server:logsReady']), 1)
         initial_registrations = len(h.g.registrations)
         h.fire('w_creators:server:logsReady')

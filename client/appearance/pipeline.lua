@@ -1,0 +1,1 @@
+-- client/appearance/pipeline.lua: implemented in a later phase of the v3 re-architecture.

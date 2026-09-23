@@ -1,5 +1,5 @@
 -- =====================================================================
---  bridge/server.lua
+--  server/bridge/framework.lua
 --  A compatibility layer that unifies the access to the framework (VORP / RSG-Core / QBR).
 --  The idea: we never touch the frameworks' character tables - we take the character's identity from them
 --  only, and save the appearance in a table of our own. So the players' characters are not affected.
@@ -9,11 +9,11 @@
 -- This file is in both manifests, so initialize optional logging here as well
 -- when the new server_script entry has not been discovered yet.
 if type(CreatorLogs) ~= 'table' then
-    local code = LoadResourceFile(GetCurrentResourceName(), 'bridge/logging.lua')
-    local ok, err = false, 'bridge/logging.lua is missing'
+    local code = LoadResourceFile(GetCurrentResourceName(), 'server/bridge/logging.lua')
+    local ok, err = false, 'server/bridge/logging.lua is missing'
     if code then
         local loader
-        loader, err = load(code, '@w_creators/bridge/logging.lua', 't', _ENV)
+        loader, err = load(code, '@w_creators/server/bridge/logging.lua', 't', _ENV)
         if loader then ok, err = pcall(loader) end
     end
     if not ok then
@@ -33,7 +33,7 @@ end
 -- =====================================================================
 --  The w_logs (Sentinel) integration
 --  It registers once, and the bridge re-registers automatically whenever the core restarts.
---  There is no money category here: the resource touches no money and no items and no weapons.
+--  Money is only ever charged by the clothing store, the barber and cosmetic surgery (WCEconomy).
 -- =====================================================================
 local logTypesRegistered = false
 
@@ -117,15 +117,64 @@ local function registerLogTypes()
             schema = { scope = { type = 'string', required = true }, networkId = 'any' },
         })
 
-        -- The only administrative surface here. /spawnprop is registered with no ACE check.
+        -- The development prop spawner (Config.Admin.spawnProp, off by default, ACE restricted).
         logger.RegisterLogType({
             key = 'prop_spawned', label = 'Prop Spawned (/spawnprop)',
             channel = 'admin-prop-spawn', severity = 'warn', class = 'admin.action',
-            description = 'تنفيذ أمر /spawnprop — الأمر بلا حارس ACE في المورد.',
+            description = 'تنفيذ أمر /spawnprop — أداة تطوير مقيّدة بصلاحية ACE.',
             schema = {
                 adminAction = { type = 'string', required = true },
                 model = 'any', viaConsole = 'any',
             },
+        })
+
+        logger.RegisterLogType({
+            key = 'appearance_changed', label = 'Appearance Changed',
+            channel = 'character-appearance', severity = 'info', class = 'system',
+            description = 'حُفظ تغيير على مظهر الشخصية (الأقسام المتغيّرة مذكورة).',
+            schema = { charid = { type = 'string', required = true }, sections = 'any', kind = 'any' },
+        })
+
+        logger.RegisterLogType({
+            key = 'surgery_completed', label = 'Cosmetic Surgery Completed',
+            channel = 'character-surgery', severity = 'info', class = 'economy',
+            description = 'اكتملت عملية تجميل ودُفع ثمنها.',
+            schema = { charid = { type = 'string', required = true }, price = 'any', sections = 'any', clinic = 'any' },
+        })
+
+        logger.RegisterLogType({
+            key = 'clothing_purchased', label = 'Clothing Purchased',
+            channel = 'clothing-store', severity = 'info', class = 'economy',
+            description = 'شراء قطع ملابس (وألوانها) من متجر الملابس.',
+            schema = { charid = { type = 'string', required = true }, items = 'any', price = 'any', store = 'any' },
+        })
+
+        logger.RegisterLogType({
+            key = 'outfit_saved', label = 'Outfit Saved',
+            channel = 'character-wardrobe', severity = 'info', class = 'system',
+            description = 'حُفظ طقم ملابس في الخزانة أو عُدّل.',
+            schema = { charid = { type = 'string', required = true }, outfitId = 'any', name = 'any' },
+        })
+
+        logger.RegisterLogType({
+            key = 'character_spawned', label = 'Character Spawned',
+            channel = 'character-spawn', severity = 'info', class = 'system',
+            description = 'ظهرت الشخصية في العالم (أول ظهور، دخول، تبديل، إحياء).',
+            schema = { charid = 'any', kind = 'any', point = 'any' },
+        })
+
+        logger.RegisterLogType({
+            key = 'security_violation', label = 'Security Violation',
+            channel = 'character-tamper', severity = 'error', class = 'system',
+            description = 'طلب رفضه الخادم لأنه لا يأتي من عميل سليم (حمولة، جلسة، ملكية، سعر...).',
+            schema = { kind = { type = 'string', required = true }, detail = 'any' },
+        })
+
+        logger.RegisterLogType({
+            key = 'haircut', label = 'Haircut',
+            channel = 'barber', severity = 'info', class = 'economy',
+            description = 'خدمة عند الحلاق (شعر، لحية، تفاصيل) ودُفع ثمنها.',
+            schema = { charid = { type = 'string', required = true }, price = 'any', sections = 'any', barber = 'any' },
         })
     end)
 end
@@ -228,8 +277,8 @@ function Bridge.Notify(source, message, notifyType)
 end
 
 --- Setting the hunger/thirst (a best effort; safely ignored if the framework does not support it).
-local function setSurvival(source)
-    if not Config.SetSurvivalMetadata then return end
+function Bridge.SetSurvival(source)
+    if not Config.Characters.setSurvivalMetadata then return end
     if Bridge.Name == 'vorp' then return end -- VORP runs the metabolism with its own system
     local Player = getFrameworkPlayer(source)
     if Player and Player.Functions and Player.Functions.SetMetaData then
@@ -263,7 +312,7 @@ function Bridge.GetLastPosition(source)
             local id = charid and tonumber((tostring(charid):gsub('^vorp:', '')))
             if id then
                 local ok, rows = pcall(w.database.query.await,
-                    ('SELECT coords FROM %s WHERE charidentifier = ?'):format(Config.CharactersTable.vorp),
+                    ('SELECT coords FROM %s WHERE charidentifier = ?'):format(Config.Characters.tables.vorp),
                     { id })
                 if ok and rows and rows[1] then raw = rows[1].coords end
             end
@@ -290,73 +339,6 @@ function Bridge.GetLastPosition(source)
     if x == 0.0 and y == 0.0 and z == 0.0 then return nil end
 
     return { x = x, y = y, z = z, heading = tonumber(raw.heading) or tonumber(raw.w) or 0.0 }
-end
-
---- The character's spawn coordinates: the last saved position if there is one, otherwise the starting point.
-function Bridge.GetSpawnCoords(source)
-    local last = Bridge.GetLastPosition(source)
-    if last then return last end
-    return {
-        x = Config.FirstSpawnCoords.x,
-        y = Config.FirstSpawnCoords.y,
-        z = Config.FirstSpawnCoords.z,
-        heading = Config.FirstSpawnHeading or 0.0,
-    }
-end
-
---- Looking up a spawn location by its id in the config.
-function Bridge.FindSpawnPoint(id)
-    for _, pt in ipairs(Config.SpawnPoints or {}) do
-        if pt.id == id then return pt end
-    end
-    return nil
-end
-
---- The players who are expected to pick a spawn location.
---  The key's presence is the permission: without it w_creators:server:spawnAt is refused, so an
---  injected client cannot move himself to any town whenever he likes.
-SpawnPending = {}
-
-AddEventHandler('playerDropped', function()
-    SpawnPending[source] = nil
-end)
-
---- Finishing the creation/selection: setting the state, redirecting, then spawning.
---  isNew = true for a freshly created character (it has no saved position).
-function Bridge.FinishCharacter(source, isNew)
-    setSurvival(source)
-
-    -- The location selector: the player stays in his isolated bucket until he really picks.
-    -- The camera flies over the towns and his body has not appeared yet, so there is no need for anyone to see him.
-    -- The return to the world happens in spawnAt together with the spawn itself.
-    if Config.SpawnSelector and not Config.SpawnEvent then
-        SpawnPending[source] = true
-        TriggerClientEvent('w_creators:client:selectSpawn', source, {
-            -- A new character has no saved position, and the option can be switched off
-            last = (Config.SpawnLastOption and not isNew) and Bridge.GetLastPosition(source) or nil,
-        })
-        return
-    end
-
-    SetPlayerRoutingBucket(source, 0)
-
-    if Config.SpawnEvent then
-        TriggerClientEvent(Config.SpawnEvent, source)
-        return
-    end
-
-    local pos
-    if isNew then
-        pos = {
-            x = Config.FirstSpawnCoords.x,
-            y = Config.FirstSpawnCoords.y,
-            z = Config.FirstSpawnCoords.z,
-            heading = Config.FirstSpawnHeading or 0.0,
-        }
-    else
-        pos = Bridge.GetSpawnCoords(source)
-    end
-    TriggerClientEvent('w_creators:client:spawn', source, pos)
 end
 
 -- =====================================================================
@@ -466,7 +448,7 @@ function Bridge.GetCharacters(source)
     if Bridge.Name == 'vorp' then
         local rows = w.database.query.await(
             ('SELECT charidentifier, firstname, lastname, money, gold, job, joblabel FROM %s WHERE identifier = ?')
-                :format(Config.CharactersTable.vorp),
+                :format(Config.Characters.tables.vorp),
             { license }) or {}
 
         -- The bank balances: the vorp_banking table is separate and a player may hold an account in more
@@ -498,7 +480,7 @@ function Bridge.GetCharacters(source)
         end
         return list
     else
-        local table_ = Bridge.Name == 'rsg' and Config.CharactersTable.rsg or Config.CharactersTable.qbr
+        local table_ = Bridge.Name == 'rsg' and Config.Characters.tables.rsg or Config.Characters.tables.qbr
         local ok, rows = pcall(w.database.query.await,
             ('SELECT citizenid, charinfo, job FROM %s WHERE license = ?'):format(table_),
             { license })
@@ -602,7 +584,7 @@ function Bridge.RegisterCharacter(source, data)
         for _ = 1, 40 do -- up to 4 seconds
             Wait(100)
             local ok, res = pcall(w.database.query.await,
-                ('SELECT charidentifier FROM %s WHERE identifier = ? ORDER BY charidentifier DESC LIMIT 1'):format(Config.CharactersTable.vorp),
+                ('SELECT charidentifier FROM %s WHERE identifier = ? ORDER BY charidentifier DESC LIMIT 1'):format(Config.Characters.tables.vorp),
                 { license })
             if ok and res and res[1] then row = res break end
         end
@@ -686,13 +668,17 @@ function Bridge.DeleteCharacter(source, charid)
     if Bridge.Name == 'vorp' then
         local raw = tonumber((charid:gsub('^vorp:', '')))
         if raw then
-            w.database.query.await(('DELETE FROM %s WHERE charidentifier = ?'):format(Config.CharactersTable.vorp), { raw })
+            w.database.query.await(('DELETE FROM %s WHERE charidentifier = ?'):format(Config.Characters.tables.vorp), { raw })
         end
     else
         coreDelete(source, charid)
     end
-    -- Deleting the associated appearance data
-    w.database.query.await('DELETE FROM characters_appearence WHERE charid = ?', { charid })
+    -- The appearance, the owned clothing and the outfits go in one transaction (WCAppearanceRepo).
+    if WCAppearanceRepo and WCAppearanceRepo.delete then
+        WCAppearanceRepo.delete(charid)
+    else
+        w.database.query.await('DELETE FROM characters_appearence WHERE charid = ?', { charid })
+    end
 end
 
 CreateThread(function()

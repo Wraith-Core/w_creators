@@ -286,8 +286,8 @@ session/editor/scene is active, requests the matching `<kind>:open` callback and
   allows remote), rate limit. Stores `snapshot` (saved appearance), `location`, `expires`.
 - `get(src, token)` → session | nil, code.
 - `commit(src, token, opId, fn)` → Result. Serialises per character (`CreatorAppearanceLocks`), marks
-  busy, replays the cached Result for a repeated `opId`, runs `fn(session)` in `pcall`, closes the
-  session on success.
+  busy, replays the cached Result for a repeated `opId` (per-player replay cache, 120 s, survives the
+  session close), runs `fn(session)` in `pcall`, closes the session on success.
 - `close(src, token)`, automatic expiry, `playerDropped` cleanup, `onResourceStop` cleanup.
 
 **`WCAppearanceRepo`**: `load(charid)` → `app, meta` (lazy v3 upgrade §6.2), `save(charid, app, extra?)`
@@ -395,7 +395,7 @@ Body
  └─ Neck        neckWidth neckDepth
 ```
 
-Only the 61 w_lib-named expressions exist; nothing else is exposed. The NUI shows values as −100…+100
+Only the 63 w_lib-named expressions exist; nothing else is exposed. The NUI shows values as −100…+100
 (`display.scale = 100`); storage is −1…1.
 
 ### 5.3 Clothing taxonomy (store, wardrobe, creator clothing stage)
@@ -407,7 +407,7 @@ subcategories; each subcategory owns **exactly one** catalog category (a categor
 Head         Hats(hats) · Masks(masks) · Eyewear(eyewear)
 Neck         Bandanas & neckerchiefs(neckwear) · Ties(neckties)
 Upper body   Shirts(shirts_full) · Vests(vests) · Coats(coats) · Closed coats(coats_closed)
-             Ponchos(ponchos) · Cloaks(cloaks) · Dresses(dresses, female) · Armour(armor)
+             Ponchos(ponchos) · Cloaks(cloaks) · Dresses & gowns(dresses) · Armour(armor)
 Arms & hands Gloves(gloves) · Gauntlets(gauntlets) · Bracelets(jewelry_bracelets)
              Rings — left(jewelry_rings_left) · Rings — right(jewelry_rings_right)
 Lower body   Pants(pants) · Skirts(skirts, female) · Chaps(chaps) · Leg accessories(legs_acessories)
@@ -493,7 +493,7 @@ Console command `wc_migrate_appearances` upgrades all rows in batches (console o
 
 ### 6.3 Identity
 `firstname`, `lastname`: 2..25 UTF-8 characters each, letters (Latin incl. Latin-1 letters, Arabic
-U+0621–U+064A, U+066E–U+06D3), space, apostrophe, hyphen; no leading/trailing/double spaces.
+U+0621–U+064A, U+066E–U+06D3; Arabic diacritics U+064B–U+0652/U+0670 allowed after a letter), space, apostrophe, hyphen; no leading/trailing/double spaces.
 `dob`: `YYYY-MM-DD`, a real calendar date, age between `Config.Characters.identity.minAge` and `maxAge`
 relative to `referenceYear` (nil = current real year). `sex` comes from the server-granted creation
 session (the gender the player picked), not from free text.
