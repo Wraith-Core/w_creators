@@ -19,7 +19,7 @@ local BOTH = { male = true, female = true }
 
 local LAYERS = {
     -- skin
-    { id = 'complex',  library = 'complex',  section = 'skin', label = 'البشرة',
+    { id = 'complex',  library = 'complex',  section = 'skin', label = 'البشرة الأساسية',
       ids = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 } },
     { id = 'disc',     library = 'disc',     section = 'skin', label = 'تفاوت البشرة',
       ids = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 } },
@@ -45,7 +45,7 @@ local LAYERS = {
     { id = 'shadows',      library = 'eyeshadow',  section = 'makeup', label = 'ظلال العين',    ids = { 0 } },
     { id = 'paintedmasks', library = 'masks',      section = 'makeup', label = 'طلاء الوجه',    ids = { 0 } },
     -- eyebrows
-    { id = 'eyebrows', library = 'eyebrow', section = 'eyebrows', label = 'الحاجبان', palette = HAIR_PALETTE,
+    { id = 'eyebrows', library = 'eyebrow', section = 'eyebrows', label = 'نمط الحاجبين', palette = HAIR_PALETTE,
       ids = { 12, 6, 3, 11, 2, 4, 13, 14, 15, 1, 3, 2, 6, 8, 5, 7, 7, 9, 0, 10, 5, 1, 0, 4 } },
     -- hair
     { id = 'hairov', library = 'hair', section = 'hair', label = 'شعر الرأس الخفيف', palette = HAIR_PALETTE,

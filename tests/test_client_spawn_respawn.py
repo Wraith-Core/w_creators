@@ -264,6 +264,12 @@ class AmbulanceRoutingTests(unittest.TestCase):
         lua = LuaRuntime(unpack_returned_tuples=True)
         lua.execute('''
             Calls = {}
+            -- the helper's file-level locals and the CitizenFX scheduler (the export answers at
+            -- once here, so its thread runs to completion inside CreateThread)
+            reviving, RESURRECT_WAIT_MS = 0, 45000
+            function CreateThread(fn) fn() end
+            function Wait() end
+            function GetGameTimer() return 0 end
             function GetResourceState(name) return STATE end
             function NetworkResurrectLocalPlayer(x, y, z, h, a, b) Calls[#Calls + 1] = { 'native', x, y, z, h } end
             exports = { w_creators = setmetatable({}, { __index = function(_, name)

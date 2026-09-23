@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   backAction, cameraFor, childById, confirmRequest, LEAVE_SAVE_NEXT, modalFor, openPath, choiceOptions, createMemory, filterChildren, formatDisplay, formatMoney,
   fromDisplay, headingFor, idleRequest, initialIdentity, isNavigable, isPending, missingIdentity, nextOpId,
-  popPath, pushPath, recall, remember, requestReducer, resolvePath, rowValue, segments, selectedStage, toDisplay,
+  identityDirty, priceLines, popPath, textBlocked, pushPath, recall, remember, requestReducer, resolvePath, rowValue, segments, selectedStage, toDisplay,
 } from '../src/treeState.js';
 
 const tree = {
@@ -182,4 +182,45 @@ test('confirmation modals: danger actions, leave, save and reset', () => {
   // the leave modal's Save opens the save confirmation (label + total) instead of committing
   assert.equal(LEAVE_SAVE_NEXT, 'save');
   assert.ok(modalFor(LEAVE_SAVE_NEXT, { copy: { title: 'T' }, saveBody: 'x' }));
+});
+
+// ---- review round 1 (nui) ----
+
+test('identityDirty: a typed creator identity is unsaved input; a locked or absent one is not', () => {
+  const fresh = { fields: [{ key: 'firstname', value: '' }, { key: 'lastname', value: '' }, { key: 'dob', type: 'date', value: '' }] };
+  assert.equal(identityDirty(fresh, initialIdentity(fresh)), false);
+  assert.equal(identityDirty(fresh, { firstname: 'John', lastname: '', dob: '' }), true);
+  assert.equal(identityDirty(fresh, { firstname: 'John', lastname: 'Marston', dob: '1873-01-01' }), true);
+  const locked = { locked: true, fields: [{ key: 'firstname', type: 'info', value: 'Arthur' }, { key: 'lastname', type: 'info', value: 'Morgan' }] };
+  assert.equal(identityDirty(locked, initialIdentity(locked)), false);
+  assert.equal(identityDirty(null, { firstname: 'x' }), false);
+  assert.equal(identityDirty(undefined, undefined), false);
+  // Back at the root with only a typed name asks before leaving instead of cancelling
+  const dirty = false || identityDirty(fresh, { firstname: 'John', lastname: '', dob: '' });
+  assert.equal(backAction({ confirm: null, pathLength: 0, dirty }), 'confirmLeave');
+});
+
+test('priceLines: the breakdown rows when they add up to the total', () => {
+  const store = { total: 6, lines: [{ label: 'Hat', amount: 3.5 }, { label: 'Color · Boots', amount: 2.5 }] };
+  assert.deepEqual(priceLines(store), [{ label: 'Hat', value: '$3.50' }, { label: 'Color · Boots', value: '$2.50' }]);
+  assert.deepEqual(priceLines({ total: 0.3, lines: [{ label: 'a', amount: 0.1 }, { label: 'b', amount: 0.2 }] }).length, 2);
+  // a capped barber visit (lines above the cap) shows the total alone
+  assert.deepEqual(priceLines({ total: 10, lines: [{ label: 'Hair', amount: 8 }, { label: 'Beard', amount: 6 }] }), []);
+  assert.deepEqual(priceLines({ total: 0, lines: [] }), []);
+  assert.deepEqual(priceLines(null), []);
+  assert.deepEqual(priceLines({ total: 1, lines: [{ label: 'x', amount: 'NaN' }] }), []);
+  // the save modal carries them; without lines the modal shape is unchanged
+  const S = {};
+  assert.deepEqual(modalFor('save', { strings: S, copy: { title: 'T' }, saveBody: 'B', lines: priceLines(store), total: '$6.00' }),
+    { title: 'T', body: 'B', lines: priceLines(store), total: '$6.00' });
+  assert.deepEqual(modalFor('save', { copy: { title: 'T' }, saveBody: 'B', lines: [] }), { title: 'T', body: 'B' });
+});
+
+test('textBlocked: a required text action needs a non-blank value (the new outfit name)', () => {
+  const node = { kind: 'text', control: 'outfit.new.name', required: true };
+  assert.equal(textBlocked(node, ''), true);
+  assert.equal(textBlocked(node, '   '), true);
+  assert.equal(textBlocked(node, 'Work'), false);
+  assert.equal(textBlocked({ kind: 'text', control: 'outfit.7.rename' }, ''), false); // not required
+  assert.equal(textBlocked(null, ''), false);
 });

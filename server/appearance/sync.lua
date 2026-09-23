@@ -8,6 +8,7 @@
 --    WCSync.broadcast(src, app)               cache + w_creators:client:applyRemoteAppearance to all
 --    WCSync.broadcastState(src, group, value) cache + w_creators:client:remoteClothingState to all
 --    WCSync.forget(src)                       drop the cache + w_creators:client:forgetRemote to all
+--    WCSync.withRuntimeStates(src, app, charid) the saved look + the runtime (non-persisting) states
 --    WCSync.get(src)                          a copy of the cached appearance, or nil
 --
 --  Net events / callbacks:
@@ -41,6 +42,30 @@ function Sync.broadcast(src, app)
     cache[src] = WCUtil.copy(app)
     TriggerClientEvent('w_creators:client:applyRemoteAppearance', -1, src, app)
     return true
+end
+
+--- A copy of a saved appearance with the player's runtime (non-persisting) clothing states added
+--  (WCClothingActions: e.g. a raised bandana), for a state whose item the look still wears. A
+--  re-send of the saved look that is not a change of the look (a grooming stage, a reload, the
+--  ApplyCharacterAppearance export) carries them, so the cache, the other players and a late
+--  joiner keep drawing them (the saved look alone has only the persisting states).
+function Sync.withRuntimeStates(src, app, charid)
+    if type(app) ~= 'table' or type(WCClothingActions) ~= 'table' or type(WCClothingActions.states) ~= 'function'
+        or charid == nil then
+        return app
+    end
+    local out = WCUtil.copy(app)
+    out.clothing = type(out.clothing) == 'table' and out.clothing or {}
+    out.clothing.states = type(out.clothing.states) == 'table' and out.clothing.states or {}
+    -- without an appearance: only the runtime states of this character
+    for group, value in pairs(WCClothingActions.states(src, nil, tostring(charid))) do
+        local def = WCClothingStates.byId[group]
+        if def and not def.persist and WCClothingStates.isValid(group, value)
+            and WCClothingStates.applicable(out, group) then
+            out.clothing.states[group] = value
+        end
+    end
+    return out
 end
 
 --- Update one clothing state of a player's cached appearance and send the delta to every client.
@@ -110,7 +135,8 @@ function Sync.reload(src)
     if not app then
         return WCResult.fail(type(meta) == 'table' and meta.error or 'CHARACTER_NOT_FOUND')
     end
-    Sync.broadcast(src, app)
+    -- not a change of the look: the runtime states (a raised bandana) stay drawn remotely
+    Sync.broadcast(src, Sync.withRuntimeStates(src, app, active.charid))
     return WCResult.ok({ appearance = app })
 end
 

@@ -80,7 +80,8 @@ class CreationSexLockTests(CharsBase):
 
 DEATH_OWNER_STARTED = r'''
 ambulanceDead = {}
-rawset(exports, 'w_ambulancejob', { IsDead = function(src) return ambulanceDead[src or 0] == true end })
+-- the CitizenFX export proxy shape: every member is function(self, ...) (the receiver is dropped)
+rawset(exports, 'w_ambulancejob', { IsDead = function(self, src) return ambulanceDead[src or 0] == true end })
 local baseState = GetResourceState
 GetResourceState = function(name) if name == 'w_ambulancejob' then return 'started' end return baseState(name) end
 '''

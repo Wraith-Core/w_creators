@@ -184,16 +184,22 @@ Config.Scene = {
 
 -- ---------------------------------------------------------------------
 --  Research features (docs/NATIVES.md). Default off unless stated.
+--  Only clothingAnimations changes gameplay. The other flags only unlock a research wrapper in
+--  client/natives/ (it returns nil/false while its flag is off); no production path calls those
+--  wrappers, so turning them on changes nothing in game by itself.
 -- ---------------------------------------------------------------------
 Config.Experimental = {
-    -- Create preview peds through the MetaPed asset request lifecycle instead of by model.
+    -- Unlocks the MetaPed asset request wrappers (WCNative.metaped.requestPed / createPed / ...).
+    -- Research only: no production path calls them; preview peds are always created by model.
     metapedRequestPath = false,
-    -- _SET_PLAYER_HAT_ACCESS for hat toggling (the production path removes/re-applies the hash).
+    -- Unlocks the _SET_PLAYER_HAT_ACCESS wrapper (WCNative.clothing.setHatAccess). Research only:
+    -- no production path calls it; the hat state always removes and re-applies the hat hash.
     hatAccess = false,
     -- Short animations for clothing state changes (Config.ClothingStates.animations: research-only
-    -- clip names, not verified on every build).
+    -- clip names, not verified on every build). Read by client/clothing/states.lua.
     clothingAnimations = false,
-    -- The unconfirmed variation preset native (0xFFA1594703ED27CA).
+    -- Unlocks the unconfirmed variation preset wrapper (0xFFA1594703ED27CA,
+    -- WCNative.metaped.setVariationPreset). Research only: no production path calls it.
     variationPreset = false,
 }
 

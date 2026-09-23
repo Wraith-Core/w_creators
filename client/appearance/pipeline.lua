@@ -5,15 +5,20 @@
 --
 --    validate ped + model → outfit preset 3 → commit + ready → strip clothes → BODIES_LOWER,
 --    BODIES_UPPER → heads, eyes, teeth → hair → facial hair → waist type → scale → clothing
---    (Config.Clothing.applyOrder, tints, hidden visibility states skipped) → wearable clothing
---    states (inapplicable ones reset to base) → body commit + ready → morph (reset every channel,
---    then the values) → final refresh + ready → overlays (w.pedTexture, on the committed head).
+--    (Config.Clothing.applyOrder, tints the config allows, hidden visibility states skipped) →
+--    body commit + ready → wearable clothing states (inapplicable ones reset to base) → morph
+--    (reset every channel, then the values) → final refresh + ready → overlays (w.pedTexture,
+--    on the committed head).
 --
 --  The features are batched: nothing refreshes the ped per feature (audit A11). There are three
 --  structural commits: the preset (it resets the drawable slots and must be committed before the
 --  saved face and body go on), the body (the waist outfit must be committed before the morph, as
 --  in w_lib's applySkin and the pre-v3 pipeline) and the final one. The overlays come last because
---  w.pedTexture builds the face texture on the head the ped carries at that moment.
+--  w.pedTexture builds the face texture on the head the ped carries at that moment. For the same
+--  reason the wearable states follow a commit of the items they act on: w_lib's state helpers
+--  (setWearableState, sleeveRoll/collarOpen...) read the ped's current component, palette, tints
+--  and state and write the tints back, so run on an item that is not committed yet they would read
+--  the previous item (and copy its dye onto the new one). The final refresh commits them.
 --  Component hashes go through the w_lib wrappers (w.component.*); raw natives through WCNative.
 -- =====================================================================
 
@@ -103,13 +108,22 @@ local function clothingOrder(equipped)
     return out
 end
 
---- The visible clothing of an appearance: { [category] = { hash, tint } } (hidden states removed).
+--- The tint drawn for a clothing category: the stored tint while the config allows it
+--  (WCCatalog.validTint), otherwise nil and the item renders in its original colour. The stored dye
+--  itself is never touched: it is drawn again once the config allows it (ARCHITECTURE.md §5.4).
+local function drawnTint(category, tint)
+    if tint == nil or not WCCatalog.validTint(category, tint) then return nil end
+    return tint
+end
+
+--- The visible clothing of an appearance: { [category] = { hash, tint } } (hidden states removed,
+--  tints the config forbids left out: drawnTint).
 local function visibleClothing(app)
     local out = {}
     local equipped, tints = equippedOf(app), tintsOf(app)
     for category, hash in pairs(equipped) do
         if hash and hash ~= 0 and not hiddenByState(app, category) then
-            out[category] = { hash = hash, tint = tints[category] }
+            out[category] = { hash = hash, tint = drawnTint(category, tints[category]) }
         end
     end
     return out
@@ -250,7 +264,7 @@ function A.ApplyClothingState(ped, app, groupId, value)
             end
             return true
         end
-        return A.ApplyComponent(ped, category, hash, tints[category])
+        return A.ApplyComponent(ped, category, hash, drawnTint(category, tints[category]))
     end
 
     if group.mechanism == 'wearable' then
@@ -387,17 +401,18 @@ local function render(ped, app, opts)
         if item then put(category, item.hash, item.tint) end
     end
 
-    -- 7. wearable clothing states
-    if not opts.skipStates then applyWearableStates(ped, app) end
-
-    -- 8. the body commit: the waist outfit is committed before the morphology is set (as w_lib's
-    --    applySkin and the pre-v3 pipeline do), so the outfit cannot overwrite the body morph
+    -- 7. the body commit: the waist outfit is committed before the morphology is set (as w_lib's
+    --    applySkin and the pre-v3 pipeline do), so the outfit cannot overwrite the body morph; the
+    --    clothing is committed before the wearable states read it back
     if not pedExists(ped) then return false, 'INVALID_PED', failed end
     WCNative.ped.refresh(ped)
     if not stalled and not A.WaitReady(ped) then
         WCDebug.log('appearance', 'ped %s not ready after the body commit', tostring(ped))
     end
     if not pedExists(ped) then return false, 'INVALID_PED', failed end
+
+    -- 8. wearable clothing states, on the committed items (committed by the final refresh)
+    if not opts.skipStates then applyWearableStates(ped, app) end
 
     -- 9. morphology, then the final refresh
     A.ApplyMorph(ped, app.morph)
@@ -521,6 +536,28 @@ local function diff(ped, before, after)
         end
     end
     if next(only) then
+        -- w_lib's state helpers read the ped's current item back: a re-applied item (or requirement)
+        -- of a touched group is committed first, so they act on it and not on the previous one.
+        -- A state value change alone needs no commit (the items on the ped are already committed).
+        local pending = false
+        for _, group in ipairs(WCClothingStates.groups) do
+            -- a group without an equipped item sets no state (nothing to read back)
+            if only[group.id] and WCClothingStates.category(after, group.id) then
+                for _, c in ipairs(group.categories) do
+                    if reapplied[c] then pending = true end
+                end
+                for _, c in ipairs(group.requires) do
+                    if reapplied[c] then pending = true end
+                end
+            end
+        end
+        if pending then
+            if not pedExists(ped) then return false, failed, 'INVALID_PED' end
+            if not A.Refresh(ped) then
+                WCDebug.log('appearance', 'ped %s not ready after the clothing commit', tostring(ped))
+            end
+            if not pedExists(ped) then return false, failed, 'INVALID_PED' end
+        end
         applyWearableStates(ped, after, only)
         changed = true
     end

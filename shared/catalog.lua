@@ -257,7 +257,17 @@ function C.tintable(category)
     return #out > 0 and out or nil
 end
 
---- Is `tint` a valid { palette, tint0, tint1, tint2 } for the category?
+local function tintValuesOk(tint)
+    for _, key in ipairs({ 'tint0', 'tint1', 'tint2' }) do
+        local v = tint[key]
+        if type(v) ~= 'number' or not WCUtil.isFinite(v) or v % 1 ~= 0 or v < 0 or v > 254 then return false end
+    end
+    return true
+end
+
+--- Is `tint` a valid { palette, tint0, tint1, tint2 } for the category under the live
+--  Config.Clothing.tints (enabled, the category's palette list)? The rule for NEW edits (store plan,
+--  SetClothes, owned tints, the editor, a changed tint in mergeSections).
 function C.validTint(category, tint)
     if type(tint) ~= 'table' then return false end
     local palettes = C.tintable(category)
@@ -267,11 +277,17 @@ function C.validTint(category, tint)
         if name == tint.palette then found = true break end
     end
     if not found then return false end
-    for _, key in ipairs({ 'tint0', 'tint1', 'tint2' }) do
-        local v = tint[key]
-        if type(v) ~= 'number' or not WCUtil.isFinite(v) or v % 1 ~= 0 or v < 0 or v > 254 then return false end
-    end
-    return true
+    return tintValuesOk(tint)
+end
+
+--- Is `tint` a structurally valid stored tint: a clothing category, a palette w_lib knows
+--  (w.component.data.palettes) and integers 0..254? Independent of Config.Clothing.tints, so a
+--  stored dye survives tints being disabled or a palette list narrowed (AppearanceSchema.sanitize
+--  with rules = false; ARCHITECTURE.md §5.4). Whether it is drawn is the renderer's decision.
+function C.validStoredTint(category, tint)
+    if type(tint) ~= 'table' or type(tint.palette) ~= 'string' or not C.isClothing(category) then return false end
+    if not paletteSet()[tint.palette] then return false end
+    return tintValuesOk(tint)
 end
 
 --- The locale key of a hair/beard colour from its asset name (e.g. ..._HAIR_001_Blonde), or nil.

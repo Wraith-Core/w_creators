@@ -511,8 +511,9 @@ class InstallSqlTests(unittest.TestCase):
             self.assertIsNotNone(block, table)
             for col in cols:
                 self.assertIn('`%s`' % col, block.group(1), '%s.%s' % (table, col))
-        for mid in rt.eval('FakeDB.migrations').values():
-            self.assertIn("'%s'" % mid, sql)
+        # The ledger is never pre-filled (a pre-v3 database importing the file must still migrate):
+        # tests/test_review_shared_r1.py covers that.
+        self.assertNotIn('INSERT', sql.upper())
 
 
 if __name__ == '__main__':

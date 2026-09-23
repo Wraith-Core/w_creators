@@ -4,6 +4,10 @@
 --  w_creators_migrations). This file is the equivalent end state for a fresh database, for
 --  reference or a manual install. Nothing here touches the framework's own character tables.
 --  Existing databases: let the resource migrate (every step is additive and idempotent).
+--  This file deliberately records NO migration id: CREATE TABLE IF NOT EXISTS does nothing on an
+--  existing (pre-v3) table, so the resource must still run every step on its next start. Each step
+--  checks information_schema first, so on a database installed from here they change nothing, and
+--  on a pre-v3 database that imported this file they add the missing v3 columns.
 -- =====================================================================
 
 -- 001_base_tables + 002_appearance_v3
@@ -52,12 +56,10 @@ CREATE TABLE IF NOT EXISTS `w_creators_outfits` (
     INDEX `charid_idx` (`charid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- The applied migration ids (so the resource does not re-run them on a database installed from here)
+-- The migration ledger. Left empty on purpose (see the header): the resource records each id
+-- itself after the step has checked the real columns.
 CREATE TABLE IF NOT EXISTS `w_creators_migrations` (
     `id` VARCHAR(64) NOT NULL,
     `applied_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-INSERT IGNORE INTO `w_creators_migrations` (`id`) VALUES
-    ('001_base_tables'), ('002_appearance_v3'), ('003_clothes_meta'), ('004_outfits');

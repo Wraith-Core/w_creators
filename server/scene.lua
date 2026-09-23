@@ -11,14 +11,30 @@
 --  that bucket only when the player is still in the one w_creators set (a bucket another resource set
 --  meanwhile — jail, housing instance — is never touched).
 --
+--  A 'selection' isolation belongs to the character room (Config.Scene.anchor, within
+--  Config.Scene.cleanupRadius): the selector and the creator run there, and the spawn selector holds
+--  the ped there. The first selection isolation of a flow may be granted anywhere (the client
+--  isolates before its teleport into the room) and the player must reach the room within
+--  Scene.ROOM_GRACE_MS; any later one (after a release, or once the flow's isolation was lost) is
+--  granted only inside the room. The periodic check returns a player found outside the room (after
+--  the grace, or once seen inside) to the bucket he came from and logs a security_violation: the
+--  private bucket is never a way to roam the world unseen. The flow ends with the spawn (toWorld).
+--  A client release of a selection isolation withdraws a pending login spawn grant (the legitimate
+--  client keeps the bucket until the spawn: the grant belongs to the scene).
+--
 --    WCScene.isolate(src, startSwitch?) -> Result { bucket, reason }
 --        startSwitch (scene:prepare): a player with an active character and no fitting-room session
 --        starts a server-tracked character switch (WCCharacters.beginSwitch, §9.1 rules) — the
 --        selector's first call (§17). A refused switch answers its code (SERVICE_DISABLED / BUSY).
+--        A logged-in player the server does not track yet (a resource restart before the adoption
+--        reached him) is resolved first (WCCharacters.recover): never refused as a violation.
 --    WCScene.registerPed(src, netId) -> Result { bucket }
 --    WCScene.release(src)            -> Result { released }
 --    WCScene.isIsolated(src)         -> boolean
---    WCScene.toWorld(src, reason)    the spawn path: bucket 0 and the tracking cleared
+--    WCScene.toWorld(src, reason)    the spawn path: bucket 0 (only from the bucket w_creators set, the
+--                                    player's private bucket or 0: a bucket another resource set
+--                                    since — jail, instance — is kept) and the tracking cleared
+--    WCScene.check()                 the periodic pass (fitting sessions, selection room)
 --
 --  Callbacks: w_creators:scene:prepare | registerPed | release.
 --  Legacy net events (same guarded functions): w_creators:server:isolate,
@@ -29,9 +45,14 @@
 WCScene = {}
 local Scene = WCScene
 
-local tracked = {} -- [src] = { bucket = src, previous = <bucket before>, reason = 'selection'|'fitting' }
+local tracked = {} -- [src] = { bucket = src, previous = <bucket before>, reason = 'selection'|'fitting',
+                   --           at = ms isolated, seenInRoom = bool }
+-- [src] = true: the flow's free selection isolation is used; the next one needs the room. Cleared
+-- by the spawn into the world (toWorld) and a disconnect.
+local roomBound = {}
 
 local PED_TIMEOUT_MS = 5000
+Scene.ROOM_GRACE_MS = 30000 -- time to reach the room after the first selection isolation of a flow
 local MODELS = { male = 'mp_male', female = 'mp_female' }
 
 local function valid(src)
@@ -58,6 +79,16 @@ local function fittingSession(src)
         return nil
     end
     return session
+end
+
+--- Is the player's ped in the character room? true | false | nil (no ped known to the server).
+function Scene.inRoom(src)
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not DoesEntityExist(ped) then return nil end
+    local radius = tonumber(Config.Scene and Config.Scene.cleanupRadius) or 25.0
+    local d2 = WCUtil.dist2(GetEntityCoords(ped), Config.Scene and Config.Scene.anchor)
+    if not d2 then return nil end
+    return d2 <= radius * radius
 end
 
 --- Why this player may be isolated now ('selection' | 'fitting'), or nil.
@@ -87,18 +118,39 @@ function Scene.isolate(src, startSwitch)
     end
 
     local reason = reasonFor(src)
-    if not reason and startSwitch == true and type(WCCharacters) == 'table' and WCCharacters.active(src) then
-        -- The selector opened mid-game (/characters): the switch rules decide, not a violation.
-        local started, code = WCCharacters.beginSwitch(src)
-        if not started then return WCResult.fail(code or 'BUSY') end
-        reason = reasonFor(src)
+    if not reason and startSwitch == true and type(WCCharacters) == 'table' then
+        if not WCCharacters.active(src) and type(WCCharacters.recover) == 'function' then
+            -- Logged in but not tracked (a resource restart the adoption has not reached yet, or a
+            -- character without a saved look): resolved now, never logged as a violation.
+            local state, code = WCCharacters.recover(src)
+            if state == nil and code then return WCResult.fail(code) end
+            reason = reasonFor(src)
+        end
+        if not reason and WCCharacters.active(src) then
+            -- The selector opened mid-game (/characters): the switch rules decide, not a violation.
+            local started, code = WCCharacters.beginSwitch(src)
+            if not started then return WCResult.fail(code or 'BUSY') end
+            reason = reasonFor(src)
+        end
     end
     if not reason then
         WCSecurity.violation(src, 'scene_isolation', { bucket = current })
         return WCResult.fail('SESSION_NOT_FOUND')
     end
+    local seenInRoom = false
+    if reason == 'selection' then
+        local where = Scene.inRoom(src)
+        if roomBound[src] and where == false then
+            -- The flow's free isolation is spent: a new one only inside the room.
+            WCSecurity.violation(src, 'scene_isolation', { bucket = current, reason = 'away_from_room' })
+            return WCResult.fail('TOO_FAR')
+        end
+        roomBound[src] = true
+        seenInRoom = where == true
+    end
     -- Tracked but moved elsewhere by another resource since: that bucket is the one to come back to.
-    tracked[src] = { src = src, bucket = src, previous = current, reason = reason }
+    tracked[src] = { src = src, bucket = src, previous = current, reason = reason, at = GetGameTimer(),
+                     seenInRoom = seenInRoom }
     SetPlayerRoutingBucket(src, src)
     logBucket(src, 'player', src, reason == 'fitting' and 'عزل غرفة القياس' or 'عزل مشهد الاختيار/الإنشاء',
         { before = current })
@@ -168,16 +220,25 @@ function Scene.release(src)
     return WCResult.ok({ released = true, bucket = previous })
 end
 
---- The spawn path (§16.3): the character enters the world in bucket 0 and the tracking is dropped.
+--- The spawn path (§16.3): the character enters the world in bucket 0 and the tracking (and the
+--  flow's room binding) is dropped. Only the bucket w_creators set (or the player's own private
+--  bucket) is reset: a bucket another resource set since the isolation — jail, instance — is kept.
+--  Returns true when the player is in bucket 0 now.
 function Scene.toWorld(src, reason)
     src = tonumber(src)
     if not src then return false end
+    local entry = tracked[src]
     tracked[src] = nil
-    if GetPlayerRoutingBucket(src) ~= 0 then
+    roomBound[src] = nil
+    local current = GetPlayerRoutingBucket(src)
+    if current == 0 then return true end
+    if (entry and current == entry.bucket) or current == src then
         SetPlayerRoutingBucket(src, 0)
         logBucket(src, 'player', 0, reason or 'الظهور في العالم')
+        return true
     end
-    return true
+    WCDebug.log('scene', 'player %s spawns in bucket %s, set by another resource: kept', tostring(src), tostring(current))
+    return false
 end
 
 --- Forget the tracking of a player without touching his bucket.
@@ -191,9 +252,16 @@ end
 w.callback.register('w_creators:scene:prepare', function(src) return Scene.isolate(src, true) end)
 w.callback.register('w_creators:scene:registerPed', function(src, netId) return Scene.registerPed(src, netId) end)
 -- Client-requested releases are rate-limited here (the internal callers of Scene.release are not).
+-- Leaving the selection scene withdraws a pending login spawn grant: the legitimate client keeps the
+-- bucket until the spawn, so a grant kept after a release could only serve a later escape.
 local function releaseRequest(src)
     if not WCSecurity.rate(src, 'scene:release', 6, 10000) then return WCResult.fail('RATE_LIMITED') end
-    return Scene.release(src)
+    local entry = tracked[tonumber(src) or -1]
+    local result = Scene.release(src)
+    if result.ok and entry and entry.reason == 'selection' and WCSpawnServer and WCSpawnServer.cancelLogin then
+        WCSpawnServer.cancelLogin(tonumber(src))
+    end
+    return result
 end
 w.callback.register('w_creators:scene:release', function(src) return releaseRequest(src) end)
 
@@ -224,11 +292,40 @@ function Scene.checkFitting()
     return released
 end
 
+--- A selection isolation lasts only while the player is in the character room: once seen there,
+--  or once the grace after the isolation is over, a player found outside it is returned to the
+--  bucket he came from (a security_violation is logged). Returns the count.
+function Scene.checkSelection(nowMs)
+    nowMs = nowMs or GetGameTimer()
+    local released = 0
+    for src, entry in pairs(tracked) do
+        if entry.reason == 'selection' and GetPlayerName(src) and GetPlayerRoutingBucket(src) == entry.bucket then
+            local where = Scene.inRoom(src)
+            if where == true then
+                entry.seenInRoom = true
+            elseif where == false and (entry.seenInRoom or nowMs - (entry.at or nowMs) >= Scene.ROOM_GRACE_MS) then
+                roomBound[src] = true
+                local result = Scene.release(src)
+                if result.ok and result.data and result.data.released then
+                    released = released + 1
+                    WCSecurity.violation(src, 'scene_isolation', { bucket = entry.bucket, reason = 'away_from_room' })
+                end
+            end
+        end
+    end
+    return released
+end
+
+--- The periodic pass: fitting-room and selection isolations.
+function Scene.check()
+    return Scene.checkFitting() + Scene.checkSelection()
+end
+
 CreateThread(function()
     while true do
         Wait(Scene.FITTING_CHECK_MS)
-        local ok, err = pcall(Scene.checkFitting)
-        if not ok then WCDebug.warn('scene', 'fitting check failed: %s', tostring(err)) end
+        local ok, err = pcall(Scene.check)
+        if not ok then WCDebug.warn('scene', 'scene check failed: %s', tostring(err)) end
     end
 end)
 
@@ -242,6 +339,7 @@ end
 
 AddEventHandler('playerDropped', function()
     tracked[tonumber(source) or -1] = nil
+    roomBound[tonumber(source) or -1] = nil
 end)
 
 --- Resource stop: only the buckets w_creators set are restored.

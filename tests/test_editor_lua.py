@@ -290,11 +290,9 @@ class StoreWardrobeTests(EditorBase):
         self.assertTrue(r.ok, r.message)
         self.assertEqual(self.rt.eval('OutfitCalls[1].value'), 'Formal')
         self.assertEqual(self.rt.g.findNode(r.payload.tree, 'outfit.7').label, 'Formal')
-        # save needs a name first
+        # the name field saves in one step (its button is Save: tests/test_review_nui_r2.py)
         self.assertIsNone(self.registry()['outfit.new.save'])
         r = self.action(op='invoke', control='outfit.new.name', value='Travel')
-        self.assertTrue(r.ok)
-        r = self.action(op='invoke', control='outfit.new.save')
         self.assertTrue(r.ok, r.message)
         self.assertEqual(self.rt.eval('OutfitCalls[2].op'), 'save')
         self.assertEqual(self.rt.eval('OutfitCalls[2].value.name'), 'Travel')
@@ -532,8 +530,9 @@ class OperationTests(EditorBase):
         self.assertIsNone(dob.max)
         self.rt.run("GlobalState[WCUtil.TODAY_KEY] = { year = 1900, month = 1, day = 1 }; WCEditor.refresh()")
         dob = lua_list(self.payload().identity.fields)[2]
-        self.assertEqual(dob.min, '1810-01-01')
-        self.assertEqual(dob.max, '1882-12-31')
+        # the exact window of WCIdentity.validateDob on that date (tests/test_review_nui_r2.py)
+        self.assertEqual(dob.min, '1809-01-02')
+        self.assertEqual(dob.max, '1882-01-01')
 
     def test_locked_identity_is_read_only_and_never_submitted(self):
         self.rt.eval("openEditor('creator', 'male', { identity = { locked = true, firstname = 'John', "

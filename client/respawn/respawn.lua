@@ -309,6 +309,26 @@ end
 function R.resurrect(coords, heading, reason)
     reason = type(reason) == 'string' and reason:sub(1, 32) or 'external'
     if state == S.RESPAWN_PENDING or state == S.RESPAWNING then return false end
+    if WCState.busy('respawn') then return false end
+    local ped = PlayerPedId()
+    if pedExists(ped) and not R.isDown(ped) then
+        -- A living player (a death system that still flags him dead: w_ambulancejob's hospital-bed
+        -- heal timer, a medic / admin revive): nothing to resurrect. The native would reset his
+        -- tasks and the restore re-render his look on screen; only a requested move is honoured.
+        local x, y, z = WCUtil.xyz(coords)
+        if coords ~= nil and not x then return false end -- invalid coordinates, as for a dead player
+        if x then
+            local at = GetEntityCoords(ped)
+            if #(vector3(at.x, at.y, at.z) - vector3(x + 0.0, y + 0.0, z + 0.0)) > 1.0 then
+                SetEntityCoords(ped, x + 0.0, y + 0.0, z + 0.0, false, false, false, false)
+                heading = tonumber(heading)
+                if WCUtil.isFinite(heading) then SetEntityHeading(ped, heading + 0.0) end
+            end
+        end
+        WCDebug.log('respawn', 'resurrect (%s): the player is alive; nothing to resurrect', reason)
+        TriggerEvent('w_creators:client:resurrected', reason)
+        return true
+    end
     if not WCState.busy('respawn', true) then return false end
     setState(S.RESPAWN_PENDING, reason)
     local ok, result = pcall(run, coords, heading, reason)

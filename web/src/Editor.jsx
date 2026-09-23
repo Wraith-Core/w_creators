@@ -5,8 +5,8 @@ import {Frame, Glyph} from './Chrome';
 import SceneCamera from './SceneCamera';
 import {MenuRow, NodeView} from './TreeView';
 import {
-  backAction, cameraFor, createMemory, filterChildren, formatMoney, headingFor, idleRequest, initialIdentity,
-  isPending, LEAVE_SAVE_NEXT, missingIdentity, modalFor, confirmRequest, nextOpId, openPath, popPath, recall, remember, requestReducer, resolvePath, selectedStage,
+  backAction, cameraFor, createMemory, filterChildren, formatMoney, headingFor, identityDirty, idleRequest, initialIdentity,
+  isPending, priceLines, LEAVE_SAVE_NEXT, missingIdentity, modalFor, confirmRequest, nextOpId, openPath, popPath, recall, remember, requestReducer, resolvePath, selectedStage,
 } from './treeState';
 
 // Navigation memory per editor session id (same id = same path/search/identity after an update).
@@ -90,7 +90,9 @@ export default function Editor({payload, onPayload, onClose}) {
   const save = () => action({op: 'save', identity});
   const back = () => {
     if (lock.current) return;
-    const next = backAction({confirm, pathLength: validPath.length, dirty: !!payload.dirty});
+    // a typed creator identity is unsaved input too: leaving asks Save / Discard / Stay
+    const dirty = !!payload.dirty || identityDirty(payload.identity, identity);
+    const next = backAction({confirm, pathLength: validPath.length, dirty});
     if (next === 'dismiss') setConfirm(null);
     else if (next === 'pop') {
       returnRow.current = validPath[validPath.length - 1];
@@ -126,10 +128,14 @@ export default function Editor({payload, onPayload, onClose}) {
   const price = payload.price;
   const atRoot = validPath.length === 0;
   const confirmCopy = payload.confirm || {};
-  const saveBody = session.mode === 'creator' && payload.identity
+  const creatorName = session.mode === 'creator' && payload.identity;
+  // what is charged, line by line (store items and dyes, barber services) above the total
+  const lines = creatorName ? [] : priceLines(price);
+  const total = price ? `${S.total || ''} · ${formatMoney(price.total)}` : '';
+  const saveBody = creatorName
     ? `${identity.firstname} ${identity.lastname}`.trim()
-    : [confirmCopy.body, price ? `${S.total || ''} · ${formatMoney(price.total)}` : ''].filter(Boolean).join(' — ');
-  const modal = modalFor(confirm, {strings: S, copy: confirmCopy, saveBody});
+    : [confirmCopy.body, lines.length ? '' : total].filter(Boolean).join(' — ');
+  const modal = modalFor(confirm, {strings: S, copy: confirmCopy, saveBody, lines, total: price ? formatMoney(price.total) : ''});
   const confirmAction = () => {
     const next = confirmRequest(confirm);
     if (next?.op === 'save') save();
@@ -165,6 +171,7 @@ export default function Editor({payload, onPayload, onClose}) {
     {modal && <div className="modal-shade"><section className="wst-panel confirmation" role="dialog" aria-modal="true" aria-labelledby="confirmation-title"><Frame/>
       <h2 id="confirmation-title">{modal.title}</h2><div className="wst-rule wc-hr"/>
       <p>{modal.body}</p>
+      {modal.lines && <dl className="price-lines">{modal.lines.map((l, i) => <div key={i}><dt>{l.label}</dt><dd dir="ltr">{l.value}</dd></div>)}<div className="price-total"><dt>{S.total}</dt><dd dir="ltr">{modal.total}</dd></div></dl>}
       {confirm === 'leave'
         ? <div className="confirmation-actions">
             <button className="wst-button" disabled={busy} onClick={() => setConfirm(null)}>{S.stay}</button>

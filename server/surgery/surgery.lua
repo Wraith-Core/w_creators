@@ -194,18 +194,19 @@ local function ownedClothing(saved, merged, owned)
     if type(owned) ~= 'table' then return nil, 'ITEM_NOT_OWNED' end
     local tints = {}
     for category, hash in pairs(equipped) do
-        if WCOwnership.entry(owned, hash) then
-            tints[category] = WCOwnership.tintOf(owned, hash, category)
-        elseif saved.clothing.equipped[category] == hash then
-            tints[category] = WCOwnership.cleanTint(category, saved.clothing.tints[category])
-        else
-            return nil, 'ITEM_NOT_OWNED', category
-        end
+        -- stored dyes (owned / saved): kept as stored even with tints disabled or narrowed (§5.4)
+        local tint, notOwned = WCOwnership.wornTint(saved, owned, category, hash)
+        if tint == false then return nil, notOwned, category end
+        tints[category] = tint
     end
     local changed, code, category = WCOwnership.checkRules(saved.clothing.equipped, equipped)
     if not changed then return nil, code, category end
     merged.clothing.tints = tints
     merged.clothing.outfit = nil
+    -- The saved visibility states are settled (the store rule): a swapped item starts visible and a
+    -- state whose item is gone is dropped, so a stored 'off' never hides the item put on now.
+    merged.clothing.states = WCOwnership.settleStates(merged, saved.clothing.states,
+        WCOwnership.groupsOf(WCOwnership.changedCategories(saved.clothing.equipped, equipped)))
     return true
 end
 

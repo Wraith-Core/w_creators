@@ -246,6 +246,10 @@ local function wardrobeSession(src, token)
     if s.kind ~= 'wardrobe' then return nil, 'SESSION_NOT_FOUND' end
     if s.busy then return nil, 'BUSY' end
     if s.location then
+        -- The location as it is now (same gate as the wardrobe commit): once it closes (hours) or
+        -- is disabled, the session opened before can no longer write outfits either.
+        local loc = WCLocations.byId(s.location.id)
+        if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return nil, 'LOCATION_DISABLED' end
         if not withinRange(src, s.location) then return nil, 'TOO_FAR' end
     elseif not (Config.Wardrobe and Config.Wardrobe.allowRemote == true) then
         -- A remote session opened before remote wardrobes were turned off (same as the commit).

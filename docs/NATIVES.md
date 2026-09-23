@@ -16,6 +16,8 @@ Every wrapper:
 `tests/test_natives.py` checks the validation, the batching order, the experimental gating and the
 request lifecycle; `tests/test_syntax.py` checks that no file outside `client/natives/` invokes a raw
 native and that every `H.invoke(0x…)` has a documented hash.
+"OneSync tested here" in the doc blocks refers to `docs/TESTING.md` (what the automated tests cover
+and what still needs an in-game check).
 
 ## Confidence levels
 
@@ -23,7 +25,7 @@ native and that every `H.invoke(0x…)` has a documented hash.
 |---|---|
 | **Verified** | Used by the pre-v3 working resource, by w_lib, or by another production resource on this server (w_ambulancejob). |
 | **Likely** | Documented and widely used by the RedM community; not exercised by this resource before v3. |
-| **Experimental** | Research only. Behind a `Config.Experimental.*` flag (default off) and not on any production path. Names may be unconfirmed. |
+| **Experimental** | Research only. Behind a gate that is off by default and not on any production path: a `Config.Experimental.*` flag, or `Config.Admin.devTools` for the dev-tools-only category discovery natives. Names may be unconfirmed. |
 | **Deprecated / Avoid** | Known to be unreliable; kept documented so nobody reintroduces it. |
 
 ## Inventory
@@ -43,16 +45,16 @@ native and that every `H.invoke(0x…)` has a documented hash.
 | `0x5653AB26C82938CF` | `_SET_CHAR_EXPRESSION` | `WCNative.ped.setExpression(ped, id, value)` | Verified | appearance pipeline (morph) | Value must be a float (clamped −1..1); no refresh — batch with `refresh`. |
 | `0x704C908E9C405136` | pre-refresh | `WCNative.ped.preRefresh(ped)` | Verified | `refresh` | w_lib uses the same pair. |
 | `0xCC8CA3E88256E58F` | `_UPDATE_PED_VARIATION` | `WCNative.ped.updateVariation(ped)` | Verified | `refresh`, tailor NPCs | Params `(ped, false, true, true, true, false)`. |
-| — | batch refresh | `WCNative.ped.refresh(ped)` | Verified | appearance pipeline | `0x704C908E9C405136` then `0xCC8CA3E88256E58F`, once per apply (fixes A11). |
+| — | batch refresh | `WCNative.ped.refresh(ped)` | Verified | appearance pipeline | `0x704C908E9C405136` then `0xCC8CA3E88256E58F`, once per structural commit, never per feature (fixes A11): three per full render (the preset, the body commit and the final commit after the morph, see the `client/appearance/pipeline.lua` header). |
 | by name | `SET_PED_SCALE` | `WCNative.ped.setScale(ped, scale)` | Verified | appearance pipeline (height) | Float coercion: an integer scale collapses the skeleton. |
-| `0x9587913B9E772D29` | `_PLACE_ENTITY_ON_GROUND_PROPERLY` | `WCNative.ped.placeOnGround(entity)` | Verified | preview scene, spawn | Accepts peds (the OBJECT variant does not). |
+| `0x9587913B9E772D29` | `_PLACE_ENTITY_ON_GROUND_PROPERLY` | `WCNative.ped.placeOnGround(entity)` | Verified | preview scene (`CreatorScene.position`) | Accepts peds (the OBJECT variant does not). The spawn does not use it: it probes the ground with `GetGroundZAndNormalFor_3dCoord`. |
 | `0x971D38760FBC02EF` | `SET_PED_KEEP_TASK` | `WCNative.ped.setKeepTask(ped, toggle)` | Verified | first-spawn cutscene | Wagon driver. |
 | `0x5E3BDDBCB83F3D84` | `_GIVE_WEAPON_TO_PED_2` | `WCNative.ped.giveWeapon(ped, weapon, ammo, inHand, inHolster)` | Verified | preview scene | Holstered revolver on preview peds only; never the player ped. |
-| `0xD3A7B003ED343FD9` | `_APPLY_SHOP_ITEM_TO_PED` | `WCNative.clothing.applyShopItem(ped, hash, immediately, isMp, p4)` | Verified | raw fallback of `w.component.apply` | Refresh afterwards. |
-| `0xD710A5007C2AC539` | `_REMOVE_TAG_FROM_META_PED` | `WCNative.clothing.removeTag(ped, category, p2)` | Likely | raw fallback of `w.component.remove` | Category name or hash; refresh afterwards. |
+| `0xD3A7B003ED343FD9` | `_APPLY_SHOP_ITEM_TO_PED` | `WCNative.clothing.applyShopItem(ped, hash, immediately, isMp, p4)` | Verified | nothing (documented raw alternative of `w.component.apply`) | `Appearance.ApplyComponent` has no raw fallback: a failing `w.component.apply` is logged. Refresh afterwards. |
+| `0xD710A5007C2AC539` | `_REMOVE_TAG_FROM_META_PED` | `WCNative.clothing.removeTag(ped, category, p2)` | Likely | nothing (documented raw alternative of `w.component.remove`) | `Appearance.RemoveCategory` has no raw fallback. Category name or hash; refresh afterwards. |
 | `0xA0C683284DF027C7` | `_SET_PLAYER_HAT_ACCESS` | `WCNative.clothing.setHatAccess(player, access, p2)` | Experimental | nothing | `Config.Experimental.hatAccess`; see below. |
 | `0x69D65E89FFD72313` | `_REQUEST_LETTER_BOX_NOW` | `WCNative.camera.letterbox(enable, p1)` | Verified | first-spawn cutscene | Re-request every frame while active. |
-| by name | `NETWORK_RESURRECT_LOCAL_PLAYER` | `WCNative.respawn.resurrect(coords, heading)` | Verified | respawn service (`exports.w_creators:Resurrect`) | The ped handle changes; the caller waits for it and restores the appearance. |
+| by name | `NETWORK_RESURRECT_LOCAL_PLAYER` | `WCNative.respawn.resurrect(coords, heading)` | Verified | respawn service (`exports.w_creators:Resurrect`) | The player ped handle **may** change (not confirmed: w_ambulancejob keeps using the handle it read before the call); the caller re-reads `PlayerPedId()` afterwards and restores the appearance. |
 | `0x513F8AA5BF2F17CF` | `_NEW_LOAD_SCENE_START_SPHERE` | `WCNative.scene.loadSphere(x, y, z, radius, p4)` | Verified | creator/selection scene | Asynchronous; wait on collision/IPL state with a timeout. |
 | `0x524B54361229154F` | `TASK_START_SCENARIO_IN_PLACE_HASH` | `WCNative.scene.startScenario(ped, scenario, duration, heading)` | Verified | preview peds | Heading defaults to the ped's. |
 | `0xFA925AC00EB830B9` | `_CREATE_VAR_STRING` | `WCNative.ui.varString(text)` | Verified | creator exit | `LITERAL_STRING`. |

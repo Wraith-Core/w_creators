@@ -393,11 +393,26 @@ local function stopCode(flow)
     return flow.serverClosed and 'SESSION_NOT_FOUND' or 'BUSY'
 end
 
+--- An open whose answer is uncertain (a reply lost to the callback timeout, a server error, BUSY
+--  because an earlier open of ours left a session behind) may have left a session on the server
+--  that this client never got the token of. The client runs one flow at a time, so a session of
+--  this player that was never used is abandoned: the server closes it (token-less, unused only).
+F.ABANDON = 'w_creators:session:abandon'
+local UNCERTAIN_OPEN = { INTERNAL_ERROR = true, BUSY = true }
+
 local function openFlow(flow)
     local spec = flow.spec
     local result = call(spec.open, spec.locationId)
-    if flow.finished then return false, stopCode(flow) end
+    if flow.finished then
+        -- stopped while the open ran (resource stop, forced close): a session opened meanwhile is
+        -- closed now rather than left to its TTL
+        local late = result.ok and type(result.data) == 'table' and result.data.token or nil
+        if type(late) == 'string' then send('w_creators:session:close', late)
+        elseif UNCERTAIN_OPEN[result.code] then send(F.ABANDON) end
+        return false, stopCode(flow)
+    end
     if not result.ok then
+        if UNCERTAIN_OPEN[result.code] then send(F.ABANDON) end
         notify(result.message or WCResult.messageKey(result.code))
         flow.finished = true
         release(flow)

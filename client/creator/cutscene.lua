@@ -171,34 +171,41 @@ end
 
 local function placePlayer(x, y, z, heading)
     local ped = PlayerPedId()
+    x, y, z = x + 0.0, y + 0.0, z + 0.0 -- a table-form config may hold integers (float natives)
     SetEntityCoords(ped, x, y, z, false, false, false, false)
     if heading then SetEntityHeading(ped, heading + 0.0) end
     RequestCollisionAtCoord(x, y, z)
     WCUtil.waitUntil(function() return HasCollisionLoadedAroundEntity(ped) end, COLLISION_TIMEOUT, 0)
 end
 
+--- A newer ride or a stop (Cut.stop: respawn, resource stop) took over since this ride began.
+--- Every yield of a ride (fade, collision, model streaming, seating, departure) is followed by this
+--- check: a stale ride only removes the entities it created itself and never touches the player,
+--- the screen, the cinematic mode or st.wagon / st.driver again (those now belong to the newer owner).
+local function stale(gen) return gen ~= st.generation end
+
 --- The end of the ride: the player gets off, the driver takes the wagon away, then both go.
-local function arrive(gen, s)
+--- The handles are this ride's own: a newer ride (or a stop) may replace st.wagon / st.driver
+--- meanwhile, and these must still go.
+local function arrive(gen, s, wagon, driver)
     local ped = PlayerPedId()
     st.active = false
-    if entityExists(st.driver) then RemovePedFromGroup(st.driver, GetPedGroupIndex(ped)) end
+    if entityExists(driver) then RemovePedFromGroup(driver, GetPedGroupIndex(ped)) end
     releasePlayer()
     endPresentation()
-    if entityExists(st.wagon) then
-        TaskLeaveVehicle(ped, st.wagon, 0, 0)
-        WCUtil.waitUntil(function() return not IsPedInVehicle(ped, st.wagon, false) end, SEAT_TIMEOUT, CHECK_MS)
-        if entityExists(st.driver) then
+    if entityExists(wagon) then
+        TaskLeaveVehicle(ped, wagon, 0, 0)
+        WCUtil.waitUntil(function() return not IsPedInVehicle(ped, wagon, false) end, SEAT_TIMEOUT, CHECK_MS)
+        if stale(gen) then return deletePair(wagon, driver) end
+        if entityExists(driver) then
             local dx, dy, dz = xyz(s.departure)
-            TaskVehicleDriveToCoord(st.driver, st.wagon, dx, dy, dz, s.speed + 0.0, 1.0,
-                GetEntityModel(st.wagon), s.drivingStyle, 5.0, false)
+            TaskVehicleDriveToCoord(driver, wagon, dx, dy, dz, s.speed + 0.0, 1.0,
+                GetEntityModel(wagon), s.drivingStyle, 5.0, false)
         end
     end
     storyNotify(ARRIVAL_NOTICE, ARRIVAL_NOTICE_MS)
     TriggerMusicEvent('MC_MUSIC_STOP')
     -- presentation pacing, not synchronisation: the empty wagon drives off before it is removed.
-    -- The handles are this ride's own: a newer ride (or a stop) may have replaced st.wagon /
-    -- st.driver meanwhile, and these must still go.
-    local wagon, driver = st.wagon, st.driver
     Wait(s.departureDelay)
     deletePair(wagon, driver)
     if st.wagon == wagon then st.wagon = nil end
@@ -206,25 +213,36 @@ local function arrive(gen, s)
 end
 
 --- Something went wrong (no wagon, no driver, never arrived): the player is placed at the arrival.
-local function fallback(gen, s, reason)
+--- wagon / driver are this ride's own entities (either may be nil). A stale ride only removes them:
+--- the player now belongs to whoever stopped it (respawn) or to the newer ride.
+local function fallback(gen, s, reason, wagon, driver)
+    if stale(gen) then return deletePair(wagon, driver) end
     WCDebug.warn('creator', 'first-spawn cutscene ended early: %s', tostring(reason))
     st.active = false
     endPresentation()
+    deletePair(wagon, driver)
     deleteEntities()
     local ped = PlayerPedId()
     if IsPedInAnyVehicle(ped, false) then ClearPedTasksImmediately(ped) end
     local x, y, z = xyz(s.arrival)
     placePlayer(x, y, z)
+    if stale(gen) then return end -- stopped while the collision loaded: the stop released him
     releasePlayer()
     TriggerMusicEvent('MC_MUSIC_STOP')
-    if gen == st.generation then reveal() end
+    reveal()
 end
 
-local function spawnDriver(s)
+--- The driver of this ride's wagon. Returns nil when it cannot be created, or when the ride went
+--- stale while its model streamed (the driver just created is removed again).
+local function spawnDriver(gen, s, wagon)
     local model = GetHashKey(s.driver)
     if not IsModelValid(model) then return nil end
     local sx, sy, sz, sh = xyz(s.start)
     local driver = w.entity.create(s.driver, vector4(sx, sy, sz, sh), false)
+    if stale(gen) then
+        deletePair(nil, driver)
+        return nil
+    end
     if not entityExists(driver) then return nil end
     local ped = PlayerPedId()
     SetEntityNoCollisionEntity(ped, driver, false)
@@ -234,15 +252,18 @@ local function spawnDriver(s)
     SetEntityAsMissionEntity(driver, true, true)
     SetPedAsGroupMember(driver, GetPedGroupIndex(ped))
     SetRelationshipBetweenGroups(1, GetHashKey('PLAYER'), GetPedRelationshipGroupHash(driver))
-    SetPedIntoVehicle(driver, st.wagon, SEAT_DRIVER)
+    SetPedIntoVehicle(driver, wagon, SEAT_DRIVER)
     local ax, ay, az = xyz(s.arrival)
-    TaskVehicleDriveToCoord(driver, st.wagon, ax, ay, az, s.speed + 0.0, 1.0, GetEntityModel(st.wagon),
+    TaskVehicleDriveToCoord(driver, wagon, ax, ay, az, s.speed + 0.0, 1.0, GetEntityModel(wagon),
         s.drivingStyle, 5.0, false)
     WCNative.ped.setKeepTask(driver, true)
     return driver
 end
 
---- The ride.
+--- The ride. Every yield is followed by a stale(gen) check (see stale()); the wagon and driver are
+--- kept in locals and published to st.wagon / st.driver only while this ride is still current, so
+--- a stop during the setup (WCSpawn.respawn -> Cut.stop) is final: no entity leaks, no re-seat, no
+--- cinematic mode left on.
 local function play()
     local s = settings()
     st.generation = st.generation + 1
@@ -252,21 +273,27 @@ local function play()
     deleteEntities()
     local ped = PlayerPedId()
     if not IsScreenFadedOut() then StartFade(500, 'spawn') end
+    if stale(gen) then return end
     TriggerMusicEvent('REHR_START')
     NetworkSetEntityOnlyExistsForParticipants(ped, true)
     SetEntityInvincible(ped, true)
     local sx, sy, sz, sh = xyz(s.start)
     placePlayer(sx, sy, sz, sh)
+    if stale(gen) then return end -- the stop released the player
 
-    st.wagon = w.entity.create(s.wagon, vector4(sx, sy, sz, sh), true)
-    if not entityExists(st.wagon) then return fallback(gen, s, 'wagon') end
-    SetVehicleOnGroundProperly(st.wagon)
-    st.driver = spawnDriver(s)
-    if not st.driver then return fallback(gen, s, 'driver') end
-    SetPedIntoVehicle(ped, st.wagon, SEAT_PASSENGER)
-    if not WCUtil.waitUntil(function() return IsPedInVehicle(ped, st.wagon, false) end, SEAT_TIMEOUT, 0) then
-        return fallback(gen, s, 'seat')
-    end
+    local wagon = w.entity.create(s.wagon, vector4(sx, sy, sz, sh), true)
+    if stale(gen) then return deletePair(wagon, nil) end
+    if not entityExists(wagon) then return fallback(gen, s, 'wagon') end
+    st.wagon = wagon
+    SetVehicleOnGroundProperly(wagon)
+    local driver = spawnDriver(gen, s, wagon)
+    if stale(gen) then return deletePair(wagon, driver) end
+    if not driver then return fallback(gen, s, 'driver', wagon) end
+    st.driver = driver
+    SetPedIntoVehicle(ped, wagon, SEAT_PASSENGER)
+    local seated = WCUtil.waitUntil(function() return IsPedInVehicle(ped, wagon, false) end, SEAT_TIMEOUT, 0)
+    if stale(gen) then return deletePair(wagon, driver) end
+    if not seated then return fallback(gen, s, 'seat', wagon, driver) end
 
     SetCinematicModeActive(true)
     presentation(gen)
@@ -277,11 +304,11 @@ local function play()
     local ax, ay, az = xyz(s.arrival)
     local target = vector3(ax, ay, az)
     local deadline = GetGameTimer() + s.maxDuration
-    while st.active and gen == st.generation do
+    while st.active and not stale(gen) do
         local me = PlayerPedId()
-        if #(GetEntityCoords(me) - target) < s.arriveRadius then return arrive(gen, s) end
-        if IsEntityDead(me) or not entityExists(st.wagon) or GetGameTimer() > deadline then
-            return fallback(gen, s, 'interrupted')
+        if #(GetEntityCoords(me) - target) < s.arriveRadius then return arrive(gen, s, wagon, driver) end
+        if IsEntityDead(me) or not entityExists(wagon) or GetGameTimer() > deadline then
+            return fallback(gen, s, 'interrupted', wagon, driver)
         end
         Wait(CHECK_MS)
     end
@@ -294,6 +321,7 @@ local function plain()
     local first = Config.Spawn and Config.Spawn.firstSpawn or {}
     local x, y, z = WCUtil.xyz(first.coords)
     if x then placePlayer(x, y, z, tonumber(first.heading)) end
+    if stale(gen) then return end -- a stop (respawn) during the collision wait owns the screen now
     reveal()
     playStory(gen)
 end

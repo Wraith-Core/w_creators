@@ -82,8 +82,9 @@ export const openPath = (path, node) => [...list(path), ...list(node?.via), node
 // The confirmation modal of a pending confirm state:
 //  'save' (the commit, with its total), 'reset', 'leave' (unsaved changes at the root) or
 //  { kind: 'invoke', node, where } (a destructive action, node.danger). null = no modal.
-export function modalFor(confirm, { strings = {}, copy = {}, saveBody = '' } = {}) {
-  if (confirm === 'save') return { title: copy.title || '', body: saveBody };
+//  A save modal carries the price breakdown (`lines`, from priceLines) and its `total` when there is one.
+export function modalFor(confirm, { strings = {}, copy = {}, saveBody = '', lines = [], total = '' } = {}) {
+  if (confirm === 'save') return list(lines).length ? { title: copy.title || '', body: saveBody, lines, total } : { title: copy.title || '', body: saveBody };
   if (confirm === 'reset') return { title: strings.reset || '', body: strings.resetBody || '' };
   if (confirm === 'leave') return { title: strings.leaveTitle || '', body: strings.leave || '' };
   if (confirm?.kind === 'invoke' && confirm.node) {
@@ -105,6 +106,14 @@ export function confirmRequest(confirm) {
 // The Save button of the leave modal never commits directly: it opens the save confirmation,
 // which shows the save label and the total that will be charged.
 export const LEAVE_SAVE_NEXT = 'save';
+
+// The creator's identity form differs from the values it opened with: typed names / date of birth
+// are unsaved input even while the appearance is untouched (Lua's `dirty` is working ≠ saved only).
+export function identityDirty(identity, form) {
+  if (!identity) return false;
+  const start = initialIdentity(identity);
+  return Object.keys(start).some(key => String(form?.[key] ?? '') !== start[key]);
+}
 
 // What Back / Escape does: dismiss the open modal, go up one level, ask to save/discard (root,
 // dirty) or close (root, clean).
@@ -180,6 +189,17 @@ export function choiceOptions(node, strings = {}) {
 
 export const formatMoney = n => `$${(Number(n) || 0).toFixed(2)}`;
 
+// The rows of a price breakdown (payload.price.lines = [{label, amount}], §8.1) as {label, value}.
+// Shown only when the lines add up to the total: a capped barber visit has no line for the cap, and
+// amounts that do not add up would misstate what is charged (the total alone is shown then).
+export function priceLines(price) {
+  const lines = list(price?.lines).filter(l => l && Number.isFinite(Number(l.amount)));
+  if (!lines.length) return [];
+  const cents = n => Math.round(Number(n) * 100);
+  if (lines.reduce((sum, l) => sum + cents(l.amount), 0) !== cents(price.total)) return [];
+  return lines.map(l => ({ label: String(l.label ?? ''), value: formatMoney(l.amount) }));
+}
+
 // Split the children of a group into render segments, keeping their order:
 //  rows      navigable children and actions (MenuRow)
 //  controls  consecutive choice/slider leaves (one .component article)
@@ -216,6 +236,12 @@ export const rowValue = (node, strings = {}) =>
   node?.badgeLabel || (node?.badge ? strings[node.badge] : '') || node?.summary || null;
 
 // Identity form (creator): initial values from the payload fields; missing = a required field empty.
+// A text node (§8.2 kind 'text') whose action cannot run with this typed value: a required field
+// (node.required, e.g. the new outfit's name) that is empty once trimmed.
+export function textBlocked(node, draft) {
+  return !!node?.required && String(draft ?? '').trim() === '';
+}
+
 export function initialIdentity(identity) {
   const out = { firstname: '', lastname: '', dob: '' };
   for (const f of list(identity?.fields)) if (f.key in out && typeof f.value === 'string') out[f.key] = f.value;

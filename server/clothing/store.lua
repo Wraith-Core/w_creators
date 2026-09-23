@@ -130,10 +130,19 @@ function Store.plan(saved, submitted, owned, loc)
     if not changed then return nil, code, detail end
 
     local tints = {}
-    for category in pairs(resolved) do
+    for category, hash in pairs(resolved) do
         local raw = clothing.tints and clothing.tints[category]
         if raw ~= nil and raw ~= false then
-            local tint = WCOwnership.cleanTint(category, raw)
+            -- The saved item with its saved dye, unchanged, is stored data: checked structurally
+            -- only (it survives tints being disabled or a palette list narrowed, §5.4). Only a
+            -- changed or new tint must satisfy the live Config.Clothing.tints.
+            local savedTint = saved.clothing.tints[category]
+            local tint
+            if hash == saved.clothing.equipped[category] and WCOwnership.sameTint(raw, savedTint) then
+                tint = WCOwnership.storedTint(category, savedTint)
+            else
+                tint = WCOwnership.cleanTint(category, raw)
+            end
             if not tint then return nil, 'INVALID_TINT', category end
             tints[category] = tint
         end
@@ -165,7 +174,10 @@ function Store.plan(saved, submitted, owned, loc)
         -- never charged and its owned row is never rewritten.
         local untouched = hash == saved.clothing.equipped[category]
             and WCOwnership.sameTint(tint, saved.clothing.tints[category])
-        local isNew = not untouched and hash ~= saved.clothing.equipped[category] and WCOwnership.entry(owned, hash) == nil
+        -- Any change to an item the character does not own is a purchase, a dye of a worn but
+        -- unowned item (a uniform applied by another resource) included: it must be sold here and
+        -- is charged, never granted for the tint price alone.
+        local isNew = not untouched and WCOwnership.entry(owned, hash) == nil
         local dyed = not untouched and not WCOwnership.sameTint(tint, baselineTint(saved, owned, category, hash))
         local cost = 0
         if isNew then
@@ -230,18 +242,11 @@ local function commitStore(src, s, submitted)
     end
     if plan.empty then return fail('NO_CHANGES') end
 
-    -- The clothing the player arrived in stays owned (pre-v3 behaviour); purchases/dyes come after
-    -- so their tint wins.
-    local granted = {}
-    for _, item in ipairs(plan.grants) do granted[WCOwnership.key(item.hash)] = true end
+    -- Only what is bought (or dyed) here becomes owned. The clothing the player arrived in is not
+    -- granted: the pre-v3 outfit is owned since its lazy upgrade ('legacy', WCAppearanceRepo) and a
+    -- worn item without an ownership row was applied by another resource (SetClothes: a job
+    -- uniform), which must never become owned (the wardrobe rule, §5.6).
     local extra = {}
-    local wornItems = {}
-    for _, category in ipairs(WCUtil.sortedKeys(saved.clothing.equipped)) do
-        local hash = saved.clothing.equipped[category]
-        if not granted[WCOwnership.key(hash)] then wornItems[category] = hash end
-    end
-    local wornApp = { clothing = { equipped = wornItems, tints = saved.clothing.tints } }
-    for _, q in ipairs(WCOwnership.wornGrants(s.charid, wornApp, owned)) do extra[#extra + 1] = q end
     for _, q in ipairs(WCOwnership.grantQueries(s.charid, plan.grants, 'store')) do extra[#extra + 1] = q end
 
     local result = WCEconomy.withCharge(src, plan.total, 'clothing', function()

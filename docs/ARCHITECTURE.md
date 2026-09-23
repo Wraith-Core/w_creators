@@ -121,8 +121,7 @@ w_creators/
   locales/       ar.json  en.json  (key-sorted; tests/test_locale_coverage.py checks every key the Lua uses)
   web/           React NUI (src/) → build/index.html
   sql/           install.sql (reference; the resource migrates itself)
-  docs/          ARCHITECTURE.md APPEARANCE.md CLOTHING.md CLOTHING_STATES.md BARBER.md
-                 SURGERY.md SPAWN_RESPAWN.md NATIVES.md API.md TESTING.md
+  docs/          ARCHITECTURE.md (this contract) NATIVES.md NUI_CONTRACT.md TESTING.md
   tests/         python + lupa unit tests; web/tests for the NUI
 ```
 
@@ -183,7 +182,8 @@ compType, e.g. `'blush'`), `byId[id]`, `sectionOf(id)` → `'skin'|'makeup'|'eye
 - `groupOf(category)` → `{group=<groupId>, sub=<subId>}` from `Config.Clothing.taxonomy`.
 - `price(category, hash, pricingProfileId)` → number (server authoritative; base × profile multiplier, rounded to cents; `nil` = not for sale).
 - `available(storeProfileId, sex, category, hash)` → boolean (store catalog filtering, §5.3).
-- `tintable(category)` → palette list or nil; `validTint(category, tint)` → boolean.
+- `tintable(category)` → palette list or nil; `validTint(category, tint)` → boolean (the live config: new edits);
+  `validStoredTint(category, tint)` → boolean (structural only: a w_lib palette, integers 0..254; stored data).
 - `colorKey(hashname)` → locale key for hair/beard colour names (e.g. `_BLONDE`).
 - `styleLabel(category, model)` → translated `"<category label> <nn>"`.
 
@@ -638,6 +638,12 @@ for the saved worn item without an owned tint, its saved tint; going back to the
 editor's price preview (`WCEditorTree.price`) uses the same rule. The owned row (`w_creators_clothes`)
 stores the item's tint; the wardrobe applies the owned tint and cannot change it.
 
+The `enabled` flag and the palette lists govern **new** tints only (store plan, `SetClothes`, owned
+tints, the editor, a changed tint in `mergeSections`). Stored data (`sanitize` with `rules = false`:
+repository reads/writes, `normalize`, `toLegacy`) checks a tint structurally (`validStoredTint`), so
+disabling tints or narrowing a category's palettes never erases a saved dye; the renderer skips
+a tint that `validTint` rejects while the config forbids it.
+
 ### 5.5 Clothing states
 
 `Config.ClothingStates.groups` (ordered; each `verified = 'likely'|'experimental'`, `persist`):
@@ -698,6 +704,9 @@ persisting states that apply to its own equipped items.
 | `004_outfits` | `w_creators_outfits` |
 
 `ADD COLUMN IF NOT EXISTS` is MariaDB-only; migrations check `information_schema.COLUMNS` first.
+`sql/install.sql` (the same end state for a manual install) creates the ledger table but records no
+id: its `CREATE TABLE IF NOT EXISTS` statements do nothing on an existing pre-v3 table, so the
+resource still runs every step once (a no-op on a fresh install, the missing columns on a pre-v3 one).
 
 ---
 
@@ -967,8 +976,9 @@ Every wrapper in `client/natives/*.lua` is annotated:
 
 Confidence levels (mirrored in `docs/NATIVES.md`): **Verified** (used by the existing working
 resource or w_lib in production), **Likely** (documented and widely used by the RedM community,
-not exercised by this resource before), **Experimental** (research-only; behind
-`Config.Experimental.*`, default off), **Deprecated / Avoid**.
+not exercised by this resource before), **Experimental** (research-only; behind a gate that is off
+by default: `Config.Experimental.*`, or `Config.Admin.devTools` for the dev-only category discovery
+natives), **Deprecated / Avoid**.
 
 The MetaPed request lifecycle (`0xF97C34C33487D569`, `0x43E4DA469541A9C9`, `0xC0940AC858C1E126`,
 `0x0BCD4091C8EABA42`, `0x3972F78A78B5D9DF`) is wrapped with timeout and guaranteed release but is

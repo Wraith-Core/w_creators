@@ -392,9 +392,69 @@ local function showFailure(key)
     EndFade(300)
 end
 
+-- ---------------------------------------------------------------------
+--  A resource restart whose selection the server refuses
+--  The restarted server adopts every player whose framework character is still logged in (§9.1);
+--  scene:prepare then starts a switch away from that character. The switch is refused while the
+--  player is dead (BUSY), in a session (BUSY), after the 2-minute window with allowSwitch off
+--  (SERVICE_DISABLED), and answers SESSION_NOT_FOUND while the adoption has not run yet (a
+--  framework character that is not active yet is never "in the flow"). None of these is a failure:
+--  the character is in play, so the player is left untouched in the world (never hidden, frozen or
+--  held by the retry prompt) and the client state is refilled from the saved appearance.
+-- ---------------------------------------------------------------------
+local RESTART_IN_PLAY = { BUSY = true, SERVICE_DISABLED = true, SESSION_NOT_FOUND = true }
+local RELOAD = 'w_creators:appearance:reload' -- §16: {appearance} of the active character (1 / 10 s)
+local RESTART_RELOAD_STEP_MS = 10500   -- appearance:reload is rate limited to 1 / 10 s
+local RESTART_RELOAD_TIMEOUT_MS = 180000 -- the adoption waits up to 120 s for the database
+
+--- Fill WCState with the adopted character's saved look (no render: the ped kept its look over the
+--  restart). A selection still pending on the adoption (SESSION_NOT_FOUND) is opened again once,
+--  when the server knows the character: inside the restart window the switch is then allowed.
+local function resumeInWorld(code, gen, reopen)
+    CreateThread(function()
+        local deadline = GetGameTimer() + RESTART_RELOAD_TIMEOUT_MS
+        local adopted = type(WCState.appearance) == 'table'
+        while not adopted do
+            if gen ~= st.generation or st.inSelection then return end
+            local result = await(RELOAD)
+            local data = result.ok and type(result.data) == 'table' and result.data or nil
+            if data and type(data.appearance) == 'table' then
+                local app = AppearanceSchema.normalize(data.appearance)
+                if gen ~= st.generation or st.inSelection then return end
+                if type(app) == 'table' then
+                    WCState.set(app)
+                    if data.charid ~= nil then
+                        WCState.setCharacter(tostring(data.charid), app.sex)
+                    elseif not WCState.character then
+                        -- the reload does not name the character; the flows only need to know one is
+                        -- in play (W:CHARCREATION:starting is refused then)
+                        WCState.character = { sex = app.sex }
+                    end
+                    adopted = true
+                end
+            end
+            if not adopted then
+                if GetGameTimer() >= deadline then
+                    WCDebug.warn('characters', 'restart: the character in play could not be reloaded (%s)',
+                        tostring(result.code))
+                    return
+                end
+                Wait(RESTART_RELOAD_STEP_MS)
+            end
+        end
+        WCDebug.log('characters', 'restart: the selection was refused (%s); the character stays in play',
+            tostring(code))
+        if reopen and code == 'SESSION_NOT_FOUND' and gen == st.generation and not st.inSelection then
+            Sel.open({ restart = true, reopened = true })
+        end
+    end)
+end
+
 --- The opening (the caller holds st.busy).
---  opts.manual: /characters mid-game — a refused switch leaves the player where he is.
---  opts.error:  a locale key shown once the screen is up (back from the creator).
+--  opts.manual:  /characters mid-game — a refused switch leaves the player where he is.
+--  opts.restart: the boot after a resource restart — a refusal because the adopted character is
+--                in play leaves the player where he is as well (resumeInWorld).
+--  opts.error:   a locale key shown once the screen is up (back from the creator).
 local function openInternal(opts)
     opts = type(opts) == 'table' and opts or {}
     st.generation = st.generation + 1
@@ -402,6 +462,12 @@ local function openInternal(opts)
     if opts.manual or opts.back then StartFade(400, 'selection') else WCurtain.show('selection') end
 
     local isolated, code = CreatorScene.isolate()
+    if not isolated and opts.restart and RESTART_IN_PLAY[code] then
+        -- the character adopted after the resource restart stays in play: nothing was changed
+        EndFade(300)
+        resumeInWorld(code, st.generation, not opts.reopened)
+        return false, code
+    end
     if not isolated and opts.manual then
         -- SERVICE_DISABLED / BUSY: the server refused the switch; nothing was changed
         EndFade(300)
@@ -652,7 +718,11 @@ function Sel.finish(spawnMode)
         -- already put the player in bucket 0; the HUD comes back now and the screen is faded in
         -- if that event does not do it
         if CreatorScene.forgetIsolation then CreatorScene.forgetIsolation() end
-        SetCustomHudVisible(true)
+        -- the selection / creator loops muted the radar and the native HUD every frame; every other
+        -- exit gets them back through WCSpawn's restoreUi (w_creators:client:spawn never comes here)
+        pcall(SetWorldUiVisible, true)
+        pcall(w.setRadarVisible, true)
+        pcall(DisplayHud, true)
         CreateThread(function()
             local shown = WCUtil.waitUntil(function()
                 if gen ~= st.generation then return true end
@@ -798,7 +868,9 @@ CreateThread(function()
     StartFade(0, 'preparing')
     DismissLoadingScreen()
     WCDebug.log('characters', 'opening the character selection')
-    Sel.open({})
+    -- after a resource restart the adopted character may be in play (dead, in a session, the
+    -- switch window over): a refusal then leaves the player in the world (resumeInWorld)
+    Sel.open({ restart = bootedInSession })
 end)
 
 -- ---------------------------------------------------------------------

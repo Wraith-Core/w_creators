@@ -79,7 +79,7 @@ end
 local function fail(code, data) return WCResult.fail(code, data) end
 
 --- Register fn(session, reason) called whenever a session closes ('commit'|'close'|'expired'|
---  'dropped'|'stopped'|'character'|'replaced').
+--  'dropped'|'stopped'|'character'|'replaced'|'abandoned').
 function SS.onClose(fn)
     closeHooks[#closeHooks + 1] = fn
 end
@@ -318,6 +318,18 @@ w.callback.register('w_creators:session:close', function(src, token)
     if type(token) ~= 'string' or #token > 128 then return fail('INVALID_PAYLOAD') end
     SS.close(src, token)
     return WCResult.ok()
+end)
+
+--- w_creators:session:abandon(): the client lost the answer of its open (a reply timeout, a server
+--  error, BUSY behind an earlier open of its own), so it may hold no token for a session the server
+--  opened. Its session is closed only while unused (no token-bearing call seen) and no commit runs:
+--  a session the client knows the token of is never closed this way. { closed }.
+w.callback.register('w_creators:session:abandon', function(src)
+    if not WCSecurity.rate(src, 'session:abandon', 5, 10000) then return fail('RATE_LIMITED') end
+    local s = sessions[src]
+    if not s or s.used or s.busy then return WCResult.ok({ closed = false }) end
+    finish(src, 'abandoned')
+    return WCResult.ok({ closed = true })
 end)
 
 --- w_creators:session:result(token, opId): the recorded answer of an uncertain commit (read only).

@@ -3,19 +3,33 @@
 --  Additive, versioned, idempotent schema migrations. Applied ids are stored in
 --  w_creators_migrations; every step also checks information_schema first (ADD COLUMN IF NOT
 --  EXISTS is MariaDB-only), so a partially migrated or hand-edited database converges.
---  Nothing is ever dropped. run() is called once on w.database.ready.
+--  The ledger is a record, not the proof: a recorded step's end state (its tables / columns) is
+--  verified on every start and the step is applied again when something is missing (a table
+--  restored from a pre-v3 dump while the ledger kept its ids), so waitReady never reports a
+--  schema the code cannot write to. Nothing is ever dropped. run() is called once on
+--  w.database.ready.
 -- =====================================================================
 
 WCMigrations = { list = {}, done = false, ok = nil, applied = {} }
 local M = WCMigrations
 
---- Register a migration (applied in registration order).
-function M.register(id, fn)
-    assert(type(id) == 'string' and type(fn) == 'function', 'WCMigrations.register(id, fn)')
+--- Register a migration (applied in registration order). verify (optional) checks the step's end
+--  state (true when everything it creates exists); a recorded step that fails it runs again.
+function M.register(id, fn, verify)
+    assert(type(id) == 'string' and type(fn) == 'function', 'WCMigrations.register(id, fn, verify?)')
+    assert(verify == nil or type(verify) == 'function', 'WCMigrations.register: verify must be a function')
     for _, m in ipairs(M.list) do
         if m.id == id then error('duplicate migration id ' .. id) end
     end
-    M.list[#M.list + 1] = { id = id, fn = fn }
+    M.list[#M.list + 1] = { id = id, fn = fn, verify = verify }
+end
+
+--- Do all the columns exist in the table?
+function M.columnsExist(t, columns)
+    for _, c in ipairs(columns) do
+        if not M.columnExists(t, c) then return false end
+    end
+    return true
 end
 
 --- Does the table exist in the current database?
@@ -71,6 +85,15 @@ function M.run()
                 w.database.insert.await('INSERT INTO w_creators_migrations (id) VALUES (?)', { m.id })
                 applied[#applied + 1] = m.id
                 WCDebug.log('migrations', 'applied %s', m.id)
+            elseif m.verify and not m.verify() then
+                -- Recorded, but its tables / columns are gone (a partial restore): applied again
+                -- (every step is idempotent); the ledger row is kept.
+                WCDebug.warn('migrations', '%s is recorded but its schema is missing: applying it again', m.id)
+                local stepOk, stepErr = pcall(m.fn)
+                if not stepOk then error(('migration %s failed: %s'):format(m.id, tostring(stepErr)), 0) end
+                if not m.verify() then error(('migration %s: the schema is still incomplete'):format(m.id), 0) end
+                applied[#applied + 1] = m.id
+                WCDebug.log('migrations', 'repaired %s', m.id)
             end
         end
     end)
@@ -120,17 +143,23 @@ M.register('001_base_tables', function()
             UNIQUE KEY `char_item` (`charid`, `hash`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ]])
+end, function()
+    return M.tableExists('characters_appearence') and M.tableExists('w_creators_clothes')
 end)
 
 M.register('002_appearance_v3', function()
     M.addColumn('characters_appearence', 'appearance', 'LONGTEXT NULL')
     M.addColumn('characters_appearence', 'appearance_version', 'INT NOT NULL DEFAULT 2')
     M.addColumn('characters_appearence', 'updated_at', 'TIMESTAMP NULL')
+end, function()
+    return M.columnsExist('characters_appearence', { 'appearance', 'appearance_version', 'updated_at' })
 end)
 
 M.register('003_clothes_meta', function()
     M.addColumn('w_creators_clothes', 'source', 'VARCHAR(16) NULL')
     M.addColumn('w_creators_clothes', 'acquired_at', 'TIMESTAMP NULL')
+end, function()
+    return M.columnsExist('w_creators_clothes', { 'source', 'acquired_at' })
 end)
 
 M.register('004_outfits', function()
@@ -146,6 +175,8 @@ M.register('004_outfits', function()
             INDEX `charid_idx` (`charid`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ]])
+end, function()
+    return M.tableExists('w_creators_outfits')
 end)
 
 w.database.ready(function()

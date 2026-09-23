@@ -33,7 +33,7 @@ app.body.weight = 3
 app.clothing.equipped.hats = h('male', 'hats')
 app.clothing.equipped.coats = h('male', 'coats')
 app.clothing.equipped.vests = h('male', 'vests')
-app.clothing.tints.shirts_full = { palette = 'metaped_tint_generic', tint0 = 5, tint1 = 6, tint2 = 7 }
+app.clothing.tints.shirts_full = { palette = 'metaped_tint_generic_clean', tint0 = 5, tint1 = 6, tint2 = 7 }
 '''
 
 
@@ -71,8 +71,8 @@ class PipelineTests(unittest.TestCase):
             idx('applied("vests")'),
             idx('applied("coats")'),
             idx('applied("hats")'),
-            idx('indexOf("component.collarClose")'),
-            idx('entries("updateVariation")[2].i'),   # the body commit (waist outfit)
+            idx('entries("updateVariation")[2].i'),   # the body commit (waist outfit, clothing)
+            idx('indexOf("component.collarClose")'),  # the states act on committed items
             idx('indexOf("setExpression")'),
             idx('lastIndex("setExpression")'),
             idx('lastIndex("updateVariation")'),      # the final refresh
@@ -96,17 +96,21 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.e('count("updateVariation")'), 3)
         self.assertEqual(self.e('count("preRefresh")'), 3)
         commits = [self.e('entries("updateVariation")[%d].i' % k) for k in (1, 2, 3)]
-        # the body commit comes after every component / state / waist / scale application ...
-        for op in ('component.apply', 'component.setWearableState', 'component.collarClose',
-                   'component.sleeveUnroll', 'EquipMetaPedOutfit', 'SetPedScale'):
+        # the body commit comes after every component / waist / scale application ...
+        for op in ('component.apply', 'EquipMetaPedOutfit', 'SetPedScale'):
             last = self.e('lastIndex("%s")' % op)
             if last is not None:
                 self.assertLess(last, commits[1], op)
                 self.assertGreater(last, commits[0], op)
-        # ... and only the morph sits between the body commit and the final refresh
-        between = set(self.rt.py(self.e('''(function(a, b) local out = {}
-            for i = a + 1, b - 1 do out[#out + 1] = Log[i].op end return out end)(%d, %d)''' % (commits[1], commits[2]))).values())
-        self.assertEqual(between - {'preRefresh'}, {'setExpression'})
+        # ... and only the wearable states (w_lib reads the committed item back) and the morph sit
+        # between the body commit and the final refresh
+        between = self.rt.py(self.e('''(function(a, b) local out = {}
+            for i = a + 1, b - 1 do out[#out + 1] = Log[i].op end return out end)(%d, %d)''' % (commits[1], commits[2]))).values()
+        states = {'component.setWearableState', 'component.collarClose', 'component.sleeveUnroll'}
+        self.assertEqual(set(between) - {'preRefresh'} - states, {'setExpression'})
+        ops = [op for op in between if op != 'preRefresh']
+        self.assertEqual(ops[-1], 'setExpression')
+        self.assertTrue(set(ops[:ops.index('setExpression')]) <= states)
         # nothing refreshes through w_lib in between
         self.assertEqual(self.e('count("component.refreshPed")'), 0)
         self.assertEqual(self.e('count("component.setWaistType")'), 0)
@@ -168,7 +172,7 @@ class PipelineTests(unittest.TestCase):
     def test_tints_reach_w_component(self):
         self.restore()
         data = self.rt.py(self.e('select(2, applied("shirts_full"))'))
-        self.assertEqual(data['palette'], 'metaped_tint_generic')
+        self.assertEqual(data['palette'], 'metaped_tint_generic_clean')
         self.assertEqual((data['tint0'], data['tint1'], data['tint2']), (5, 6, 7))
         self.assertNotIn('palette', self.rt.py(self.e('select(2, applied("pants"))')))
 
@@ -203,7 +207,9 @@ class PipelineTests(unittest.TestCase):
             return out end)()'''))
         self.assertEqual(list(calls.values()), [{1: 'boots', 2: 'base'}])
         self.assertGreater(self.e('indexOf("component.setWearableState")'), self.e('(applied("boots"))'))
-        self.assertLess(self.e('indexOf("component.setWearableState")'), self.e('entries("updateVariation")[2].i'))
+        # the reset reads the committed boots back: it follows the body commit
+        self.assertGreater(self.e('indexOf("component.setWearableState")'), self.e('entries("updateVariation")[2].i'))
+        self.assertLess(self.e('indexOf("component.setWearableState")'), self.e('lastIndex("updateVariation")'))
         # nothing is reset when the boots are not equipped either
         self.restore('app.clothing.equipped.boots = nil')
         self.assertEqual(self.e('count("component.setWearableState")'), 0)
@@ -308,7 +314,7 @@ class ApplyDiffTests(unittest.TestCase):
     def test_clothing_removal_state_and_tint_changes(self):
         self.assertTrue(self.diff('''after.clothing.equipped.vests = nil
             after.clothing.states.hat = 'off'
-            after.clothing.tints.pants = { palette = 'metaped_tint_generic', tint0 = 1, tint1 = 2, tint2 = 3 }
+            after.clothing.tints.pants = { palette = 'metaped_tint_generic_clean', tint0 = 1, tint1 = 2, tint2 = 3 }
             after.clothing.states.sleeves = 'rolled' '''))
         removed = self.rt.py(self.e('''(function() local out = {}
             for _, e in ipairs(entries("component.remove")) do out[#out + 1] = e.args[2] end return out end)()'''))
@@ -316,7 +322,11 @@ class ApplyDiffTests(unittest.TestCase):
         self.assertEqual(self.e('count("component.apply")'), 1)
         self.assertEqual(self.e('Log[indexOf("component.apply")].args[2]'), 'pants')
         self.assertEqual(self.e('count("component.sleeveRoll")'), 1)
-        self.assertEqual(self.e('count("updateVariation")'), 1)
+        # the re-dyed pants are the boots' requirement: they are committed before the boots state
+        # (w_lib's setWearableState re-tints the pants it reads back), then the final refresh
+        self.assertEqual(self.e('count("updateVariation")'), 2)
+        self.assertLess(self.e('indexOf("component.apply")'), self.e('indexOf("updateVariation")'))
+        self.assertGreater(self.e('indexOf("component.setWearableState")'), self.e('indexOf("updateVariation")'))
 
     def test_facial_hair_removal_and_failures(self):
         self.assertTrue(self.diff('after.hair.facial = 0'))

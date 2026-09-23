@@ -14,8 +14,16 @@
 Appearance.Overlays = {}
 local O = Appearance.Overlays
 
---- The last set applied per ped: { [library layer] = payload }.
+--- The last set applied per ped: { [library layer] = payload }. Only live peds are kept: a remote
+--  player that leaves scope and comes back is a new ped with a new handle, and the old handle's
+--  set is pruned on the next apply (no entry per handle ever seen).
 local applied = {}
+
+local function prune()
+    for ped in pairs(applied) do
+        if not DoesEntityExist(ped) then applied[ped] = nil end
+    end
+end
 
 --- Can w.pedTexture act on this ped?
 local function usable(ped)
@@ -67,6 +75,7 @@ function O.apply(ped, app)
         return false
     end
     local set = O.build(app)
+    prune()
     applied[ped] = set
     local ok, err = pcall(function()
         w.pedTexture.overwriteBodyPart(ped, 'heads', set, true)

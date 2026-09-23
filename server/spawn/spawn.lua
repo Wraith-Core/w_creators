@@ -15,6 +15,8 @@
 --    WCSpawnServer.grant(src, kind)             the one-shot spawn grant
 --    WCSpawnServer.pending(src)                 the granted kind, or nil
 --    WCSpawnServer.cancel(src)                  withdraw a grant
+--    WCSpawnServer.cancelLogin(src)             withdraw a login-kind grant (initial / login / switch):
+--                                               the player left the character scene without spawning
 --    WCSpawnServer.finish(src, kind, isNew)     -> 'selector' | 'direct' | 'event'
 --    WCSpawnServer.resolve(pointId, src)        -> pos, pointId | nil, code
 --    WCSpawnServer.validateLast(pos)            -> { x, y, z, heading } | nil
@@ -193,6 +195,8 @@ local function logSpawn(src, kind, point, extra)
     pcall(CreatorLogs.Emit, 'character_spawned', payload)
 end
 
+-- The login-kind entry into the world: the private scene bucket (the one w_creators set) becomes
+-- bucket 0; a bucket another resource set since (jail, instance) is kept (WCScene.toWorld).
 local function toWorld(src)
     if WCScene and WCScene.toWorld then
         WCScene.toWorld(src)
@@ -241,14 +245,29 @@ function Spawn.cancel(src)
     pendingKind[src] = nil
 end
 
---- Finish the creation/selection: set the survival metadata, then either open the location
---  selector (the player stays in his isolated bucket until he picks), hand over to the framework's
---  spawn event (Config.Creator.spawnEvent), or spawn directly.
+--- Withdraw a pending login-kind grant (initial / login / switch); an in-world one is kept.
+--  The client released the character scene without spawning: the grant belongs to that scene.
+function Spawn.cancelLogin(src)
+    local kind = Spawn.pending(src)
+    if kind and not IN_WORLD[kind] then
+        Spawn.cancel(src)
+        WCDebug.log('spawn', 'the %s spawn grant of %s was withdrawn: the character scene was left', kind, tostring(src))
+        return true
+    end
+    return false
+end
+
+--- Finish the creation/selection: a freshly created character gets its starting survival
+--  metadata (Config.Characters.setSurvivalMetadata: hunger / thirst, set after the creation only —
+--  a login or a switch keeps the needs the character had, so re-selecting a character is never a
+--  free refill), then either open the location selector (the player stays in his isolated bucket
+--  until he picks), hand over to the framework's spawn event (Config.Creator.spawnEvent), or spawn
+--  directly.
 --  isNew = true for a freshly created character (it has no saved position).
 --  Returns 'selector' | 'direct' | 'event'.
 function Spawn.finish(src, kind, isNew)
     kind = Spawn.KINDS[kind] and kind or (isNew and 'initial' or 'login')
-    pcall(Bridge.SetSurvival, src)
+    if isNew == true or kind == 'initial' then pcall(Bridge.SetSurvival, src) end
 
     local spawnEvent = Config.Creator.spawnEvent
     if selectorEnabled() and not spawnEvent then
@@ -290,7 +309,8 @@ local function denied(src, pointId)
     pcall(CreatorLogs.Emit, 'character_access_denied', {
         playerSource = src,
         operation = 'spawn',
-        charid = tostring(pointId),
+        -- client text: never logged beyond the longest valid point id
+        charid = tostring(pointId):sub(1, MAX_ID_LEN),
         reason = 'حدث spawnAt خارج مسار اختيار موقع الظهور',
     })
 end
@@ -312,12 +332,14 @@ end)
 --  enabled point rather than leaving the player hanging (the event cannot answer).
 RegisterNetEvent('w_creators:server:spawnAt', function(pointId)
     local src = source
+    -- Rate-limited first (as the spawn:choose callback): a refused event is logged, and an
+    -- ungranted client must not be able to flood the logger with it.
+    if not WCSecurity.rate(src, 'spawn:choose', 5, 5000) then return end
     -- The permission is one-shot: granted in finish() and withdrawn as soon as it is used.
     if not SpawnPending[src] then
         denied(src, pointId)
         return
     end
-    if not WCSecurity.rate(src, 'spawn:choose', 5, 5000) then return end
     local pos, point = Spawn.resolve(pointId, src)
     if not pos then pos, point = fallback() end
     spawnNow(src, pos, point, pendingKind[src] or 'login')

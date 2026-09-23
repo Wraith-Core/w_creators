@@ -29,21 +29,21 @@ T.PRESET_SET = {}
 for _, name in ipairs(T.PRESETS) do T.PRESET_SET[name] = true end
 
 -- Morph fields edited together on one FeaturePad (the pre-v3 web/src/FeaturePad.jsx PAIRS list,
--- re-expressed with w_lib's expression names). A pair is used only when both fields sit in the
--- same tree node; any other field is a slider.
+-- re-expressed with w_lib's expression names and re-paired inside the v3 morphology nodes: both
+-- fields of a pair must sit in the same WCMorph node, tests/test_review_nui_r1.py). Any other field
+-- of a node with pads is a fine-tune slider (the NUI's collapsed "Additional details").
 T.PAIRS = {
     { 'eyelidWidth', 'eyelidHeight' }, { 'eyesDistance', 'eyesHeight' }, { 'eyesAngle', 'eyesDepth' },
     { 'eyebrowWidth', 'eyebrowHeight' }, { 'eyelidLeft', 'eyelidRight' },
     { 'noseWidth', 'noseHeight' }, { 'noseSize', 'noseAngle' }, { 'noseCurvature', 'nostrilsDistance' },
     { 'mouthX', 'mouthY' }, { 'mouthWidth', 'mouthDepth' },
     { 'upperLipWidth', 'upperLipHeight' }, { 'lowerLipWidth', 'lowerLipHeight' },
-    { 'upperLipDepth', 'lowerLipDepth' },
     { 'mouthConerLeftWidth', 'mouthConerLeftHeight' }, { 'mouthConerRightWidth', 'mouthConerRightHeight' },
     { 'mouthConerLeftDepth', 'mouthConerLeftLipsDistance' }, { 'mouthConerRightDepth', 'mouthConerRightLipsDistance' },
-    { 'chinWidth', 'chinHeight' }, { 'jawWidth', 'jawHeight' }, { 'chinDepth', 'jawDepth' },
+    { 'chinWidth', 'chinHeight' }, { 'jawWidth', 'jawHeight' }, { 'jawDepth', 'jawY' },
     { 'cheekbonesWidth', 'cheekbonesHeight' }, { 'earsWidth', 'earsHeight' }, { 'earsAngle', 'earlobes' },
     { 'headWidth', 'faceWidth' }, { 'shoulders', 'shoulderThickness' }, { 'neckWidth', 'neckDepth' },
-    { 'thighs', 'calves' }, { 'chest', 'waist' }, { 'arms', 'hip' },
+    { 'thighs', 'calves' }, { 'chest', 'arms' }, { 'waist', 'hip' },
 }
 
 -- Camera preset per morphology node
@@ -78,7 +78,7 @@ local K = {
     outfitRename = 'إعادة التسمية', outfitDelete = 'حذف الطقم',
     outfitDeleteBody = 'سيُحذف هذا الطقم نهائيًا ولا يمكن التراجع عن ذلك.', outfitNew = 'حفظ الطقم الحالي',
     outfitName = 'اسم الطقم', outfitSave = 'حفظ', apply = 'تطبيق', items = 'القطع الفردية',
-    outfitLimit = 'وصلت إلى الحد الأقصى من الأطقم', outfitNameMissing = 'اكتب اسم الطقم أولًا',
+    outfitLimit = 'وصلت إلى الحد الأقصى من الأطقم',
     sex = 'الجنس', male = 'ذكر', female = 'أنثى', clothingCount = 'قطع الملابس', changed = 'الأقسام المعدّلة',
     noChanges = 'لا توجد تغييرات', price = 'السعر', free = 'مجاني',
     reviewHint = 'راجع اختياراتك ثم اضغط إنهاء الشخصية.', surgeryHint = 'راجع التعديلات ثم أكّد العملية.',
@@ -533,9 +533,39 @@ local function categoryPrice(s, category)
 end
 T.categoryPrice = categoryPrice
 
-local function isPurchase(s, category, hash)
-    return hash and hash ~= 0 and hash ~= s.saved.clothing.equipped[category] and not ownedEntry(s, hash)
+-- A tint as the server compares it (WCOwnership.sameTint): anything without a palette is no tint.
+local function sameTint(a, b)
+    a = type(a) == 'table' and a.palette and a or nil
+    b = type(b) == 'table' and b.palette and b or nil
+    if a == nil or b == nil then return a == b end
+    return a.palette == b.palette and a.tint0 == b.tint0 and a.tint1 == b.tint1 and a.tint2 == b.tint2
 end
+
+--- The item worn as saved, with its saved tint: never priced (WCClothingStore.plan's `untouched`).
+local function untouched(s, category, hash, tint)
+    return hash == s.saved.clothing.equipped[category] and sameTint(tint, s.saved.clothing.tints[category])
+end
+
+--- The colour an item has without a dye: its owned tint, else (the saved item) the saved one
+--  (the server's baselineTint / WCOwnership.wornTint).
+local function baselineTint(s, category, hash)
+    local tint = ownedTint(s, category, hash)
+    if tint == nil and hash ~= nil and hash == s.saved.clothing.equipped[category] then
+        tint = s.saved.clothing.tints[category]
+        if type(tint) == 'table' then tint = WCUtil.copy(tint) end
+    end
+    return tint
+end
+
+--- The server rule (WCClothingStore.plan `isNew`): any change to an item the character does not own
+--  is a purchase of the item, a dye of the worn but unowned item included (a job uniform applied by
+--  SetClothes has no ownership row). `tint` defaults to the working tint of the category.
+local function isPurchase(s, category, hash, tint)
+    if not hash or hash == 0 or ownedEntry(s, hash) then return false end
+    if tint == nil then tint = s.working.clothing.tints[category] end
+    return not untouched(s, category, hash, tint)
+end
+T.isPurchase = isPurchase
 
 local function itemBadge(s, category, hash)
     if s.mode == 'creator' then return nil end
@@ -547,10 +577,12 @@ end
 --- Equip a hash through the rules; the owned tint (if any) follows the item.
 --  An item the rules drop (a requirement missing, e.g. a buckle without a belt) is a conflict, not
 --  a silent no-op.
---- Store mode: the clothing states the server will save with this equipment
---  (WCOwnership.settleStates on the commit). A saved state is kept only while its items are still
---  the saved ones and it still applies; a swapped or removed item is shown in its default state.
-local function storeStates(s, app)
+--- Store and surgery modes: the clothing states the server will save with this equipment
+--  (WCOwnership.settleStates on the commit: WCClothingStore.plan, the clinic's ownedClothing). A
+--  saved state is kept only while its items are still the saved ones and it still applies; a swapped
+--  or removed item is shown in its default state. Neither mode edits states, so the saved states are
+--  the ones settled.
+local function settleStates(s, app)
     local out = {}
     local savedStates = s.saved.clothing.states or {}
     local savedEq, eq = s.saved.clothing.equipped, app.clothing.equipped
@@ -566,7 +598,10 @@ local function storeStates(s, app)
     end
     return out
 end
-T.storeStates = storeStates
+T.settleStates = settleStates
+T.storeStates = settleStates
+-- The modes whose server commit settles the clothing states of a swapped item.
+local SETTLES_STATES = { store = true, surgery = true }
 
 local function equipItem(s, app, category, hash)
     local _, removed, err = AppearanceSchema.equip(app, category, hash)
@@ -576,10 +611,24 @@ local function equipItem(s, app, category, hash)
         for _, c in ipairs(type(removed) == 'table' and removed or {}) do
             if c == category then return 'CONFLICTING_ITEMS' end
         end
-        app.clothing.tints[category] = ownedTint(s, category, hash)
+        -- the item's own colour as the server derives it (WCOwnership.wornTint): the owned tint,
+        -- else (the unowned saved item put back on) the saved one, so that item is untouched again
+        -- and never a purchase
+        local tint = ownedTint(s, category, hash)
+        if tint == nil and not ownedEntry(s, hash) and hash == s.saved.clothing.equipped[category] then
+            tint = s.saved.clothing.tints[category] and WCUtil.copy(s.saved.clothing.tints[category]) or nil
+        end
+        app.clothing.tints[category] = tint
     end
     app.clothing.outfit = nil
-    if s.mode == 'store' then app.clothing.states = storeStates(s, app) end
+    if SETTLES_STATES[s.mode] then
+        if s.mode == 'surgery' and WCUtil.deepEqual(app.clothing.equipped, s.saved.clothing.equipped) then
+            -- the clinic keeps the saved clothing (states included) as is when nothing was swapped
+            app.clothing.states = WCUtil.copy(s.saved.clothing.states or {})
+        else
+            app.clothing.states = settleStates(s, app)
+        end
+    end
     return nil
 end
 
@@ -671,7 +720,11 @@ local function clothingSub(reg, s, sub)
                 if not v then return 'INVALID_COMPONENT' end
                 return equipItem(s, app, category, v.hash)
             end)
-        if s.mode == 'store' then add(children, tintNodes(reg, s, category)) end
+        -- a dye of an item the character does not own is a purchase of the item (the server rule):
+        -- offered only where the store sells it (a worn uniform it does not sell is not dyed here)
+        if s.mode == 'store' and (ownedEntry(s, hash) or WCCatalog.available(s.context.storeProfile, sex, category, hash)) then
+            add(children, tintNodes(reg, s, category))
+        end
         if removable then
             children[#children + 1] = action(reg, id .. '.remove', L(K.remove), {
                 apply = function(app) return equipItem(s, app, category, 0) end,
@@ -681,7 +734,9 @@ local function clothingSub(reg, s, sub)
 
     local node = group('item.' .. category, L(sub.label), children, { camera = sub.camera, art = sub.art })
     if hash and s.mode ~= 'creator' then
-        local owned = ownedEntry(s, hash) ~= nil or hash == s.saved.clothing.equipped[category]
+        -- owned is the ownership row only: the saved item is worn ('equipped'), and a worn item
+        -- without a row (a uniform) is bought by any change, so its price shows (WCClothingStore.plan)
+        local owned = ownedEntry(s, hash) ~= nil
         local price = (s.mode == 'store' and not owned) and categoryPrice(s, category) or nil
         node.badge = hash == s.saved.clothing.equipped[category] and 'equipped' or (owned and 'owned' or nil)
         node.badgeLabel = badgeLabel(node.badge)
@@ -696,6 +751,10 @@ local function clothingSub(reg, s, sub)
         end
     elseif hash then
         node.summary = WCCatalog.styleLabel(category, info and info.model or 0)
+    elseif s.mode == 'store' then
+        -- nothing worn: the category's price (per category, §16 store:open) before any try-on
+        local price = categoryPrice(s, category)
+        if price then node.summary = money(price) end
     end
     return node
 end
@@ -753,35 +812,75 @@ end
 --  Clothing states (wardrobe "Clothing actions" and WCPanel trees)
 -- ---------------------------------------------------------------------
 
---- The clothing-action nodes for an appearance: taxonomy group -> state group -> value actions.
---  reg (optional) receives registry entries built by makeEntry(groupId, value).
-function T.clothingActions(app, reg, makeEntry)
-    local taxonomyLabels = {}
-    for _, g in ipairs(Config.Clothing.taxonomy or {}) do taxonomyLabels[g.id] = g.label end
-    local valueLabels = Config.ClothingStates and Config.ClothingStates.valueLabels or {}
-    local parents, order = {}, {}
-    for _, a in ipairs(WCClothingStates.actions(app)) do
-        local parentId = type(a.parent) == 'table' and a.parent[1] or 'other'
-        if not parents[parentId] then
-            parents[parentId] = group('states.' .. parentId, L(taxonomyLabels[parentId] or K.states), {})
-            order[#order + 1] = parentId
-        end
-        local children = {}
-        for _, value in ipairs(a.targets) do
-            local control = 'state.' .. a.group .. '.' .. value
-            local node = { id = control, kind = 'action', label = L(valueLabels[value] or value), control = control }
-            if reg then
-                local entry = makeEntry and makeEntry(a.group, value) or {}
-                entry.kind = 'action'
-                reg[control] = entry
-            end
-            children[#children + 1] = node
-        end
-        local current = a.current and (valueLabels[a.current] and L(valueLabels[a.current]) or a.current) or nil
-        add(parents[parentId].children, group('state.' .. a.group, L(a.label), children, { summary = current }))
+-- The applicable actions, Group › Item › action (labels: locale keys). The quick panel's
+-- WCClothing.available (client/clothing/states.lua) is the source of the grouping and of the action
+-- labels: the item is the worn piece (a cloak, a closed coat, the shirt holding sleeves and collar)
+-- and every action has its own verb ('Roll up sleeves', 'Take off cloak'). Without that module the
+-- same hierarchy is built from WCClothingStates with the generic value labels.
+local function availableActions(app)
+    if type(WCClothing) == 'table' and type(WCClothing.available) == 'function' then
+        local ok, list = pcall(WCClothing.available, app)
+        if ok and type(list) == 'table' then return list end
     end
+    local groupLabels, subLabels = {}, {}
+    for _, g in ipairs(Config.Clothing.taxonomy or {}) do
+        groupLabels[g.id] = g.label
+        for _, sub in ipairs(g.subs or {}) do
+            subLabels[sub.id] = sub.label
+            if sub.category then subLabels[sub.category] = subLabels[sub.category] or sub.label end
+        end
+    end
+    local valueLabels = Config.ClothingStates and Config.ClothingStates.valueLabels or {}
+    local out, groupAt, itemAt = {}, {}, {}
+    for _, a in ipairs(WCClothingStates.actions(app)) do
+        local parent = type(a.parent) == 'table' and a.parent or {}
+        local groupId = type(parent[1]) == 'string' and parent[1] or 'other'
+        local itemId = type(parent[2]) == 'string' and parent[2] or a.group
+        if not groupAt[groupId] then
+            groupAt[groupId] = { id = groupId, label = groupLabels[groupId] or K.states, items = {} }
+            out[#out + 1] = groupAt[groupId]
+        end
+        local key = groupId .. '/' .. itemId
+        local item = itemAt[key]
+        if not item then
+            local category = WCClothingStates.category(app, a.group)
+            item = { id = itemId, label = subLabels[category] or subLabels[itemId] or a.label, actions = {} }
+            itemAt[key] = item
+            groupAt[groupId].items[#groupAt[groupId].items + 1] = item
+        end
+        for _, value in ipairs(a.targets or {}) do
+            item.actions[#item.actions + 1] = { group = a.group, value = value, label = valueLabels[value] or value,
+                                                control = 'state.' .. a.group .. '.' .. value }
+        end
+    end
+    return out
+end
+
+--- The clothing-action nodes for an appearance: taxonomy group -> worn item -> actions (only the
+--  values that differ from the current state, so no summary is needed: each row is the change).
+--  reg (optional) receives registry entries built by makeEntry(groupId, value); keep(groupId)
+--  (optional) filters the state groups offered.
+function T.clothingActions(app, reg, makeEntry, keep)
     local out = {}
-    for _, id in ipairs(order) do add(out, parents[id]) end
+    for _, g in ipairs(availableActions(app)) do
+        local items = {}
+        for _, item in ipairs(g.items or {}) do
+            local children = {}
+            for _, a in ipairs(item.actions or {}) do
+                if not keep or keep(a.group) then
+                    local control = 'state.' .. a.group .. '.' .. a.value
+                    if reg then
+                        local entry = makeEntry and makeEntry(a.group, a.value) or {}
+                        entry.kind = 'action'
+                        reg[control] = entry
+                    end
+                    children[#children + 1] = { id = control, kind = 'action', label = L(a.label), control = control }
+                end
+            end
+            add(items, group('states.' .. g.id .. '.' .. item.id, L(item.label), children))
+        end
+        add(out, group('states.' .. g.id, L(g.label), items))
+    end
     return out
 end
 
@@ -857,24 +956,22 @@ local function outfitsNode(reg, s)
     end
     local max = WCUtil.int(ctx.maxOutfits or (Config.Wardrobe and Config.Wardrobe.maxSavedOutfits), 0, nil, 0)
     local full = #outfitsOf(s) >= max
+    -- One field and its Save button: what is typed is saved in the same step (the NUI keeps the
+    -- typing locally, so a separate Save row could never see it). A refused save keeps the name.
     local draft = s.draft.outfitName or ''
     local newChildren = {}
     newChildren[1] = text(reg, 'outfit.new.name', L(K.outfitName), draft, maxName, {
         call = function(session, value)
-            session.draft.outfitName = value
-            return WCResult.ok()
-        end,
-    }, { disabled = full or nil, placeholder = L(K.outfitName) })
-    local reason = full and L(K.outfitLimit) or (draft == '' and L(K.outfitNameMissing) or nil)
-    newChildren[2] = action(reg, 'outfit.new.save', L(K.outfitSave), {
-        call = function(session)
             local fn = session.opts.onOutfit
             if type(fn) ~= 'function' then return WCResult.fail('OUTFITS_DISABLED') end
-            local result = fn('save', nil, currentClothes(session, session.draft.outfitName))
+            if type(value) ~= 'string' or value == '' then return WCResult.fail('INVALID_OUTFIT_NAME') end
+            session.draft.outfitName = value
+            local result = fn('save', nil, currentClothes(session, value))
             if WCResult.is(result) and result.ok then session.draft.outfitName = '' end
             return result
         end,
-    }, { disabled = (full or draft == '') or nil, reason = reason })
+    }, { disabled = full or nil, placeholder = L(K.outfitName), actionLabel = L(K.outfitSave), required = true,
+         clear = true, reason = full and L(K.outfitLimit) or nil })
     children[#children + 1] = group('outfit.new', L(K.outfitNew), newChildren)
     return group('outfits', L(K.outfits), children, { camera = 'fullBody' })
 end
@@ -942,11 +1039,6 @@ end
 -- ---------------------------------------------------------------------
 --  Display price (mirror of the server rules — display only, the server is authoritative)
 -- ---------------------------------------------------------------------
-local function sameTint(a, b)
-    if a == nil or b == nil then return a == b end
-    return a.palette == b.palette and a.tint0 == b.tint0 and a.tint1 == b.tint1 and a.tint2 == b.tint2
-end
-
 function T.price(s)
     local lines, total = {}, 0
     local function line(label, amount)
@@ -957,24 +1049,21 @@ function T.price(s)
         end
     end
     if s.mode == 'store' then
-        local equipped, saved = s.working.clothing.equipped, s.saved.clothing
-        for _, category in ipairs(WCUtil.sortedKeys(equipped)) do
-            local hash = equipped[category]
-            if isPurchase(s, category, hash) then line(L(WCCatalog.label(category)), categoryPrice(s, category)) end
-        end
+        -- WCClothingStore.plan per worn category: an unowned item changed in any way (a dye of the
+        -- worn uniform included) is bought, and a tint differing from the item's own colour is a dye
+        local equipped, tints = s.working.clothing.equipped, s.working.clothing.tints
         local tintPrice = tonumber(s.context.tintPrice) or (Config.Clothing.tints and Config.Clothing.tints.price) or 0
-        for _, category in ipairs(WCUtil.sortedKeys(s.working.clothing.tints)) do
-            local tint = s.working.clothing.tints[category]
-            local hash = equipped[category]
-            -- the server prices only what changed: the saved item with its saved tint is free even
-            -- when its owned tint differs (WCClothingStore.plan)
-            local untouched = hash == saved.equipped[category] and sameTint(tint, saved.tints[category])
-            local baseline = ownedTint(s, category, hash)
-            if hash == saved.equipped[category] and baseline == nil then baseline = saved.tints[category] end
-            if not untouched and not sameTint(tint, baseline) then
-                line(L(K.color) .. ' · ' .. L(WCCatalog.label(category)), tintPrice)
+        local dyes = {}
+        for _, category in ipairs(WCUtil.sortedKeys(equipped)) do
+            local hash, tint = equipped[category], tints[category]
+            if isPurchase(s, category, hash, tint) then line(L(WCCatalog.label(category)), categoryPrice(s, category)) end
+            -- the saved item with its saved tint is free even when its owned tint differs
+            if type(tint) == 'table' and tint.palette and not untouched(s, category, hash, tint)
+                and not sameTint(tint, baselineTint(s, category, hash)) then
+                dyes[#dyes + 1] = category
             end
         end
+        for _, category in ipairs(dyes) do line(L(K.color) .. ' · ' .. L(WCCatalog.label(category)), tintPrice) end
     elseif s.mode == 'barber' then
         local changed = AppearanceSchema.changedSections(s.saved, s.working)
         local services = type(s.context.services) == 'table' and s.context.services or
@@ -1120,6 +1209,11 @@ local function storeTree(reg, s)
     return T.taxonomy(reg, s)
 end
 
+local function persists(groupId)
+    local def = WCClothingStates.byId[groupId]
+    return def ~= nil and def.persist == true
+end
+
 local function wardrobeTree(reg, s)
     local children = {}
     add(children, outfitsNode(reg, s))
@@ -1127,12 +1221,15 @@ local function wardrobeTree(reg, s)
         add(children, group('items', L(K.items), T.taxonomy(reg, s), { camera = 'fullBody', searchable = true }))
     end
     if sectionAllowed(s, 'states') then
+        -- only the states a wardrobe commit saves (§5.5): a non-persisting state (the bandana) is
+        -- runtime-only, changed through the clothing actions panel, and the server drops it from a
+        -- wardrobe commit, so offering it here would preview a change that can never be saved
         local actions = T.clothingActions(s.working, reg, function(groupId, value)
             return {
                 apply = function(app) app.clothing.states[groupId] = value end,
                 hook = s.opts.onState and function() return s.opts.onState(groupId, value) end or nil,
             }
-        end)
+        end, persists)
         add(children, group('actions', L(K.states), actions, { camera = 'fullBody' }))
     end
     return children

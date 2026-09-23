@@ -57,7 +57,7 @@ function Wardrobe.open(src, locationId)
         local hash = s.snapshot.clothing.equipped[category]
         local key = WCOwnership.key(hash)
         if key and hash ~= 0 and not owned[key] then
-            local tint = WCOwnership.cleanTint(category, s.snapshot.clothing.tints[category]) or {}
+            local tint = WCOwnership.storedTint(category, s.snapshot.clothing.tints[category]) or {}
             owned[key] = { category = category, palette = tint.palette, tint0 = tint.tint0,
                            tint1 = tint.tint1, tint2 = tint.tint2, source = 'worn', worn = true }
         end
@@ -112,13 +112,10 @@ function Wardrobe.plan(saved, submitted, owned, outfitIds)
     if not resolved then return nil, code, detail end
     local tints = {}
     for category, hash in pairs(resolved) do
-        if WCOwnership.entry(owned, hash) then
-            tints[category] = WCOwnership.tintOf(owned, hash, category)
-        elseif saved.clothing.equipped[category] == hash then
-            tints[category] = WCOwnership.cleanTint(category, saved.clothing.tints[category])
-        else
-            return nil, 'ITEM_NOT_OWNED', category
-        end
+        -- stored dyes (owned / saved): kept as stored even with tints disabled or narrowed (§5.4)
+        local tint, notOwned = WCOwnership.wornTint(saved, owned, category, hash)
+        if tint == false then return nil, notOwned, category end
+        tints[category] = tint
     end
     local changed
     changed, code, detail = WCOwnership.checkRules(saved.clothing.equipped, resolved)

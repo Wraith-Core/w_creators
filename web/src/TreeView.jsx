@@ -1,7 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import {Glyph,Choice} from './Chrome';
 import FeaturePad from './FeaturePad';
-import {choiceOptions,formatDisplay,formatMoney,isNavigable,rowValue,segments} from './treeState';
+import {choiceOptions,formatDisplay,formatMoney,isNavigable,rowValue,segments,textBlocked} from './treeState';
 
 // The generic renderer of one node of the Lua tree (§8.2), built from the original components:
 // MenuRow, Choice, Slider, FeaturePad and the wst-plate panels. Every text comes from the node or
@@ -29,15 +29,22 @@ export function MenuRow({id,label,value,art,onClick,disabled=false,action=false}
   </button>;
 }
 
-function TextNode({node,disabled,onInvoke}) {
+// A text field and its own action button: the typed value travels with the invoke (node.required:
+// nothing to send while empty; node.clear: the field empties once the invoke succeeded).
+export function TextNode({node,disabled,onInvoke}) {
   const [draft,setDraft]=useState(node.value||'');
   useEffect(()=>setDraft(node.value||''),[node.value]);
   const off=disabled||node.disabled;
-  const submit=()=>{if(!off)onInvoke(node.control,draft)};
+  const blocked=off||textBlocked(node,draft);
+  const submit=async()=>{
+    if(blocked)return;
+    const ok=await onInvoke(node.control,draft);
+    if(ok&&node.clear)setDraft('');
+  };
   return <div className="identity">
     <label>{node.label}<span className="wst-field input-plate"><input className="wst-input" autoComplete="off" maxLength={node.maxLength||undefined} placeholder={node.placeholder||undefined} disabled={off} value={draft}
       onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();submit();}}}/></span></label>
-    {node.actionLabel&&<button type="button" className="wst-button" disabled={off} onClick={submit}>{node.actionLabel}</button>}
+    {node.actionLabel&&<button type="button" className="wst-button" disabled={blocked} onClick={submit}>{node.actionLabel}</button>}
     {node.reason&&<p className="menu-help">{node.reason}</p>}
   </div>;
 }

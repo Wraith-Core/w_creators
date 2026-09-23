@@ -157,6 +157,24 @@ local function sectionList(set)
 end
 Barber.sectionList = sectionList
 
+-- The hair / beard growth plate of the barber: only while grooming runs (Config.Grooming.enabled:
+-- with the growth loop off, a countdown would announce growth that never happens). Each kind is
+-- { stage, seconds, remainingMinutes, stages = <stage count>, fullyGrown = bool }: at the last stage
+-- there is no next one (fullyGrown; remainingMinutes stays 0 for older clients).
+local function growthInfo(app)
+    if type(Config.Grooming) ~= 'table' or Config.Grooming.enabled ~= true then return nil end
+    local info = WCGrooming.info(app)
+    local stages = type(Config.Grooming.stages) == 'table' and Config.Grooming.stages[app.sex] or nil
+    for kind, data in pairs(info) do
+        local list = type(stages) == 'table' and stages[kind] or nil
+        local count = type(list) == 'table' and #list or 0
+        data.stages = count
+        data.fullyGrown = count > 0 and data.stage >= count
+    end
+    return next(info) ~= nil and info or nil
+end
+Barber.growthInfo = growthInfo
+
 --- Open a barber session. Result data per §16.4.
 function Barber.open(src, locationId)
     if type(locationId) ~= 'string' or #locationId > MAX_LOCATION_ID then return fail('INVALID_PAYLOAD') end
@@ -193,7 +211,7 @@ function Barber.open(src, locationId)
     return WCResult.ok({
         token = s.token,
         appearance = WCUtil.copy(s.snapshot),
-        growth = WCGrooming.info(s.snapshot),
+        growth = growthInfo(s.snapshot),
         services = pricedServices(s.location, services),
         -- the prices above already carry the multiplier; so does the cap the client applies to
         -- their sum (min(sum, cap) * m == min(sum * m, cap * m)), so its preview matches the charge

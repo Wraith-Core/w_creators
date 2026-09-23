@@ -282,10 +282,12 @@ class StoreCommitTests(unittest.TestCase):
         self.assertEqual(self.e('#res.data.purchases'), 1)
         self.assertEqual(self.e('res.data.purchases[1].category'), 'hats')
         self.assertEqual(self.e('res.data.purchases[1].hash'), self.e('hat'))
-        # one transaction: appearance + purchase grant + the clothes the player arrived in
+        # one transaction: appearance + purchase grant; the clothes the player arrived in are not
+        # granted by the store (the lazy upgrade owns the pre-v3 outfit; an unowned worn item is an
+        # API-applied one, e.g. a job uniform, which never becomes owned)
         self.assertEqual(self.e('countTx()'), self.tx0 + 1)
         self.assertEqual(self.e('ownedRow("vorp:1", hat).source'), 'store')
-        self.assertEqual(self.e('ownedRow("vorp:1", h("male", "boots", 1)).source'), 'legacy')
+        self.assertIsNone(self.e('ownedRow("vorp:1", h("male", "boots", 1))'))
         self.assertEqual(self.e('saved().clothing.equipped.hats'), self.e('hat'))
         self.assertEqual(self.e('json.decode(rows["vorp:1"].appearance).clothing.equipped.hats'), self.e('hat'))
         # broadcast, logs, event; the session is closed

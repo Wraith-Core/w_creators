@@ -300,6 +300,10 @@ function Api.SetClothes(src, clothes, overwrite)
             end
         end
         if not WCUtil.deepEqual(merged.clothing.equipped, saved.clothing.equipped) then merged.clothing.outfit = nil end
+        -- The saved visibility states are settled like a store commit: a state whose item is gone is
+        -- dropped and a swapped item starts visible (a stored 'off' would hide the item equipped now).
+        local swapped = WCOwnership.changedCategories(saved.clothing.equipped, merged.clothing.equipped)
+        merged.clothing.states = WCOwnership.settleStates(merged, saved.clothing.states, WCOwnership.groupsOf(swapped))
         return commit(src, active, saved, merged, 'api')
     end)
 end
@@ -530,8 +534,10 @@ function Api.ApplyCharacterAppearance(src)
     local done, app, meta = pcall(WCAppearanceRepo.load, active.charid)
     if not done then return fail('DATABASE_ERROR') end
     if not app then return fail(type(meta) == 'table' and meta.error or 'CHARACTER_NOT_FOUND') end
-    TriggerClientEvent('w_creators:client:applyAppearance', src, app)
-    WCSync.broadcast(src, app)
+    -- a re-send, not a change of the look: the runtime clothing states (a raised bandana) are kept
+    local look = WCSync.withRuntimeStates(src, app, active.charid)
+    TriggerClientEvent('w_creators:client:applyAppearance', src, look)
+    WCSync.broadcast(src, look)
     return ok({ appearance = app })
 end
 

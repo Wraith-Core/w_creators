@@ -388,16 +388,25 @@ local function coreLogin(source, citizenid, newData)
 end
 
 --- Deleting a character on the citizenid-based cores (rsg / qbr). Returns true when the core
---  accepted the request (both cores delete asynchronously; the caller confirms the row is gone).
+--  accepted the request (upstream cores delete asynchronously and answer nothing; the caller
+--  confirms the row is gone). An explicit false is a refusal: w_core's DeleteCharacter answers
+--  false when the economy is not ready, the bank refuses (w_centralbank CanDeleteCharacter: an
+--  open loan) or its transaction failed.
 local function coreDelete(source, citizenid)
+    local called, answer
     if Bridge.Name == 'rsg' then
-        return (pcall(function() rsgCore().Player.DeleteCharacter(source, citizenid) end))
+        called, answer = pcall(function() return rsgCore().Player.DeleteCharacter(source, citizenid) end)
     elseif Bridge.Name == 'qbr' then
-        if GetResourceState('qbr-core') == 'started' then
-            return (pcall(function() exports.w_lib:FwNativeCoreCall('DeleteCharacter',source,citizenid) end))
-        end
+        if GetResourceState('qbr-core') ~= 'started' then return false end
+        called, answer = pcall(function() return exports.w_lib:FwNativeCoreCall('DeleteCharacter', source, citizenid) end)
+    else
+        return false
     end
-    return false
+    if not called then
+        WCDebug.warn('bridge', 'deleting %s: the core failed: %s', tostring(citizenid), tostring(answer))
+        return false
+    end
+    return answer ~= false
 end
 
 --- An approximate date of birth from the age (in YYYY-MM-DD form).
@@ -464,6 +473,46 @@ local function storedJobLabel(source, raw)
     return (type(label) == 'string' and label ~= '') and label or nil
 end
 
+-- rsg / qbr balances of a listed character: { cash, bank, gold } (a field is nil when unknown).
+--  * the central ledger (w_centralbank, ready): it owns the balances behind w_core — players.money
+--    is only a projection there (written on the row's creation, never updated), so it is not read;
+--  * w_core without a ready ledger: unknown (nil), never the stale column;
+--  * stock rsg-core / qbr-core: players.money (JSON; gold is the 'gold' or 'bloodmoney' type).
+local function ledgerReady()
+    if GetResourceState('w_centralbank') ~= 'started' then return false end
+    local ok, ready = pcall(function() return exports.w_centralbank:IsReady() end)
+    return ok and ready == true
+end
+
+local function ledgerBalance(citizenid, kind)
+    local ok, balance = pcall(function()
+        return exports.w_centralbank:GetBalance(('player:%s:%s'):format(citizenid, kind))
+    end)
+    balance = ok and tonumber(balance) or nil
+    return WCUtil.isFinite(balance) and balance or nil
+end
+
+local function columnBalance(money, ...)
+    for _, kind in ipairs({ ... }) do
+        local v = tonumber(money[kind])
+        if WCUtil.isFinite(v) then return v end
+    end
+    return nil
+end
+
+local function coreBalances(citizenid, moneyColumn)
+    if ledgerReady() then
+        return { cash = ledgerBalance(citizenid, 'cash'), bank = ledgerBalance(citizenid, 'bank'),
+                 gold = ledgerBalance(citizenid, 'gold') }
+    end
+    if GetResourceState('w_core') == 'started' then return {} end
+    local money = type(moneyColumn) == 'string' and WCUtil.decode(moneyColumn)
+        or (type(moneyColumn) == 'table' and moneyColumn) or {}
+    return { cash = columnBalance(money, 'cash'), bank = columnBalance(money, 'bank'),
+             gold = columnBalance(money, 'gold', 'bloodmoney') }
+end
+Bridge.CoreBalances = coreBalances
+
 --- Listing the player's characters. It returns an array: { {charid=, name=, ...}, ... }
 function Bridge.GetCharacters(source)
     local license = Bridge.GetLicense(source)
@@ -506,7 +555,7 @@ function Bridge.GetCharacters(source)
     else
         local table_ = Bridge.Name == 'rsg' and Config.Characters.tables.rsg or Config.Characters.tables.qbr
         local ok, rows = pcall(w.database.query.await,
-            ('SELECT citizenid, charinfo, job FROM %s WHERE license = ?'):format(table_),
+            ('SELECT citizenid, charinfo, job, money FROM %s WHERE license = ?'):format(table_),
             { license })
         if not ok or type(rows) ~= 'table' then
             WCDebug.warn('bridge', 'Bridge.GetCharacters query failed: %s', tostring(rows))
@@ -521,7 +570,9 @@ function Bridge.GetCharacters(source)
                     name = (info.firstname or '') .. ' ' .. (info.lastname or '')
                 end
             end
-            list[#list + 1] = { charid = r.citizenid, raw = r.citizenid, name = name, job = storedJobLabel(source, r.job) }
+            local balances = coreBalances(tostring(r.citizenid), r.money)
+            list[#list + 1] = { charid = r.citizenid, raw = r.citizenid, name = name, job = storedJobLabel(source, r.job),
+                                cash = balances.cash, bank = balances.bank, gold = balances.gold }
         end
         return list
     end
@@ -675,12 +726,11 @@ function Bridge.LoginCharacter(source, charid)
     end
 end
 
---- Deleting a character: the framework row, then the appearance, owned clothes and outfits (one
---  transaction in WCAppearanceRepo.delete).
---  Returns true when both succeeded, otherwise false, stage ('framework' | 'appearance'). rsg / qbr
---  delete asynchronously: true there means the core accepted the request, and the caller confirms
---  that the row is gone.
-function Bridge.DeleteCharacter(source, charid)
+--- Deleting the framework character only (the character_deleted log is emitted first, while the
+--  name can still be read). Returns true when the framework accepted the deletion, false when it
+--  refused or failed. rsg / qbr delete asynchronously: true there means the core accepted the
+--  request, and the caller confirms that the row is gone before touching anything else.
+function Bridge.DeleteFrameworkCharacter(source, charid)
     charid = tostring(charid)
     -- It is recorded before the deletion: after it the character's name is unrecoverable. The
     -- logger is optional and never blocks the deletion.
@@ -698,15 +748,22 @@ function Bridge.DeleteCharacter(source, charid)
         reason = 'حذف من شاشة اختيار الشخصيات',
     })
 
-    local frameworkOk
     if Bridge.Name == 'vorp' then
         local raw = tonumber((charid:gsub('^vorp:', '')))
-        frameworkOk = raw ~= nil and (pcall(w.database.query.await,
-            ('DELETE FROM %s WHERE charidentifier = ?'):format(Config.Characters.tables.vorp), { raw }))
-    else
-        frameworkOk = coreDelete(source, charid)
+        return raw ~= nil and (pcall(w.database.query.await,
+            ('DELETE FROM %s WHERE charidentifier = ?'):format(Config.Characters.tables.vorp), { raw })) == true
     end
-    if not frameworkOk then return false, 'framework' end
+    return coreDelete(source, charid) == true
+end
+
+--- Deleting a character: the framework row, then the appearance, owned clothes and outfits (one
+--  transaction in WCAppearanceRepo.delete). The w_creators data is touched only when the framework
+--  accepted the deletion. Returns true when both succeeded, otherwise false, stage ('framework' |
+--  'appearance'). rsg / qbr delete asynchronously: characters:delete does not use this helper (it
+--  deletes the w_creators data only once the framework row is really gone).
+function Bridge.DeleteCharacter(source, charid)
+    charid = tostring(charid)
+    if not Bridge.DeleteFrameworkCharacter(source, charid) then return false, 'framework' end
 
     local appearanceOk
     if WCAppearanceRepo and WCAppearanceRepo.delete then

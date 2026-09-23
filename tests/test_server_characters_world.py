@@ -77,9 +77,13 @@ class SceneTests(Base):
         self.assertEqual(self.bucket(), 0)
         self.assertEqual(self.e('WCCharacters.active(1).charid'), 'vorp:1')
         self.assertEqual(self.e('countLogs("security_violation")'), 3)
-        # a framework character that w_creators never activated is not "in selection" either
+        # a framework character that w_creators does not track (a resource restart the adoption has
+        # not reached yet) is resolved on demand: adopted, then the switch rules apply (no violation)
         self.rt.run('charids[2] = "vorp:9"')
-        self.assertEqual(self.call('scene:prepare', 2).code, 'SESSION_NOT_FOUND')
+        r = self.call('scene:prepare', 2)
+        self.assertTrue(r.ok, r.code)
+        self.assertTrue(self.e('WCCharacters.isSwitching(2)'))
+        self.assertEqual(self.e('countLogs("security_violation")'), 3)
 
     def test_fitting_room_session_allows_isolation_and_its_close_releases(self):
         self.activate()
@@ -125,6 +129,7 @@ class SceneTests(Base):
         self.rt.run('fireEvent("w_creators:server:rejoinWorld", 1)')
         self.assertEqual(self.bucket(), 55)
         self.later()
+        self.rt.run('Players[1].coords = anchor')                             # a new isolation of the flow: in the room
         self.assertTrue(self.call('scene:prepare', 1).ok)
         self.rt.run('Players[1].bucket = 77')                                  # another resource moved him
         self.assertTrue(self.call('scene:release', 1).ok)

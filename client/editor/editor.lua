@@ -258,6 +258,35 @@ local function identityLocked(s)
     return type(s.opts.identity) == 'table' and s.opts.identity.locked == true
 end
 
+local DAYS_IN = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
+local function daysIn(y, m)
+    if m == 2 and ((y % 4 == 0 and y % 100 ~= 0) or y % 400 == 0) then return 29 end
+    return DAYS_IN[m]
+end
+
+--- The date-picker window of the DOB field: exactly the dates WCIdentity.validateDob accepts.
+--  With a referenceYear the age is `referenceYear - year` (whole years); otherwise it is the exact
+--  age on today's date (WCUtil.today), so the youngest birthday is today minAge years ago (Feb 29 in
+--  a common year -> Feb 28) and the oldest the day after today maxAge + 1 years ago. Unknown date
+--  -> no bounds (the server validates the age anyway). Returns min, max ('YYYY-MM-DD' | nil).
+local function dobBounds(referenceYear, minAge, maxAge)
+    if referenceYear then
+        return ('%04d-01-01'):format(referenceYear - maxAge), ('%04d-12-31'):format(referenceYear - minAge)
+    end
+    local today = WCUtil.today()
+    local y, m, d = today and tonumber(today.year), today and tonumber(today.month), today and tonumber(today.day)
+    if not (y and m and d) or m < 1 or m > 12 or d < 1 then return nil, nil end
+    local maxY = y - minAge
+    local max = ('%04d-%02d-%02d'):format(maxY, m, math.min(d, daysIn(maxY, m)))
+    local minY, minM, minD = y - maxAge - 1, m, d + 1
+    if minD > daysIn(minY, minM) then
+        minD, minM = 1, minM + 1
+        if minM > 12 then minM, minY = 1, minY + 1 end
+    end
+    return ('%04d-%02d-%02d'):format(minY, minM, minD), max
+end
+E.dobBounds = dobBounds
+
 local function identityPayload(s)
     local id = s.opts.identity
     if type(id) ~= 'table' then return nil end
@@ -277,12 +306,8 @@ local function identityPayload(s)
     local cfg = Config.Characters and Config.Characters.identity or {}
     -- the client has no os library: the reference year, else the date the server publishes
     -- (WCUtil.today); unknown -> no min/max on the field (the server validates the age anyway)
-    local year = tonumber(cfg.referenceYear)
-    if not year then
-        local today = WCUtil.today()
-        year = today and today.year or nil
-    end
     local minAge, maxAge = tonumber(cfg.minAge) or 18, tonumber(cfg.maxAge) or 90
+    local dobMin, dobMax = dobBounds(tonumber(cfg.referenceYear), minAge, maxAge)
     local nameMax = tonumber(cfg.nameMax) or 25
     return {
         fields = {
@@ -291,8 +316,7 @@ local function identityPayload(s)
             { key = 'lastname', label = L('اسم العائلة'), type = 'text', maxLength = nameMax,
               value = type(id.lastname) == 'string' and id.lastname or '' },
             { key = 'dob', label = L('تاريخ الميلاد'), type = 'date',
-              min = year and ('%04d-01-01'):format(year - maxAge) or nil,
-              max = year and ('%04d-12-31'):format(year - minAge) or nil,
+              min = dobMin, max = dobMax,
               value = type(id.dob) == 'string' and id.dob or '' },
             { key = 'sex', label = L('الجنس'), type = 'info',
               value = L(s.working.sex == 'male' and 'ذكر' or 'أنثى') },

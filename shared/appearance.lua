@@ -214,6 +214,10 @@ local function tableOr(v) return type(v) == 'table' and v or {} end
 --  opts.rules    false = keep the equipped set as stored (WCRules not applied). Persisted data is
 --                read and written with rules = false; the rules apply where the player edits
 --                (mergeSections, equip) so a rule never silently drops stored clothing.
+--                rules = false also checks tints structurally only (WCCatalog.validStoredTint): a
+--                stored dye survives Config.Clothing.tints being disabled or narrowed. The live tint
+--                config (WCCatalog.validTint) applies to the default (edit) mode and to changed
+--                tints in mergeSections.
 --  opts.grooming false = drop the input's grooming (server-owned; client-submitted appearances).
 function S.sanitize(app, opts)
     opts = type(opts) == 'table' and opts or {}
@@ -326,8 +330,9 @@ function S.sanitize(app, opts)
         for _, v in ipairs(ruleViolations) do violate('clothing.' .. v.category, v.reason) end
     end
     out.clothing = { equipped = ruled, tints = {}, states = {} }
+    local tintOk = opts.rules == false and WCCatalog.validStoredTint or WCCatalog.validTint
     for category, tint in pairs(tableOr(clothing.tints)) do
-        if ruled[category] and WCCatalog.validTint(category, tint) then
+        if ruled[category] and tintOk(category, tint) then
             out.clothing.tints[category] = { palette = tint.palette, tint0 = math.tointeger(tint.tint0),
                                              tint1 = math.tointeger(tint.tint1), tint2 = math.tointeger(tint.tint2) }
         else
@@ -633,7 +638,13 @@ function S.mergeSections(saved, submitted, allowed)
         out.clothing.equipped = equipped
         out.clothing.tints = {}
         for category, tint in pairs(sub.clothing.tints) do
-            if equipped[category] then out.clothing.tints[category] = WCUtil.copy(tint) end
+            -- A saved item with its saved tint keeps it as stored; any other (new) tint must satisfy
+            -- the live Config.Clothing.tints (enabled, the category's palettes).
+            local kept = equipped[category] == base.clothing.equipped[category]
+                and WCUtil.deepEqual(tint, base.clothing.tints[category])
+            if equipped[category] and (kept or WCCatalog.validTint(category, tint)) then
+                out.clothing.tints[category] = WCUtil.copy(tint)
+            end
         end
         out.clothing.outfit = sub.clothing.outfit
     end

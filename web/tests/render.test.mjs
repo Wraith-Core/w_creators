@@ -107,9 +107,13 @@ test('creator: stages, identity form, pads and advanced sliders', () => {
   assert.match(id, /class="wst-tab selected"/);
   const nose = R.editor(copy(p), ['face', 'face.nose']);
   assert.equal(count(nose, 'class="feature-pad"'), 3);
+  // pads pair fields of the same node (jaw depth/offset), only fine-tune leftovers are extras
   const jaw = R.editor(copy(p), ['face', 'face.jaw']);
-  assert.equal(count(jaw, 'class="feature-pad"'), 1);
-  assert.match(jaw, /class="feature-extra"/);
+  assert.equal(count(jaw, 'class="feature-pad"'), 2);
+  assert.doesNotMatch(jaw, /class="feature-extra"/);
+  const chin = R.editor(copy(p), ['face', 'face.chin']);
+  assert.equal(count(chin, 'class="feature-pad"'), 1);
+  assert.match(chin, /class="feature-extra"/);
   const build = R.editor(copy(p), ['body', 'body.build']);
   assert.match(build, /class="component"/);
   assert.match(build, /class="slider-field"/);
@@ -137,8 +141,16 @@ test('wardrobe: outfit actions and text node', () => {
   const outfit = R.editor(copy(p), ['outfits', 'outfit.7']);
   assert.equal(count(outfit, 'class="wst-card menu-row"'), 3);
   assert.match(outfit, /class="identity"/);
+  // the new outfit: one name field whose own button is Save (round 2): no separate Save row that
+  // stays disabled while a typed name is on screen, no 'type the name first' help line
   const fresh = R.editor(copy(p), ['outfits', 'outfit.new']);
-  assert.match(fresh, /menu-help/); // why saving is disabled
+  assert.equal(count(fresh, 'class="wst-card menu-row"'), 0);
+  assert.equal(count(fresh, '<input class="wst-input"'), 1);
+  const node = p.tree.children.find(n => n.id === 'outfits').children.find(n => n.id === 'outfit.new').children[0];
+  assert.equal(node.control, 'outfit.new.name');
+  assert.ok(fresh.includes(`>${node.actionLabel}</button>`));
+  assert.doesNotMatch(fresh, /menu-help/);
+  assert.match(fresh, /<button type="button" class="wst-button" disabled="">/); // nothing typed yet
 });
 
 test('barber: growth info plate', () => {
@@ -233,4 +245,38 @@ test('surgery: sections beyond body/face/skin (hair, facial hair) get their stag
   assert.deepEqual(p.stages.map(s => s.id), ['hair', 'facialHair', 'review']);
   const html = R.editor(copy(p), ['hair']);
   assert.match(html, /class="choice"/);
+});
+
+// ---- review round 1 (nui) ----
+
+test('body: chest/arms and waist/hip are visible pads, only shoulder blades is an extra', () => {
+  const p = payloads.creatorMale;
+  const upper = R.editor(copy(p), ['body', 'body.upper']);
+  assert.equal(count(upper, 'class="feature-pad"'), 2);
+  const extra = upper.slice(upper.indexOf('class="feature-extra"'));
+  assert.equal(count(extra, 'class="slider-field"'), 1);
+  const torso = R.editor(copy(p), ['body', 'body.torso']);
+  assert.equal(count(torso, 'class="feature-pad"'), 1);
+  assert.doesNotMatch(torso, /class="feature-extra"/);
+});
+
+test('store: a category with nothing worn shows its price before any try-on', () => {
+  const p = payloads.store;
+  const head = R.editor(copy(p), ['tax.head']);
+  const masks = find(p.tree, 'item.masks');
+  assert.ok(masks.summary && /^\$\d+\.\d\d$/.test(masks.summary));
+  assert.ok(head.includes(`<span class="row-value">${masks.summary}</span>`));
+});
+
+test('wardrobe: clothing actions are group › worn item › action', () => {
+  const p = payloads.wardrobe;
+  const upper = find(p.tree, 'states.upper');
+  assert.ok(upper);
+  for (const item of upper.children) {
+    assert.equal(item.kind, 'group');
+    assert.equal(item.summary, undefined);
+    for (const a of item.children) assert.equal(a.kind, 'action');
+  }
+  const shirt = R.editor(copy(p), ['actions', 'states.upper', 'states.upper.shirts_full']);
+  assert.ok(shirt.includes('state.sleeves.rolled'));
 });

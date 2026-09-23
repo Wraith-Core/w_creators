@@ -29,8 +29,8 @@
     {
      "key": "dob",
      "label": "تاريخ الميلاد",
-     "max": "2008-12-31",
-     "min": "1936-01-01",
+     "max": "2008-09-23",
+     "min": "1935-09-24",
      "type": "date",
      "value": ""
     },
@@ -233,6 +233,28 @@
          }
         },
         {
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "pad.chest.arms",
+         "kind": "pad",
+         "label": "الصدر / الذراعان",
+         "max": 1,
+         "min": -1,
+         "step": 0.01,
+         "x": {
+          "control": "morph.chest",
+          "label": "الصدر",
+          "value": 0
+         },
+         "y": {
+          "control": "morph.arms",
+          "label": "الذراعان",
+          "value": 0
+         }
+        },
+        {
          "control": "morph.shoulderBlades",
          "display": {
           "decimals": 0,
@@ -241,34 +263,6 @@
          "id": "morph.shoulderBlades",
          "kind": "slider",
          "label": "لوحا الكتف",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.chest",
-         "display": {
-          "decimals": 0,
-          "scale": 100
-         },
-         "id": "morph.chest",
-         "kind": "slider",
-         "label": "الصدر",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.arms",
-         "display": {
-          "decimals": 0,
-          "scale": 100
-         },
-         "id": "morph.arms",
-         "kind": "slider",
-         "label": "الذراعان",
          "max": 1,
          "min": -1,
          "step": 0.01,
@@ -283,32 +277,26 @@
        "camera": "upperBody",
        "children": [
         {
-         "control": "morph.waist",
          "display": {
           "decimals": 0,
           "scale": 100
          },
-         "id": "morph.waist",
-         "kind": "slider",
-         "label": "البطن",
+         "id": "pad.waist.hip",
+         "kind": "pad",
+         "label": "البطن / المؤخّرة",
          "max": 1,
          "min": -1,
          "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.hip",
-         "display": {
-          "decimals": 0,
-          "scale": 100
+         "x": {
+          "control": "morph.waist",
+          "label": "البطن",
+          "value": 0
          },
-         "id": "morph.hip",
-         "kind": "slider",
-         "label": "المؤخّرة",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
+         "y": {
+          "control": "morph.hip",
+          "label": "المؤخّرة",
+          "value": 0
+         }
         }
        ],
        "id": "body.torso",
@@ -488,32 +476,26 @@
          }
         },
         {
-         "control": "morph.jawDepth",
          "display": {
           "decimals": 0,
           "scale": 100
          },
-         "id": "morph.jawDepth",
-         "kind": "slider",
-         "label": "الفكّ · غائر",
+         "id": "pad.jawDepth.jawY",
+         "kind": "pad",
+         "label": "الفكّ · غائر / إزاحة الفكّ",
          "max": 1,
          "min": -1,
          "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.jawY",
-         "display": {
-          "decimals": 0,
-          "scale": 100
+         "x": {
+          "control": "morph.jawDepth",
+          "label": "الفكّ · غائر",
+          "value": 0
          },
-         "id": "morph.jawY",
-         "kind": "slider",
-         "label": "إزاحة الفكّ",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
+         "y": {
+          "control": "morph.jawY",
+          "label": "إزاحة الفكّ",
+          "value": 0
+         }
         }
        ],
        "id": "face.jaw",
@@ -1207,7 +1189,7 @@
          ],
          "id": "overlay.eyebrows",
          "kind": "group",
-         "label": "الحاجبان",
+         "label": "نمط الحاجبين",
          "summary": "01"
         },
         {
@@ -1382,7 +1364,7 @@
        ],
        "id": "overlay.complex",
        "kind": "group",
-       "label": "البشرة",
+       "label": "البشرة الأساسية",
        "summary": "بدون"
       },
       {
@@ -3047,8 +3029,8 @@
     {
      "key": "dob",
      "label": "تاريخ الميلاد",
-     "max": "2008-12-31",
-     "min": "1936-01-01",
+     "max": "2008-09-23",
+     "min": "1935-09-24",
      "type": "date",
      "value": ""
     },
@@ -3247,6 +3229,28 @@
          }
         },
         {
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "pad.chest.arms",
+         "kind": "pad",
+         "label": "الصدر / الذراعان",
+         "max": 1,
+         "min": -1,
+         "step": 0.01,
+         "x": {
+          "control": "morph.chest",
+          "label": "الصدر",
+          "value": 0
+         },
+         "y": {
+          "control": "morph.arms",
+          "label": "الذراعان",
+          "value": 0
+         }
+        },
+        {
          "control": "morph.shoulderBlades",
          "display": {
           "decimals": 0,
@@ -3255,34 +3259,6 @@
          "id": "morph.shoulderBlades",
          "kind": "slider",
          "label": "لوحا الكتف",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.chest",
-         "display": {
-          "decimals": 0,
-          "scale": 100
-         },
-         "id": "morph.chest",
-         "kind": "slider",
-         "label": "الصدر",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.arms",
-         "display": {
-          "decimals": 0,
-          "scale": 100
-         },
-         "id": "morph.arms",
-         "kind": "slider",
-         "label": "الذراعان",
          "max": 1,
          "min": -1,
          "step": 0.01,
@@ -3297,32 +3273,26 @@
        "camera": "upperBody",
        "children": [
         {
-         "control": "morph.waist",
          "display": {
           "decimals": 0,
           "scale": 100
          },
-         "id": "morph.waist",
-         "kind": "slider",
-         "label": "البطن",
+         "id": "pad.waist.hip",
+         "kind": "pad",
+         "label": "البطن / المؤخّرة",
          "max": 1,
          "min": -1,
          "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.hip",
-         "display": {
-          "decimals": 0,
-          "scale": 100
+         "x": {
+          "control": "morph.waist",
+          "label": "البطن",
+          "value": 0
          },
-         "id": "morph.hip",
-         "kind": "slider",
-         "label": "المؤخّرة",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
+         "y": {
+          "control": "morph.hip",
+          "label": "المؤخّرة",
+          "value": 0
+         }
         }
        ],
        "id": "body.torso",
@@ -3482,32 +3452,26 @@
          }
         },
         {
-         "control": "morph.jawDepth",
          "display": {
           "decimals": 0,
           "scale": 100
          },
-         "id": "morph.jawDepth",
-         "kind": "slider",
-         "label": "الفكّ · غائر",
+         "id": "pad.jawDepth.jawY",
+         "kind": "pad",
+         "label": "الفكّ · غائر / إزاحة الفكّ",
          "max": 1,
          "min": -1,
          "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.jawY",
-         "display": {
-          "decimals": 0,
-          "scale": 100
+         "x": {
+          "control": "morph.jawDepth",
+          "label": "الفكّ · غائر",
+          "value": 0
          },
-         "id": "morph.jawY",
-         "kind": "slider",
-         "label": "إزاحة الفكّ",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
+         "y": {
+          "control": "morph.jawY",
+          "label": "إزاحة الفكّ",
+          "value": 0
+         }
         }
        ],
        "id": "face.jaw",
@@ -4201,7 +4165,7 @@
          ],
          "id": "overlay.eyebrows",
          "kind": "group",
-         "label": "الحاجبان",
+         "label": "نمط الحاجبين",
          "summary": "01"
         },
         {
@@ -4376,7 +4340,7 @@
        ],
        "id": "overlay.complex",
        "kind": "group",
-       "label": "البشرة",
+       "label": "البشرة الأساسية",
        "summary": "بدون"
       },
       {
@@ -6124,6 +6088,28 @@
          }
         },
         {
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "pad.chest.arms",
+         "kind": "pad",
+         "label": "الصدر / الذراعان",
+         "max": 1,
+         "min": -1,
+         "step": 0.01,
+         "x": {
+          "control": "morph.chest",
+          "label": "الصدر",
+          "value": 0
+         },
+         "y": {
+          "control": "morph.arms",
+          "label": "الذراعان",
+          "value": 0
+         }
+        },
+        {
          "control": "morph.shoulderBlades",
          "display": {
           "decimals": 0,
@@ -6132,34 +6118,6 @@
          "id": "morph.shoulderBlades",
          "kind": "slider",
          "label": "لوحا الكتف",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.chest",
-         "display": {
-          "decimals": 0,
-          "scale": 100
-         },
-         "id": "morph.chest",
-         "kind": "slider",
-         "label": "الصدر",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.arms",
-         "display": {
-          "decimals": 0,
-          "scale": 100
-         },
-         "id": "morph.arms",
-         "kind": "slider",
-         "label": "الذراعان",
          "max": 1,
          "min": -1,
          "step": 0.01,
@@ -6174,32 +6132,26 @@
        "camera": "upperBody",
        "children": [
         {
-         "control": "morph.waist",
          "display": {
           "decimals": 0,
           "scale": 100
          },
-         "id": "morph.waist",
-         "kind": "slider",
-         "label": "البطن",
+         "id": "pad.waist.hip",
+         "kind": "pad",
+         "label": "البطن / المؤخّرة",
          "max": 1,
          "min": -1,
          "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.hip",
-         "display": {
-          "decimals": 0,
-          "scale": 100
+         "x": {
+          "control": "morph.waist",
+          "label": "البطن",
+          "value": 0
          },
-         "id": "morph.hip",
-         "kind": "slider",
-         "label": "المؤخّرة",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
+         "y": {
+          "control": "morph.hip",
+          "label": "المؤخّرة",
+          "value": 0
+         }
         }
        ],
        "id": "body.torso",
@@ -6359,32 +6311,26 @@
          }
         },
         {
-         "control": "morph.jawDepth",
          "display": {
           "decimals": 0,
           "scale": 100
          },
-         "id": "morph.jawDepth",
-         "kind": "slider",
-         "label": "الفكّ · غائر",
+         "id": "pad.jawDepth.jawY",
+         "kind": "pad",
+         "label": "الفكّ · غائر / إزاحة الفكّ",
          "max": 1,
          "min": -1,
          "step": 0.01,
-         "value": 0
-        },
-        {
-         "control": "morph.jawY",
-         "display": {
-          "decimals": 0,
-          "scale": 100
+         "x": {
+          "control": "morph.jawDepth",
+          "label": "الفكّ · غائر",
+          "value": 0
          },
-         "id": "morph.jawY",
-         "kind": "slider",
-         "label": "إزاحة الفكّ",
-         "max": 1,
-         "min": -1,
-         "step": 0.01,
-         "value": 0
+         "y": {
+          "control": "morph.jawY",
+          "label": "إزاحة الفكّ",
+          "value": 0
+         }
         }
        ],
        "id": "face.jaw",
@@ -7207,7 +7153,7 @@
        ],
        "id": "overlay.complex",
        "kind": "group",
-       "label": "البشرة",
+       "label": "البشرة الأساسية",
        "summary": "بدون"
       },
       {
@@ -8417,7 +8363,7 @@
        ],
        "id": "overlay.eyebrows",
        "kind": "group",
-       "label": "الحاجبان",
+       "label": "نمط الحاجبين",
        "summary": "01"
       },
       {
@@ -8994,7 +8940,8 @@
        ],
        "id": "item.masks",
        "kind": "group",
-       "label": "القناع"
+       "label": "القناع",
+       "summary": "$10.00"
       }
      ],
      "id": "tax.head",
@@ -9035,7 +8982,8 @@
        ],
        "id": "item.neckwear",
        "kind": "group",
-       "label": "وشاح الرقبة"
+       "label": "وشاح الرقبة",
+       "summary": "$2.15"
       }
      ],
      "id": "tax.neck",
@@ -9197,7 +9145,8 @@
          "item": {
           "equipped": true,
           "name": "القميص 01 · 01",
-          "owned": true,
+          "owned": false,
+          "price": 5,
           "variants": 3
          },
          "kind": "itemcard",
@@ -9206,7 +9155,8 @@
        ],
        "id": "item.shirts_full",
        "kind": "group",
-       "label": "القميص"
+       "label": "القميص",
+       "summary": "$5.00"
       },
       {
        "art": "vest",
@@ -9240,7 +9190,8 @@
        ],
        "id": "item.vests",
        "kind": "group",
-       "label": "الصديري"
+       "label": "الصديري",
+       "summary": "$5.00"
       },
       {
        "art": "coat",
@@ -9274,7 +9225,8 @@
        ],
        "id": "item.coats",
        "kind": "group",
-       "label": "المعطف"
+       "label": "المعطف",
+       "summary": "$5.00"
       },
       {
        "art": "ccoat",
@@ -9308,7 +9260,8 @@
        ],
        "id": "item.coats_closed",
        "kind": "group",
-       "label": "المعطف المغلق"
+       "label": "المعطف المغلق",
+       "summary": "$5.00"
       }
      ],
      "id": "tax.upper",
@@ -9350,7 +9303,8 @@
        ],
        "id": "item.gloves",
        "kind": "group",
-       "label": "القفازات"
+       "label": "القفازات",
+       "summary": "$4.25"
       }
      ],
      "id": "tax.arms",
@@ -9503,7 +9457,8 @@
          "item": {
           "equipped": true,
           "name": "البنطال 01 · 01",
-          "owned": true,
+          "owned": false,
+          "price": 5,
           "variants": 1
          },
          "kind": "itemcard",
@@ -9512,7 +9467,8 @@
        ],
        "id": "item.pants",
        "kind": "group",
-       "label": "البنطال"
+       "label": "البنطال",
+       "summary": "$5.00"
       }
      ],
      "id": "tax.lower",
@@ -9674,7 +9630,8 @@
          "item": {
           "equipped": true,
           "name": "الحذاء 01 · 01",
-          "owned": true,
+          "owned": false,
+          "price": 5,
           "variants": 5
          },
          "kind": "itemcard",
@@ -9683,7 +9640,8 @@
        ],
        "id": "item.boots",
        "kind": "group",
-       "label": "الحذاء"
+       "label": "الحذاء",
+       "summary": "$5.00"
       }
      ],
      "id": "tax.feet",
@@ -9724,7 +9682,8 @@
        ],
        "id": "item.belts",
        "kind": "group",
-       "label": "الحزام"
+       "label": "الحزام",
+       "summary": "$2.00"
       },
       {
        "camera": "accessories",
@@ -9757,7 +9716,8 @@
        ],
        "id": "item.belt_buckles",
        "kind": "group",
-       "label": "إبزيم الحزام"
+       "label": "إبزيم الحزام",
+       "summary": "$1.00"
       },
       {
        "art": "gunbelt",
@@ -9791,7 +9751,8 @@
        ],
        "id": "item.gunbelts",
        "kind": "group",
-       "label": "حزام المسدس"
+       "label": "حزام المسدس",
+       "summary": "$5.00"
       },
       {
        "camera": "accessories",
@@ -9824,7 +9785,8 @@
        ],
        "id": "item.gunbelt_accs",
        "kind": "group",
-       "label": "إكسسوار حزام المسدس"
+       "label": "إكسسوار حزام المسدس",
+       "summary": "$1.00"
       }
      ],
      "id": "tax.accessories",
@@ -9953,22 +9915,16 @@
       {
        "children": [
         {
-         "actionLabel": "تطبيق",
+         "actionLabel": "حفظ",
+         "clear": true,
          "control": "outfit.new.name",
          "id": "outfit.new.name",
          "kind": "text",
          "label": "اسم الطقم",
          "maxLength": 24,
          "placeholder": "اسم الطقم",
+         "required": true,
          "value": ""
-        },
-        {
-         "control": "outfit.new.save",
-         "disabled": true,
-         "id": "outfit.new.save",
-         "kind": "action",
-         "label": "حفظ",
-         "reason": "اكتب اسم الطقم أولًا"
         }
        ],
        "id": "outfit.new",
@@ -10177,15 +10133,7 @@
            "id": "state.sleeves.rolled",
            "kind": "action",
            "label": "طيّ الأكمام"
-          }
-         ],
-         "id": "state.sleeves",
-         "kind": "group",
-         "label": "الأكمام",
-         "summary": "إنزال"
-        },
-        {
-         "children": [
+          },
           {
            "control": "state.collar.open",
            "id": "state.collar.open",
@@ -10193,10 +10141,9 @@
            "label": "فتح"
           }
          ],
-         "id": "state.collar",
+         "id": "states.upper.shirts_full",
          "kind": "group",
-         "label": "الياقة",
-         "summary": "إغلاق"
+         "label": "القميص"
         }
        ],
        "id": "states.upper",
@@ -10214,10 +10161,9 @@
            "label": "تحت البنطال"
           }
          ],
-         "id": "state.boots",
+         "id": "states.feet.boots",
          "kind": "group",
-         "label": "الحذاء",
-         "summary": "فوق البنطال"
+         "label": "الحذاء"
         }
        ],
        "id": "states.feet",
@@ -10304,15 +10250,7 @@
          "id": "state.sleeves.rolled",
          "kind": "action",
          "label": "طيّ الأكمام"
-        }
-       ],
-       "id": "state.sleeves",
-       "kind": "group",
-       "label": "الأكمام",
-       "summary": "إنزال"
-      },
-      {
-       "children": [
+        },
         {
          "control": "state.collar.open",
          "id": "state.collar.open",
@@ -10320,10 +10258,9 @@
          "label": "فتح"
         }
        ],
-       "id": "state.collar",
+       "id": "states.upper.shirts_full",
        "kind": "group",
-       "label": "الياقة",
-       "summary": "إغلاق"
+       "label": "القميص"
       }
      ],
      "id": "states.upper",
@@ -10341,10 +10278,9 @@
          "label": "تحت البنطال"
         }
        ],
-       "id": "state.boots",
+       "id": "states.feet.boots",
        "kind": "group",
-       "label": "الحذاء",
-       "summary": "فوق البنطال"
+       "label": "الحذاء"
       }
      ],
      "id": "states.feet",

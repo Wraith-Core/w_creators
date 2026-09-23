@@ -96,7 +96,7 @@ local function firstSpawn()
         x, y, z = WCUtil.xyz(GetEntityCoords(PlayerPedId()))
         x, y, z = x or 0.0, y or 0.0, z or 0.0
     end
-    return x, y, z, headingOf({ heading = cfg.heading }) or 0.0
+    return x + 0.0, y + 0.0, z + 0.0, headingOf({ heading = cfg.heading }) or 0.0
 end
 
 local function snapEnabled()
@@ -112,7 +112,7 @@ function Sp.probe(x, y, z)
         groundZ = ok and tonumber(groundZ) or nil
         if (found == true or found == 1) and WCUtil.isFinite(groundZ)
             and math.abs(groundZ - z) <= Sp.GROUND_MAX_DELTA then
-            return groundZ
+            return groundZ + 0.0
         end
     end
     return nil
@@ -120,7 +120,10 @@ end
 
 -- Move the ped there, wait for the collision, snap it to the ground. Returns the final z or
 -- nil, reason ('NO_COLLISION' | 'NO_GROUND').
+--  The coordinates are floats from here on: a Lua integer (an integral coordinate decoded from a
+--  framework row, a table-form config) reaches a float native as its integer bits (docs/NATIVES.md).
 local function settle(ped, x, y, z, h)
+    x, y, z, h = x + 0.0, y + 0.0, z + 0.0, (tonumber(h) or 0.0) + 0.0
     SetEntityCoords(ped, x, y, z, false, false, false, false)
     SetEntityHeading(ped, h)
     local collided = WCUtil.waitUntil(function()
@@ -147,6 +150,7 @@ function Sp.place(pos)
     FreezeEntityPosition(ped, true)
     local x, y, z = WCUtil.xyz(pos)
     if x then
+        x, y, z = x + 0.0, y + 0.0, z + 0.0
         local h = headingOf(pos) or GetEntityHeading(ped)
         local groundZ, why = settle(ped, x, y, z, h)
         if groundZ then return { x = x, y = y, z = groundZ, heading = h }, false end

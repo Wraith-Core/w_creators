@@ -18,6 +18,7 @@ local cache = {}       -- [serverId] = { app, rev }
 local fingerprints = {} -- [serverId] = 'ped:rev' last applied successfully
 local failures = {}    -- [serverId] = { fp, count }
 local inFlight = {}    -- [serverId] = true while an application runs (event and watcher never overlap)
+local rendered = {}    -- [serverId] = the ped handle last rendered (its overlay set is forgotten with it)
 local revision = 0
 
 local function ownServerId()
@@ -29,6 +30,13 @@ local function sid(serverId)
 end
 
 --- The ped of a remote player when it exists in our scope, else nil.
+--- Forget the overlay set of the ped last rendered for a player (it left scope or was replaced).
+local function forgetRendered(serverId, keep)
+    local old = rendered[serverId]
+    if old ~= nil and old ~= keep and Appearance.Overlays then Appearance.Overlays.forget(old) end
+    rendered[serverId] = keep
+end
+
 local function remotePed(serverId)
     local player = GetPlayerFromServerId(serverId)
     if player == nil or player == -1 then return nil end
@@ -49,6 +57,7 @@ function Sync.check(serverId)
         -- given-up fingerprint is forgotten with it
         fingerprints[serverId] = nil
         failures[serverId] = nil
+        forgetRendered(serverId, nil)
         return false
     end
     local rev = entry.rev
@@ -58,6 +67,7 @@ function Sync.check(serverId)
     if failure and failure.fp == fp and failure.count >= Sync.MAX_FAILURES then return false end
     if inFlight[serverId] then return false end
     inFlight[serverId] = true
+    forgetRendered(serverId, ped) -- a new ped (respawn, back in scope): the old one's set goes
     local done, ok, err = pcall(Appearance.RestoreCharacter, ped, entry.app)
     inFlight[serverId] = nil
     if not done then ok, err = false, 'INTERNAL_ERROR' end
@@ -117,6 +127,7 @@ function Sync.forget(serverId)
     if not serverId then return end
     local ped = remotePed(serverId)
     if ped and Appearance.Overlays then Appearance.Overlays.forget(ped) end
+    forgetRendered(serverId, nil)
     cache[serverId], fingerprints[serverId], failures[serverId] = nil, nil, nil
 end
 
@@ -178,28 +189,78 @@ end)
 -- ---------------------------------------------------------------------
 local queued, applying = nil, false
 
---- Take the server's appearance of our character and render it on our ped.
-function Sync.applyOwn(app)
+--- The runtime clothing states (groups with persist ~= true, e.g. the raised bandana) of `from`
+--  copied into `to`: they live only in memory (§5.5), so a look the server saved never carries them.
+local function carryRuntimeStates(from, to)
+    local states = type(from) == 'table' and type(from.clothing) == 'table' and from.clothing.states
+    if type(states) ~= 'table' or type(to) ~= 'table' or type(to.clothing) ~= 'table' then return end
+    if type(to.clothing.states) ~= 'table' then to.clothing.states = {} end
+    for _, group in ipairs(WCClothingStates.groups) do
+        local value = states[group.id]
+        if group.persist ~= true and to.clothing.states[group.id] == nil
+            and WCClothingStates.isValid(group.id, value) then
+            to.clothing.states[group.id] = value
+        end
+    end
+end
+
+--- A hair / beard growth stage (server/barber/grooming.lua) during gameplay: only what changed is
+--  drawn (the hair / facial hair slots), as before v3, and the runtime states the ped shows stay on
+--  it. The full render is the fallback (no previous look, another sex, the diff failed).
+local function grow(app)
+    local before = WCState.appearance
+    local after = AppearanceSchema.normalize(app)
+    carryRuntimeStates(before, after)
+    WCState.set(after)
+    if WCState.inEditor() then
+        WCDebug.log('sync', 'grown appearance stored; rendering skipped while an editor is open')
+        return
+    end
+    if type(before) == 'table' and before.sex == after.sex then
+        local done, _, code = Appearance.ApplyDiff(PlayerPedId(), before, after)
+        if done then return end
+        WCDebug.log('sync', 'growth stage not applied incrementally (%s): full render', tostring(code))
+    end
+    local done, code = Appearance.RestorePlayer(after)
+    if not done then WCDebug.warn('sync', 'grown appearance could not be rendered: %s', tostring(code)) end
+end
+
+--- A saved look of our character (applyAppearance): stored and rendered in full.
+local function restoreOwn(app)
+    local normalized = AppearanceSchema.normalize(app)
+    WCState.set(normalized)
+    if WCState.inEditor() then
+        WCDebug.log('sync', 'own appearance stored; rendering skipped while an editor is open')
+        return
+    end
+    local done, code = Appearance.RestorePlayer(normalized)
+    if not done then WCDebug.warn('sync', 'own appearance could not be rendered: %s', tostring(code)) end
+end
+
+--- Queue one own-appearance payload (the newest wins) and run the queue unless it already runs.
+local function enqueue(app, handler)
     if type(app) ~= 'table' and type(app) ~= 'string' then return end
-    queued = app
+    queued = { app = app, handler = handler }
     if applying then return end
     applying = true
     while queued do
-        local nextApp = queued
+        local item = queued
         queued = nil
-        local ok, err = pcall(function()
-            local normalized = AppearanceSchema.normalize(nextApp)
-            WCState.set(normalized)
-            if WCState.inEditor() then
-                WCDebug.log('sync', 'own appearance stored; rendering skipped while an editor is open')
-                return
-            end
-            local done, code = Appearance.RestorePlayer(normalized)
-            if not done then WCDebug.warn('sync', 'own appearance could not be rendered: %s', tostring(code)) end
-        end)
+        local ok, err = pcall(item.handler, item.app)
         if not ok then WCDebug.warn('sync', 'own appearance failed: %s', tostring(err)) end
     end
     applying = false
+end
+
+--- Take the server's appearance of our character and render it on our ped.
+function Sync.applyOwn(app)
+    enqueue(app, restoreOwn)
+end
+
+--- A hair / beard growth stage of our character: stored with the runtime states kept, and only the
+--  hair / facial hair drawn (ApplyDiff); never rendered over an open editor.
+function Sync.applyGrowth(app)
+    enqueue(app, grow)
 end
 
 --- Is our own appearance being applied?
@@ -210,9 +271,9 @@ end
 RegisterNetEvent('w_creators:client:applyAppearance', function(app) Sync.applyOwn(app) end)
 -- legacy alias (kept event name, §13)
 RegisterNetEvent('PersonaCreatorHandler.applyCharacterAppearance', function(app) Sync.applyOwn(app) end)
--- hair / beard grew a stage (server/barber/grooming.lua): the same store-and-render path (never
--- rendered over an open editor)
-RegisterNetEvent('w_creators:client:grooming', function(app) Sync.applyOwn(app) end)
+-- hair / beard grew a stage (server/barber/grooming.lua): same queue, but an incremental render
+-- that keeps the runtime clothing states (never rendered over an open editor)
+RegisterNetEvent('w_creators:client:grooming', function(app) Sync.applyGrowth(app) end)
 
 -- ---------------------------------------------------------------------
 --  The scope watcher and the initial request

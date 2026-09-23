@@ -11,13 +11,14 @@
 --    WCOwnership.entry(owned, hash)               the owned row of a hash in a list() result, or nil
 --    WCOwnership.tintOf(owned, hash, category)    the owned tint { palette, tint0..2 } or nil
 --    WCOwnership.grantQueries(charid, items, source)  { {query, values}... } for a transaction
---    WCOwnership.wornGrants(charid, app, owned)   'legacy' grants for worn clothing not yet owned
 --    WCOwnership.grant(charid, items, source)     run grantQueries in one transaction -> boolean
 --  Submitted clothing validation (store, wardrobe, outfits):
 --    WCOwnership.resolveEquipped(sex, equipped)   { [category] = u32 } | nil, code, category
 --    WCOwnership.changedCategories(before, after) { [category] = true }
 --    WCOwnership.checkRules(savedEquipped, resolved)  changed | nil, code, category
---    WCOwnership.sameTint(a, b), WCOwnership.cleanTint(category, tint), WCOwnership.key(hash)
+--    WCOwnership.sameTint(a, b), WCOwnership.cleanTint(category, tint) (a new tint, live config),
+--    WCOwnership.storedTint(category, tint) (a saved / owned dye), WCOwnership.key(hash)
+--    WCOwnership.wornTint(saved, owned, category, hash)  the wardrobe-rule tint | false, 'ITEM_NOT_OWNED'
 --    WCOwnership.settleStates(app, states, reset)  the persisting states that still apply to app
 --    WCOwnership.exactId(v)                       a positive integer id (no rounding) | nil
 -- =====================================================================
@@ -94,14 +95,16 @@ function O.owns(charid, hash)
     return O.entry(owned, hash) ~= nil
 end
 
---- The owned tint of an item ({ palette, tint0, tint1, tint2 }) when it is valid for the category,
---  otherwise nil (the item's original colour).
+--- The owned tint of an item ({ palette, tint0, tint1, tint2 }) when it is a structurally valid
+--  stored tint for the category (WCCatalog.validStoredTint: an owned dye is stored data and
+--  survives tints being disabled or a palette list narrowed, §5.4), otherwise nil (the item's
+--  original colour).
 function O.tintOf(owned, hash, category)
     local entry = O.entry(owned, hash)
     if not entry or not entry.palette then return nil end
     local tint = { palette = entry.palette, tint0 = entry.tint0, tint1 = entry.tint1, tint2 = entry.tint2 }
     category = category or entry.category
-    if not WCCatalog.validTint(category, tint) then return nil end
+    if not WCCatalog.validStoredTint(category, tint) then return nil end
     return tint
 end
 
@@ -136,24 +139,6 @@ function O.grantQueries(charid, items, source)
         end
     end
     return queries
-end
-
---- 'legacy' grants (INSERT IGNORE) for the clothing an appearance wears that the character does not
---  own yet (the pre-v3 store kept the outfit a player arrived in; the wardrobe needs it owned).
---  The worn tint becomes the owned tint.
-function O.wornGrants(charid, app, owned)
-    local items = {}
-    local clothing = type(app) == 'table' and type(app.clothing) == 'table' and app.clothing or {}
-    local equipped = type(clothing.equipped) == 'table' and clothing.equipped or {}
-    local tints = type(clothing.tints) == 'table' and clothing.tints or {}
-    for _, category in ipairs(WCUtil.sortedKeys(equipped)) do
-        local hash = equipped[category]
-        if hash and hash ~= 0 and not O.entry(owned, hash) then
-            local tint = WCCatalog.validTint(category, tints[category]) and tints[category] or nil
-            items[#items + 1] = { category = category, hash = hash, tint = tint }
-        end
-    end
-    return O.grantQueries(charid, items, 'legacy')
 end
 
 --- Grant items in one transaction (admin / starter tools). Returns true | false, code.
@@ -239,11 +224,34 @@ function O.sameTint(a, b)
     return a.palette == b.palette and a.tint0 == b.tint0 and a.tint1 == b.tint1 and a.tint2 == b.tint2
 end
 
---- A clean copy of a valid tint ({ palette, tint0..2 } with integers), or nil.
-function O.cleanTint(category, tint)
-    if not WCCatalog.validTint(category, tint) then return nil end
+local function tintCopy(tint)
     return { palette = tint.palette, tint0 = math.tointeger(tint.tint0), tint1 = math.tointeger(tint.tint1),
              tint2 = math.tointeger(tint.tint2) }
+end
+
+--- A clean copy of a valid NEW tint ({ palette, tint0..2 } with integers) under the live
+--  Config.Clothing.tints (WCCatalog.validTint), or nil.
+function O.cleanTint(category, tint)
+    if not WCCatalog.validTint(category, tint) then return nil end
+    return tintCopy(tint)
+end
+
+--- A clean copy of a stored tint (a saved or owned dye: WCCatalog.validStoredTint, independent of
+--  the live tint config, §5.4), or nil.
+function O.storedTint(category, tint)
+    if not WCCatalog.validStoredTint(category, tint) then return nil end
+    return tintCopy(tint)
+end
+
+--- The tint of an item under the wardrobe rule (wardrobe, surgery clothing): the owned tint of an
+--  owned item; the saved tint of the item worn in the saved look without an ownership row (a
+--  uniform). Both are stored dyes, never re-validated against the live tint config, so an unchanged
+--  item keeps its dye when tints are disabled or narrowed.
+--  Returns tint | nil (the original colour), or false, 'ITEM_NOT_OWNED' for any other item.
+function O.wornTint(saved, owned, category, hash)
+    if O.entry(owned, hash) then return O.tintOf(owned, hash, category) end
+    if saved.clothing.equipped[category] == hash then return O.storedTint(category, saved.clothing.tints[category]) end
+    return false, 'ITEM_NOT_OWNED'
 end
 
 --- The persisting, valid states of `states` that apply to `app`'s equipped items. A group listed in

@@ -72,7 +72,14 @@ local function persist(src, t, opts)
             t.seconds = 0
             return false
         end
+        local before = WCUtil.copy(app)
         local visible, stageChanged = grow(app, amount)
+        -- Every kind at its last stage (or no stage configured for the sex): the growth changes
+        -- nothing, so nothing is written — the seconds are spent, the row is left alone.
+        if AppearanceSchema.equal(AppearanceSchema.sanitize(app, { rules = false }), before) then
+            t.seconds = math.max(0, t.seconds - amount)
+            return true
+        end
         local saved, result = WCAppearanceRepo.save(t.charid, app)
         if not saved then
             WCDebug.warn('grooming', 'saving the growth of %s failed: %s', t.charid, tostring(result))
@@ -80,8 +87,11 @@ local function persist(src, t, opts)
         end
         t.seconds = math.max(0, t.seconds - amount)
         if opts.notify and (visible or stageChanged) then
-            WCSync.broadcast(src, result)
-            TriggerClientEvent('w_creators:client:grooming', src, result)
+            -- A grown stage is not a change of the look by the player: the runtime (non-persisting)
+            -- clothing states — a raised bandana — are carried, never dropped by this re-render.
+            local look = WCSync.withRuntimeStates(src, result, t.charid)
+            WCSync.broadcast(src, look)
+            TriggerClientEvent('w_creators:client:grooming', src, look)
             WCDebug.log('grooming', 'character %s grew a stage', t.charid)
         end
         return true
