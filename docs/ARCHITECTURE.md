@@ -755,3 +755,95 @@ during creator (client cleanup + server session cleanup).
 | `/starting`, open isolation events | REMOVE | Exploitable (A1–A3) |
 | `/spawnprop` | REMOVE from production (dev tools, off) | Unrelated to characters |
 | `data/features.lua` raw ids | REPLACE | `shared/morphology.lua` |
+
+---
+
+## 16. Callback and event catalogue (binding)
+
+All callbacks are `w.callback.register(name, function(src, ...) ... end)` on the server and
+`w.callback.await(name, false, ...)` on the client; all return a `WCResult`. `data` fields listed
+below are the `data` of an `ok` result. Every callback applies `WCSecurity.rate` and type checks.
+
+### 16.1 Characters
+| Callback | Args | `data` / behaviour |
+|---|---|---|
+| `w_creators:characters:list` | — | `{characters = [{charid, name, firstname, lastname, dob, age, sex, lastLocation, job, cash, bank, gold, appearance}], slots, canCreate, deletion = {enabled, holdTime, typed}}` — `lastLocation` is the locale key of the nearest spawn point label or nil |
+| `w_creators:characters:select` | `charid` | ownership + per-player lock → `Bridge.LoginCharacter` → wait until `Bridge.GetCharId(src) == charid` (timeout 10 s) → load appearance. `{appearance}`; or `{needsAppearance = true, token, sex?}` when the character has no appearance row (repair path → creator in appearance-only mode) |
+| `w_creators:characters:loaded` | — | valid only after a successful `select`/`create`; marks the character active (`WCCharacters.setActive`), broadcasts the appearance, then starts the spawn flow (grant + `w_creators:client:selectSpawn` or `w_creators:client:spawn`). `{spawn = 'selector'|'direct'|'event'}` |
+| `w_creators:characters:beginCreate` | — | service `characterCreation` + free slot → one-shot grant. `{token}` |
+| `w_creators:characters:create` | `token, identity {firstname, lastname, dob}, app` | grant valid → `WCIdentity.validate` (skipped for appearance-only repair) → `AppearanceSchema.sanitize` with creator sections; starting clothing restricted to `Config.Creator.startingClothing` → `TriggerEvent('w_creators:server:characterCreated', src)` → `Bridge.RegisterCharacter` → appearance row + `starter` ownership in one transaction. `{appearance, charid}` |
+| `w_creators:characters:cancelCreate` | `token` | releases the grant |
+| `w_creators:characters:delete` | `charid, confirmText?` | service `characterDeletion`; ownership; when `typedConfirmation`, `confirmText` must equal the character's full name. Deletes framework character + appearance + owned clothes + outfits |
+
+### 16.2 Scene
+| Callback | Args | Behaviour |
+|---|---|---|
+| `w_creators:scene:prepare` | — | isolates the player in bucket `src` **only if** the player has no active character, is switching characters (server-tracked), or holds a store session with a fitting room; records that w_creators set the bucket |
+| `w_creators:scene:registerPed` | `netId` | unchanged checks (owner, model, distance from anchor, player isolated) |
+| `w_creators:scene:release` | — | resets the bucket to 0 **only if** w_creators set it for this player |
+Legacy net events `w_creators:server:isolate`, `PersonaCreatorHandler.setPlayerRoutingBucket`,
+`PersonaCreatorHandler.setRoutingBucket`, `w_creators:server:rejoinWorld` map to the same guarded functions.
+
+### 16.3 Spawn / respawn
+| Name | Kind | Behaviour |
+|---|---|---|
+| `w_creators:spawn:choose` | callback `pointId` | requires `SpawnPending[src]`; `'__last'` needs `lastLocation` service + valid last position; otherwise an enabled point id. Resolves coords server-side, clears the grant, bucket 0, fires `w_creators:client:spawn(pos, {kind})`. Legacy event `w_creators:server:spawnAt` → same |
+| `w_creators:client:selectSpawn` | server→client | `{last = {x,y,z,heading,label}|nil, points = [enabled point ids in order], kind}` |
+| `w_creators:client:spawn` | server→client | `(pos {x,y,z,heading}, meta {kind = 'initial'|'login'|'switch'|'admin'})` — w_core listens to this name |
+| `w_creators:client:respawn` | server→client | admin respawn `(pos, meta)` |
+
+### 16.4 Service sessions
+| Callback | Args | `data` |
+|---|---|---|
+| `w_creators:store:open` | `locationId` | `{token, appearance, owned, prices = {[category] = price}, tintPrice, storeProfile, pricingProfile, preview (vector4 table or nil), expiresIn}` |
+| `w_creators:store:commit` | `token, opId, app` | `{appearance, charged, purchases = [{category, hash}]}` |
+| `w_creators:wardrobe:open` | `locationId|nil` | `{token, appearance, owned, outfits = [{id, name, data}], maxOutfits, outfitsEnabled}` |
+| `w_creators:wardrobe:commit` | `token, opId, app` | `{appearance}` |
+| `w_creators:outfits:save` | `token, name, equipped, states` | `{outfit, outfits}` |
+| `w_creators:outfits:update` | `token, id, equipped, states` | `{outfit, outfits}` |
+| `w_creators:outfits:rename` | `token, id, name` | `{outfit, outfits}` |
+| `w_creators:outfits:delete` | `token, id` | `{outfits}` |
+| `w_creators:barber:open` | `locationId` | `{token, appearance, growth, services = {hair={enabled,price}, facialHair={enabled,price}, details={enabled,price,eyebrows,makeup}}, sections}` |
+| `w_creators:barber:commit` | `token, opId, app` | `{appearance, charged}` |
+| `w_creators:surgery:open` | `clinicId` | `{token, appearance, price, allow, sections}` |
+| `w_creators:surgery:commit` | `token, opId, app` | `{appearance, charged}` |
+| `w_creators:session:close` | `token` | always ok (idempotent) |
+| `w_creators:client:sessionClosed` | server→client `(token, code)` | forced close (expiry, resource stop, death) → client restores the snapshot |
+
+### 16.5 Appearance and clothing states
+| Name | Kind | Behaviour |
+|---|---|---|
+| `w_creators:appearance:reload` | callback | rate-limited (1 / 10 s). `{appearance}` and re-broadcast |
+| `PersonaCreatorHandler.reloadCharacterAppearance` | legacy net event | same as above |
+| `w_creators:clothing:setState` | callback `group, value` | service `clothingActions`; group exists, value valid, applicable to the equipped items; persists when `persist`; broadcasts `w_creators:client:remoteClothingState`. `{states}` |
+| `w_creators:client:applyAppearance` | server→client `(app)` | own appearance (alias `PersonaCreatorHandler.applyCharacterAppearance`) |
+| `w_creators:client:applyRemoteAppearance` | server→client `(serverId, app)` | |
+| `w_creators:client:remoteClothingState` | server→client `(serverId, group, value)` | |
+| `w_creators:client:forgetRemote` | server→client `(serverId)` | on drop / character switch |
+| `w_creators:client:grooming` | server→client `(app)` | hair/beard stage changed |
+| `w_creators:client:openSurgery` / `openStore` / `openBarber` / `openWardrobe` | server→client `(locationId)` | server exports; the client then calls the matching `open` callback (which re-validates) |
+| `w_creators:server:characterCreated` | server-local `(src)` | fired before the framework login of a new character (w_lib) |
+| `w_creators:server:appearanceChanged` | server-local `(src, charid, kind)` | after any committed appearance change |
+
+## 17. Client flows per domain (who calls what)
+
+- **Selector** (`client/characters/selector.lua`): scene prepare → list → preview peds via
+  `CreatorScene.create` (one at a time) → select/create/delete → on `select` ok:
+  `WCState.set(app)`, `Appearance.RestorePlayer(app)`, then `characters:loaded`.
+- **Creator** (`client/creator/creator.lua`): `beginCreate` → gender scene → `WCEditor.open(ped,
+  'creator', AppearanceSchema.default(sex), {sections = all, identity = {...}, onCommit = create})` →
+  on ok: `Appearance.SetPlayerModel(sex)`, `RestorePlayer(app)`, release scene, `characters:loaded`.
+- **Store / wardrobe / barber / surgery**: `<kind>:open` → (store: fitting-room teleport + isolation;
+  others: stay in place, frozen) → `WCPreviewEnv.enter` → `WCEditor.open(PlayerPedId(), mode, data.appearance,
+  {sections, context, onCommit = <kind>:commit})` → on success `WCState.set(result.appearance)` +
+  `Appearance.RestorePlayer`; on cancel/close/death/resource stop: `Appearance.RestorePlayer(snapshot)`,
+  `session:close`, `WCPreviewEnv.exit`, leave fitting room.
+- **Clothing actions** (`client/clothing/states.lua`): keybind/command/export → `WCPanel.open` with
+  the tree from `WCClothingStates.actions(WCState.appearance)` → action: optional animation (timeout,
+  cancel-safe) → apply locally → `clothing:setState` → on failure revert to the previous state.
+- **Respawn** (`client/respawn/respawn.lua`): state machine; `Resurrect` export; post-resurrect
+  `Appearance.RestorePlayer()`.
+- **Locations** (`client/services/locations.lua`): builds prompts/blips/NPCs for every usable
+  location of every enabled service type (`WCLocations.active`), dispatching to
+  `WCStore.open(id)`, `WCWardrobe.open(id)`, `WCBarber.open(id)`, `WCSurgery.open(id)`; rebuilds on
+  language change; removes everything on resource stop.
