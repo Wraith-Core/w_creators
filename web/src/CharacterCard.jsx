@@ -2,16 +2,22 @@ import React from 'react';
 import { CURRENCY_ICONS } from './currencyIcons';
 import { Frame } from './Chrome';
 const money=n=>(Number(n)||0).toLocaleString('en-US');
+const present=v=>v!==undefined&&v!==null&&String(v).trim()!=='';
 export default function CharacterCard({ data, strings: L }) {
-  // Five chips of identical structure: a label on one side and a value on the other. The name
-  // and the job are texts with no icon, and the balances are numbers with their currency's icon.
+  // Chips of identical structure: a label on one side and a value on the other. The identity rows
+  // are texts with no icon (a row without a value is left out), and the balances are numbers with
+  // their currency's icon.
   const rows = [
-    { key: 'name', label: L.name || '', value: data.name,               text: true },
-    { key: 'job',  label: L.job || '',  value: data.job || '',           text: true },
+    { key: 'name',         label: L.name || '',         value: data.name,         text: true },
+    { key: 'age',          label: L.age || '',          value: data.age,          text: true, optional: true },
+    { key: 'dob',          label: L.dob || '',          value: data.dob,          text: true, optional: true },
+    { key: 'gender',       label: L.gender || '',       value: data.gender,       text: true, optional: true },
+    { key: 'lastLocation', label: L.lastLocation || '', value: data.lastLocation, text: true, optional: true },
+    { key: 'job',          label: L.job || '',          value: data.job || '',    text: true },
     { key: 'cash', label: L.cash || '', value: '$' + money(data.cash), icon: CURRENCY_ICONS.money },
     { key: 'bank', label: L.bank || '', value: '$' + money(data.bank), icon: CURRENCY_ICONS.money },
     { key: 'gold', label: L.gold || '', value: money(data.gold),       icon: CURRENCY_ICONS.gold },
-  ];
+  ].filter(r => !r.optional || present(r.value));
   return (
     <div className="wst-panel charcard">
       <Frame/>
@@ -28,4 +34,3 @@ export default function CharacterCard({ data, strings: L }) {
     </div>
   );
 }
-

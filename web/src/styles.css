@@ -138,6 +138,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px;
 .confirmation { position: relative; background: var(--panel-fill); box-shadow: 0 15px 80px #000b; padding: 1.7em; width: min(24em, 85vw); text-align: center; }
 .confirmation h2 { font: 1.45em/1.5 var(--font-display); margin: .3em 0 1em; }
 .confirmation p { font-size: .95em; color: var(--wc-dim); margin: 1.5em 0; overflow-wrap: anywhere; }
+.price-lines { margin: -.6em 0 1.5em; font-size: .88em; color: var(--wc-dim); text-align: start; }
+.price-lines div { display: flex; justify-content: space-between; gap: 1em; padding: .3em 0; border-bottom: 1px solid #ffffff14; }
+.price-lines dt, .price-lines dd { margin: 0; overflow-wrap: anywhere; }
+.price-lines .price-total { border-bottom: 0; color: #ddd; font-weight: 600; }
 .confirmation-actions { display: flex; justify-content: center; gap: .7em; font-size: .85em; }
 .confirmation-actions button { flex: 1; }
 /* The selection card shares the editor's art rather than maintaining another skin. */
