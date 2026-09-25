@@ -275,14 +275,15 @@ class EnvironmentHudTests(unittest.TestCase):
     def cycle(self):
         self.run('clearLog(); WCPreviewEnv.enter(); tick(0); WCPreviewEnv.exit()')
 
-    def test_a_hidden_hud_stays_hidden_after_the_visit(self):
+    def test_a_hidden_radar_stays_hidden_after_the_visit(self):
         self.run('function IsRadarHidden() return true end')
         self.cycle()
-        self.assertEqual(count(self.rt, 'TriggerEvent:hud:client:showui'), 0)
-        self.assertEqual(count(self.rt, 'TriggerEvent:hud:client:Hideui'), 0)
         self.assertEqual(count(self.rt, 'setRadarVisible'), 0)
         # the game HUD was muted per frame all the same
         self.assertGreater(count(self.rt, 'DisplayRadar'), 0)
+        # the w_hud HUD no longer follows the radar (store notes): hidden for the visit, given back
+        self.assertEqual(count(self.rt, 'TriggerEvent:hud:client:Hideui'), 1)
+        self.assertEqual(count(self.rt, 'TriggerEvent:hud:client:showui'), 1)
 
     def test_a_shown_hud_is_hidden_and_given_back(self):
         self.run('function IsRadarHidden() return false end')

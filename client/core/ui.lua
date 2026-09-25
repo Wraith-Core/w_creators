@@ -1,9 +1,9 @@
 -- =====================================================================
 --  client/core/ui.lua  —  screen transitions and HUD visibility (ARCHITECTURE.md §3.2)
 --  Kept globals: WCurtain, StartFade, EndFade, DismissLoadingScreen, SuppressGameHud,
---  SetCustomHudVisible, SetWorldUiVisible. Every optional integration (w_loading, w_hud,
---  vorp_core, chat) is reached through events/exports that are silently dropped when the
---  resource is absent, so none of them is a hard dependency.
+--  SetCustomHudVisible, SetPlayerHudVisible, SetWorldUiVisible. Every optional integration
+--  (w_loading, w_hud, vorp_core, chat) is reached through events/exports that are silently
+--  dropped when the resource is absent, so none of them is a hard dependency.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
@@ -113,15 +113,24 @@ function SetCustomHudVisible(visible)
     TriggerEvent(visible and 'hud:client:showui' or 'hud:client:Hideui')
 end
 
+--- Show/hide the w_hud HUD for good, also for a player in play (the fitting room, the wardrobe,
+--  the barber's and the surgeon's chair). 'hud:client:Hideui' only sets w_hud's show flag, and
+--  for a logged-in player w_hud's own tick sets that flag back within 50 ms; its main gate
+--  (hideStement) holds, and also governs its DisplayRadar calls, so the stement setter goes with
+--  it. Both are setters, not toggles (safe to repeat), and neither is the player's own HUD switch
+--  (w_hud's showUI): showing them again never undoes a HUD the player had turned off himself.
+---@param visible boolean
+function SetPlayerHudVisible(visible)
+    SetCustomHudVisible(visible)
+    TriggerEvent(visible and 'hud:client:showUiWithHoutStement' or 'hud:client:hideUiWithHoutStement')
+end
+
 --- Show/hide every server interface around the character scenes (HUD, map, counters, chat).
---  'hud:client:Hideui' only sets w_hud's show flag; its main gate (hideStement) also governs its
---  DisplayRadar calls, so the stement setter is needed too (a setter, not a toggle: safe to repeat).
 --  vorp_core's counter is deliberately not re-shown: its own thread shows it when the map comes
 --  back and respects Config.HideUi. The chat hides itself; only its log is cleared.
 ---@param visible boolean
 function SetWorldUiVisible(visible)
-    SetCustomHudVisible(visible)
-    TriggerEvent(visible and 'hud:client:showUiWithHoutStement' or 'hud:client:hideUiWithHoutStement')
+    SetPlayerHudVisible(visible)
     if not visible then
         TriggerEvent('vorp:showUi', false)
         TriggerEvent('chat:clear')

@@ -242,7 +242,9 @@ dictionary and runs every refresher in `pcall`.
 curtain or a screen fade raised by this resource is up), `WCurtain.restore(force?)` (fade in + lower
 the curtain when held, always with `force`; the resource-stop handler uses it so an interrupted
 transition never leaves the screen black), `StartFade(ms, key)`, `EndFade(ms)` (condition waits with a
-timeout), `DismissLoadingScreen()`, `SuppressGameHud()`, `SetCustomHudVisible(b)`, `SetWorldUiVisible(b)`.
+timeout), `DismissLoadingScreen()`, `SuppressGameHud()`, `SetCustomHudVisible(b)`, `SetPlayerHudVisible(b)`
+(the w_hud show flag plus its stement gate: the one that holds for a player in play, whose show flag
+w_hud's own tick sets back), `SetWorldUiVisible(b)`.
 
 **`Appearance`** (the one pipeline):
 - `RestoreCharacter(ped, app, opts?)` → `ok, err, failedCategories`. It never throws: callers check
@@ -305,8 +307,10 @@ the player is still inside the room.
 **`WCPreviewEnv`**: `enter(opts)` / `exit()` — symmetric and idempotent; `active()`, `changes()`.
 `opts`: `ped`, `controls`, `hud`, `worldUi`, `holster` (`HidePedWeapons`; `exit` does not re-draw),
 `freeze`, `invincible`, `clearTasks`, `coords` (restored on exit), `time`, `weather`. One per-frame
-thread runs only while active. `exit()` never calls `DisplayRadar` (the radar belongs to
-`w.setRadarVisible`). On resource stop: exit, NUI focus off, camera closed, and the player unfrozen /
+thread runs only while active. `hud` hides the w_hud HUD (`SetPlayerHudVisible`) for the whole visit,
+whatever the radar shows, and `exit()` gives it back first (a w_hud restarted mid-visit is hidden
+again); the radar wish is turned off and back on only when the radar was shown. `exit()` never calls
+`DisplayRadar` (the radar belongs to `w.setRadarVisible`). On resource stop: exit, NUI focus off, camera closed, and the player unfrozen /
 made visible / HUD restored only if a w_creators flow was holding them.
 
 **`WCEditor`** — the one appearance editor session (creator, surgery, barber, store, wardrobe):
@@ -336,7 +340,8 @@ from `referenceYear` or `WCUtil.today()` and are left out when the date is unkno
 - Character card (§8.1): `cardPayload(card)` → the `charCard` message for a `characters:list` card
   (labels translated, `sex` → translated gender, `lastLocation` key translated, the appearance
   never sent), `showCard(card|nil)`, `cardStrings()`, `CARD_STRINGS`.
-- Also `payload(s)`, `strings()`, `action(data)`, `cameraAction(data)`, `validate`, `STRINGS`,
+- Also `payload(s)`, `strings()`, `action(data)`, `cameraAction(data)` (applies now),
+  `cameraRequest(data, cb)` (the `editor:camera` callback: parks a request made while busy, §8.3), `validate`, `STRINGS`,
   `uiLocale()`, `uiDir()`.
 
 **`WCEditorTree`** (tree builder, `client/editor/tree.lua`): `build(s)` → `root, registry`, `stages`,
@@ -875,7 +880,12 @@ stored −1..1 and shown −100..100.
   - `op='set'` one control; `op='setMany'` `values = {[control] = value}` (pads, one undo step);
     `op='invoke'` action/text nodes; `op='undo'|'reset'|'random'`; `op='save'` (creator sends
     `identity`); `op='cancel'` (discard and close).
-- `editor:camera` `{id, preset?|rotate?|zoom?|reset?|pick?}`
+- `editor:camera` `{id, preset?|rotate?|zoom?|reset?|pick?|hide?}`. A request that arrives while an
+  operation runs (a live preview, a set) is not refused: it is parked and applied the moment the
+  operation ends, then answered, so the view the NUI names is the one the camera took. Latest wins
+  per slot (a view — preset, pick, reset — replaces the parked view and drops parked turns / zooms;
+  turns and zooms add up; the hide toggle has its own slot); a replaced request answers `ok = false`,
+  and so does one still parked when the session closes.
 - `panel:action` `{id, control, value?}`, `panel:close` `{id}`
 - One NUI action = one Lua operation: the NUI locks while a request is pending; Lua rejects
   concurrent ops per session (`BUSY`); the server replays a duplicate `opId` (§3.3 `WCSessions.commit`).

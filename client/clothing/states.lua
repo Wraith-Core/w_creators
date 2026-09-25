@@ -77,8 +77,49 @@ local CATEGORY_LABELS = {
 local FEMALE_LABELS = {
     vestTuck = { under = 'إدخال المشدّ تحت البنطال', over = 'إخراج المشدّ فوق البنطال' },
 }
--- A body state the game names (the body-part fix): the label carries the game's own name
-local BODY_STATE_LABELS = { bodyUpper = 'الجزء العلوي: %s', bodyLower = 'الجزء السفلي: %s' }
+-- ★ A body state (the body-part fix) is one of the game's own state names ('base_coat_open_glove').
+--   The raw name is never shown: it is read as words, longest match first, and each word is a
+--   dictionary key. A part with no word ('base', 'shirt', 'dummy', a number) is skipped; a name
+--   with no known word at all becomes "<body part> NN" (its place in the group's list).
+local BODY_WORDS = {
+    { 'under_ripped_pants', 'تحت البنطال الممزّق' },
+    { 'fingerless_glove', 'قفاز بلا أصابع' },
+    { 'gunslinger_glove', 'قفاز المسلّح' },
+    { 'archer_glove', 'قفاز الرماية' },
+    { 'closed_collar', 'الياقة مغلقة' },
+    { 'rolled_sleeve', 'أكمام مشمّرة' },
+    { 'open_collar', 'الياقة مفتوحة' },
+    { 'full_sleeve', 'أكمام كاملة' },
+    { 'under_pants', 'تحت البنطال' },
+    { 'under_boots', 'تحت الحذاء' },
+    { 'under_spats', 'تحت الطماق' },
+    { 'under_chaps', 'تحت الشابز' },
+    { 'short_boots', 'حذاء قصير' },
+    { 'short_pants', 'بنطال قصير' },
+    { 'coat_open', 'المعطف مفتوح' },
+    { 'mask_up', 'على الوجه' },
+    { 'overalls', 'مع الأفرول' },
+    { 'stocking', 'جوارب طويلة' },
+    { 'tucked', 'مدسوس في البنطال' },
+    { 'tuck', 'مدسوس في البنطال' },
+    { 'hidden', 'مخفي' },
+    { 'glove', 'قفاز' },
+    { 'vest', 'مع الصديري' },
+    { 'gown', 'ثوب' },
+}
+for _, entry in ipairs(BODY_WORDS) do entry.parts = select(2, entry[1]:gsub('_', '_')) + 1 end
+
+-- The short word a non-default state shows on the radial menu's bubble (the garment's own picture
+-- says which garment; 'off' is drawn as a cross, not written).
+local STATE_SHORT = {
+    bandana  = { up = 'على الوجه' },
+    sleeves  = { rolled = 'مشمّرة' },
+    collar   = { open = 'مفتوحة' },
+    boots    = { under = 'تحت البنطال' },
+    vestTuck = { under = 'تحت البنطال' },
+    loadout  = { left = 'يسار' },
+}
+local BODY_CUSTOM = 'مخصّص' -- a body part set by hand (not 'auto'); its words are in the action
 
 -- Which clip of Config.ClothingStates.animations[group] ('up' | 'down') a target value plays when
 -- the animation has no clip named after the value itself.
@@ -222,13 +263,44 @@ end
 local function taxonomyIndex()
     local groups, subs = {}, {}
     for gi, g in ipairs((Config.Clothing and Config.Clothing.taxonomy) or {}) do
-        groups[g.id] = { label = g.label, order = g.order or gi, index = gi }
+        groups[g.id] = { label = g.label, order = g.order or gi, index = gi, icon = g.icon }
         for si, sub in ipairs(g.subs or {}) do
-            subs[sub.id] = { label = sub.label, order = sub.order or si, index = si, group = g.id }
+            subs[sub.id] = { label = sub.label, order = sub.order or si, index = si, group = g.id, icon = sub.icon }
             if sub.category then subs[sub.category] = subs[sub.category] or subs[sub.id] end
         end
     end
     return groups, subs
+end
+
+--- The readable, translated name of a body state ('base_coat_open_glove' -> "المعطف مفتوح، قفاز").
+local function bodyStateLabel(groupId, value)
+    local parts = {}
+    for part in tostring(value):gmatch('[^_]+') do parts[#parts + 1] = part end
+    local words, seen, i = {}, {}, 1
+    while i <= #parts do
+        local matched = false
+        for _, entry in ipairs(BODY_WORDS) do
+            local n = entry.parts
+            if i + n - 1 <= #parts and table.concat(parts, '_', i, i + n - 1) == entry[1] then
+                if not seen[entry[2]] then
+                    seen[entry[2]] = true
+                    words[#words + 1] = L(entry[2])
+                end
+                i, matched = i + n, true
+                break
+            end
+        end
+        if not matched then i = i + 1 end -- 'base', 'shirt' or a word we do not know: skipped
+    end
+    if #words == 0 then
+        local def = WCClothingStates.byId[groupId]
+        local at = 0
+        for n, v in ipairs(def and def.values or {}) do
+            if v == value then at = n - 1 break end
+        end
+        return ('%s %02d'):format(L(def and def.label or ''), at)
+    end
+    return table.concat(words, L('، '))
 end
 
 local function actionLabel(app, groupId, value)
@@ -239,9 +311,10 @@ local function actionLabel(app, groupId, value)
     if bySex and bySex[value] then return bySex[value] end
     local byGroup = ACTION_LABELS[groupId]
     if byGroup and byGroup[value] then return byGroup[value] end
-    if BODY_STATE_LABELS[groupId] then
+    local def = WCClothingStates.byId[groupId]
+    if def and def.mechanism == 'bodyWearable' then
         -- already translated (the game's state name is not a dictionary key); locale() passes it on
-        return L(BODY_STATE_LABELS[groupId], value)
+        return bodyStateLabel(groupId, value)
     end
     local values = Config.ClothingStates and Config.ClothingStates.valueLabels or {}
     return values[value] or value
@@ -401,7 +474,15 @@ end
 --  status: 'disabled'     the service or Config.ClothingStates is off      -> hide the menu entirely
 --          'no_character' no appearance loaded yet                          -> hide the menu entirely
 --          'ok' / 'empty' a real answer; 'empty' means nothing is actionable right now
----@return table { status, rows = { { group, value, label, item, itemId, icon, control } } }
+--
+--  ★ Each row also says WHICH garment it is, so a radial menu can show "what I have on me" with one
+--    picture per garment instead of one per state group: rows of one garment share `itemId`;
+--    `category` is the equipped category (a cloak under the poncho group, a closed coat under the
+--    coat group), `icon` / `iconUrl` its own clothing icon from the taxonomy, `name` its catalogue
+--    name as the store writes it ("القبعة 07 · 03"), `kind` 'body' for the body-part fix, and
+--    `stateShort` the word for a non-default state ('' when default or taken off).
+---@return table { status, rows = { { group, value, label, item, itemId, icon, iconUrl, category,
+---                categoryLabel, name, kind, stateShort, control, current } } }
 function C.actionList()
     if not enabled() then return { status = 'disabled', rows = {} } end
     if type(WCState.appearance) ~= 'table' then return { status = 'no_character', rows = {} } end
@@ -410,21 +491,70 @@ function C.actionList()
         WCDebug.warn('clothing', 'the action list could not be built: %s', tostring(tree))
         return { status = 'error', rows = {} }
     end
+    local app = WCState.appearance
+    local _, subs = taxonomyIndex()
+    local base = ('nui://%s/web/build/tex/cloth/'):format(GetCurrentResourceName())
+    local garments = {} -- [group] = the garment fields, the same for every action of the group
+    local function garmentOf(groupId, item)
+        if garments[groupId] then return garments[groupId] end
+        local def = WCClothingStates.byId[groupId] or {}
+        local category = WCClothingStates.category(app, groupId)
+        local body = def.mechanism == 'bodyWearable'
+        local info = category and subs[category] or subs[item.id or ''] or {}
+        local g = {
+            category = tostring(category or ''),
+            kind = body and 'body' or 'garment',
+            -- the body item is not a catalogue garment: its name is the group's ("Upper Body Fit")
+            categoryLabel = tostring(L((body and def.label) or (category and WCCatalog.label(category)) or item.label or '')),
+            icon = (not body and type(info.icon) == 'string') and info.icon or '',
+            name = '',
+        }
+        g.iconUrl = g.icon ~= '' and (base .. g.icon .. '.png') or ''
+        -- the model / variant of the worn hash inside ITS category (a hash the catalogue lists under
+        -- two categories must not be named after the other one); unknown to the catalogue: no name
+        local equipped = type(app.clothing) == 'table' and type(app.clothing.equipped) == 'table' and app.clothing.equipped or {}
+        local worn = not body and category and WCCatalog.category(app.sex, category)
+        local found = worn and worn.hashes[WCUtil.u32(equipped[category]) or 0]
+        if found then
+            g.name = ('%s · %02d'):format(WCCatalog.styleLabel(category, found.model), found.variant)
+        end
+        garments[groupId] = g
+        return g
+    end
+    local function stateShort(groupId, current)
+        local def = WCClothingStates.byId[groupId]
+        if not def or current == '' or current == def.default or current == 'off' then return '' end
+        if def.mechanism == 'bodyWearable' then return tostring(L(BODY_CUSTOM)) end
+        local key = STATE_SHORT[groupId] and STATE_SHORT[groupId][current]
+        return key and tostring(L(key)) or ''
+    end
     local rows = {}
     for _, group in ipairs(tree) do
         for _, item in ipairs(group.items or {}) do
             for _, action in ipairs(item.actions or {}) do
+                local groupId, current = tostring(action.group or ''), tostring(action.current or '')
+                local okG, g = pcall(garmentOf, groupId, item)
+                if not okG or type(g) ~= 'table' then
+                    WCDebug.warn('clothing', 'the garment of %s could not be read: %s', groupId, tostring(g))
+                    g = { category = '', kind = 'garment', categoryLabel = '', icon = '', iconUrl = '', name = '' }
+                end
                 rows[#rows + 1] = {
-                    group   = tostring(action.group or ''),
+                    group   = groupId,
                     value   = tostring(action.value or ''),
                     -- C.available answers locale keys: translated here to the player's language, since
                     -- the caller (the wheel) shows them as they are
                     label   = tostring(L(action.label or '')),
                     item    = tostring(L(item.label or '')),  -- the garment it acts on
                     itemId  = tostring(item.id or ''),
-                    icon    = tostring(action.group or ''),   -- art id; the caller resolves it
+                    icon    = g.icon,                         -- the taxonomy's clothing icon ('' = none)
+                    iconUrl = g.iconUrl,
+                    category = g.category,
+                    categoryLabel = g.categoryLabel,
+                    name    = g.name,
+                    kind    = g.kind,
+                    stateShort = stateShort(groupId, current),
                     control = tostring(action.control or ''),
-                    current = tostring(action.current or ''),   -- the state the garment is in now
+                    current = current,   -- the state the garment is in now
                 }
             end
         end

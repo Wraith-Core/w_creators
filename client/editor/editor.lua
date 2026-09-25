@@ -3,15 +3,17 @@
 --  The one appearance editor session (creator, surgery, barber, store, wardrobe).
 --
 --  session = { id, mode, ped, working, saved, history (undo, max 30), registry (control -> entry),
---              busy, opts, context, sections, draft, cache, camera }
+--              busy, opts, context, sections, draft, cache, camera, parkedCamera }
 --  Every NUI value is validated against the session registry (built with the tree by
 --  WCEditorTree) and clamped; mutations go through AppearanceSchema / WCRules on a copy of the
 --  working appearance, the ped is updated with Appearance.ApplyDiff(ped, before, after) and a
 --  failed render reverts to `before` (INVALID_COMPONENT). One operation at a time per session.
 --
 --  NUI callbacks: editor:action { id, op, control?, value?, values?, identity?, opId }
---                 editor:camera { id, preset? | rotate? | zoom? | reset? | pick? }
---  Both answer { ok, code?, message? (translated), payload?, closed?, camera? }.
+--                 editor:camera { id, preset? | rotate? | zoom? | reset? | pick? | hide? }
+--  Both answer { ok, code?, message? (translated), payload?, closed?, camera? }. An operation made
+--  while another runs is BUSY; a camera request is parked instead (latest wins) and answered once
+--  applied, when the operation ends.
 -- =====================================================================
 
 WCEditor = {}
@@ -591,10 +593,108 @@ local function mouth(s, open)
 end
 E.mouth = mouth
 
+-- ---------------------------------------------------------------------
+--  Camera requests that arrive while the editor is busy
+--  An operation (a live preview, a set, a save) can yield while the ped renders. A camera request
+--  that came in meanwhile used to be refused and was lost: the owner opened head › mask during a
+--  preview, the camera stayed on the whole body and the header kept naming it. Such a request is
+--  parked instead, applied the moment the operation ends (before the next one can start) and only
+--  then answered, so the view the NUI names is always the one the camera took. Latest wins, per slot:
+--    view  a preset, a pick or a reset frames the character anew and faces it forward: a newer one
+--          replaces the parked one, and drops the parked turn / zoom it would undo anyway;
+--    turn, zoom  relative steps (a drag sends many): a newer step is added to the parked one;
+--    hide  the hide-clothes toggle changes what is drawn, not where the camera looks: its own slot,
+--          so the clothing stage's "put the clothes back on" is never lost to the view sent with it.
+--  A replaced request is answered { ok = false } at once: the NUI keeps what it shows until the
+--  latest one lands.
+-- ---------------------------------------------------------------------
+local PARK_ORDER = { 'hide', 'view', 'turn', 'zoom' }
+local PARK_STEPS = { turn = { key = 'rotate', min = -180, max = 180 }, zoom = { key = 'zoom', min = -4, max = 4 } }
+
+local function answerCamera(cb, out)
+    if type(cb) ~= 'function' then return end
+    local ok, err = pcall(cb, out)
+    if not ok then WCDebug.warn('editor', 'camera answer failed: %s', tostring(err)) end
+end
+
+--- The slot of a camera request, in the branch order of E.cameraAction; nil = nothing to park.
+local function parkSlot(data)
+    if data.hide ~= nil then return 'hide' end
+    if data.reset or type(data.pick) == 'table' then return 'view' end
+    if data.rotate ~= nil then return 'turn' end
+    if data.zoom ~= nil then return 'zoom' end
+    if data.preset ~= nil then return 'view' end
+    return nil
+end
+
+--- Park a camera request behind the running operation (the latest per slot). Returns false when
+--  there is nothing to park (the caller refuses it right away, as before).
+local function parkCamera(s, data, cb)
+    local slot = parkSlot(data)
+    if not slot then return false end
+    local parked = s.parkedCamera or {}
+    local req = { data = data, cb = cb }
+    local step = PARK_STEPS[slot]
+    if step then
+        local value = WCUtil.number(data[step.key], step.min, step.max, nil)
+        if not value then return false end
+        local prev = parked[slot]
+        if prev then
+            value = math.max(step.min, math.min(step.max, value + prev.data[step.key]))
+            answerCamera(prev.cb, { ok = false })
+        end
+        req.data = { id = data.id, [step.key] = value }
+    else
+        if parked[slot] then answerCamera(parked[slot].cb, { ok = false }) end
+        if slot == 'view' then
+            for _, other in ipairs({ 'turn', 'zoom' }) do
+                if parked[other] then answerCamera(parked[other].cb, { ok = false }) end
+                parked[other] = nil
+            end
+        end
+    end
+    parked[slot] = req
+    s.parkedCamera = parked
+    return true
+end
+
+--- Apply what was parked, now that the editor is free, each answered with what it did. A parked
+--  hide renders (the editor is busy again meanwhile): what arrives then is parked and applied by
+--  this same loop.
+local function flushCamera(s)
+    while current == s and not s.busy and s.parkedCamera do
+        local parked, req = s.parkedCamera, nil
+        for _, slot in ipairs(PARK_ORDER) do
+            if parked[slot] then
+                req, parked[slot] = parked[slot], nil
+                break
+            end
+        end
+        if not req then
+            s.parkedCamera = nil
+            break
+        end
+        local ok, out = pcall(E.cameraAction, req.data)
+        if not ok then WCDebug.warn('editor', 'parked camera request failed: %s', tostring(out)) end
+        answerCamera(req.cb, ok and out or { ok = false })
+    end
+end
+
+--- The session closes: nothing parked can be applied any more.
+local function dropCamera(s)
+    local parked = s.parkedCamera
+    s.parkedCamera = nil
+    if not parked then return end
+    for _, slot in ipairs(PARK_ORDER) do
+        if parked[slot] then answerCamera(parked[slot].cb, { ok = false }) end
+    end
+end
+
 local function closeSession(s)
     if current ~= s then return end
     current = nil
     s.closed = true
+    dropCamera(s)
     closePrompts(s)
     send({ type = 'editorClose' })
     focus(false)
@@ -1133,11 +1233,14 @@ function E.action(data)
     elseif not WCResult.is(result) then
         result = WCResult.fail('INTERNAL_ERROR')
     end
+    -- the camera requests that came in while this ran go now, before the next operation can start
+    -- and before the answer is built: a parked hide toggle changes the payload's `hidden`
+    flushCamera(s)
     -- a preview runs at frame rate and the frame does not read its answer: no tree rebuilt for it
     return respond(s, result, data.op == 'preview')
 end
 
---- Handle one editor:camera request.
+--- Apply one editor:camera request now and return its answer ({ ok = false } while busy).
 function E.cameraAction(data)
     local s = current
     if type(data) ~= 'table' or not s or (data.id ~= nil and data.id ~= s.id) or s.busy then return { ok = false } end
@@ -1184,9 +1287,22 @@ function E.cameraAction(data)
     return { ok = true, camera = s.camera }
 end
 
+--- The editor:camera NUI callback. A request of this session that arrives while an operation
+--  runs is parked and answered once applied (flushCamera); any other is applied and answered now.
+function E.cameraRequest(data, cb)
+    local s = current
+    if s and s.busy and type(data) == 'table' and (data.id == nil or data.id == s.id)
+        and parkCamera(s, data, cb) then
+        return
+    end
+    answerCamera(cb, E.cameraAction(data))
+    -- a hide toggle renders with the editor busy: what was parked meanwhile goes now
+    if s then flushCamera(s) end
+end
+
 if type(RegisterNUICallback) == 'function' then
     RegisterNUICallback('editor:action', function(data, cb) cb(E.action(data)) end)
-    RegisterNUICallback('editor:camera', function(data, cb) cb(E.cameraAction(data)) end)
+    RegisterNUICallback('editor:camera', function(data, cb) E.cameraRequest(data, cb) end)
     RegisterNUICallback('editor:identity', function(data, cb) cb(E.identityCheck(data)) end)
 end
 

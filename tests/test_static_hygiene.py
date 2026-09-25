@@ -41,8 +41,8 @@ EXTERNAL = {
     'hospital:client:Revive': "w_ambulancejob's revive, triggered by the spawn module for a downed player",
     'hud:client:showui': 'HUD resources (client/core/ui.lua SetCustomHudVisible)',
     'hud:client:Hideui': 'HUD resources (client/core/ui.lua SetCustomHudVisible)',
-    'hud:client:showUiWithHoutStement': 'HUD resources (client/core/ui.lua SetWorldUiVisible)',
-    'hud:client:hideUiWithHoutStement': 'HUD resources (client/core/ui.lua SetWorldUiVisible)',
+    'hud:client:showUiWithHoutStement': 'HUD resources (client/core/ui.lua SetPlayerHudVisible)',
+    'hud:client:hideUiWithHoutStement': 'HUD resources (client/core/ui.lua SetPlayerHudVisible)',
     'vorp:showUi': 'vorp_core HUD (client/core/ui.lua)',
     'chat:clear': 'the chat resource (client/core/ui.lua)',
     # events other resources send to this one

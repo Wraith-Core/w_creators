@@ -73,7 +73,7 @@ end
 --  opts (every field optional; defaults in brackets):
 --    ped        the previewed ped [PlayerPedId()]
 --    controls   disable all controls every frame [true]
---    hud        hide the game HUD, the radar and the w_hud HUD [true]
+--    hud        hide the game HUD and the w_hud HUD for the whole visit, and the radar when shown [true]
 --    worldUi    also hide every server interface (SetWorldUiVisible) [false]
 --    holster    holster the ped's weapon [true]
 --    freeze     freeze the ped in place [true]
@@ -118,14 +118,20 @@ function Env.enter(opts)
     end
 
     if opts.hud ~= false then
-        -- the game HUD is muted per frame either way; the w_hud HUD and the radar wish are
-        -- turned off (and back on at exit) only when they were on: a player who had hidden
-        -- them keeps them hidden after the visit
+        -- the game HUD is muted per frame
         c.suppress = true
+        -- the w_hud HUD goes for the whole visit and comes back at exit, whatever the radar shows.
+        -- It used to follow the radar, and in a store the radar is often off (an interior, a
+        -- w_map minimap that keeps the native radar dormant): the HUD stayed up in the fitting
+        -- room. SetPlayerHudVisible touches only the flags this visit sets, never the player's own
+        -- HUD switch, so giving it back cannot show a HUD he had turned off.
+        SetPlayerHudVisible(false)
+        c.hud = true
+        -- the radar wish is turned off (and back on at exit) only when it was on: a player who had
+        -- hidden the radar keeps it hidden after the visit
         if IsRadarShown() then
-            SetCustomHudVisible(false)
             pcall(w.setRadarVisible, false)
-            c.hud = true
+            c.radar = true
         end
     end
     if opts.worldUi then
@@ -158,18 +164,17 @@ function Env.exit()
     active, changed = false, nil
     local ped = c.ped
 
+    -- the HUD first: whatever fails further down, the player never leaves the visit without it
+    if c.hud then pcall(SetPlayerHudVisible, true) end
+    -- w_lib is the one radar authority (HUD wish, radar mode, custom minimap): never
+    -- DisplayRadar(true) directly.
+    if c.radar then pcall(w.setRadarVisible, true) end
     if c.weather then
         call('ClearOverrideWeather')
         call('ClearWeatherTypePersist')
     end
     if c.time then NetworkClearClockTimeOverride() end
     if c.worldUi then SetWorldUiVisible(true) end
-    if c.hud then
-        SetCustomHudVisible(true)
-        -- w_lib is the one radar authority (HUD wish, radar mode, custom minimap): never
-        -- DisplayRadar(true) directly.
-        pcall(w.setRadarVisible, true)
-    end
     -- the game HUD was suppressed per frame, so it comes back
     if c.suppress then DisplayHud(true) end
     if pedExists(ped) then
@@ -194,6 +199,12 @@ end
 function Env.changes()
     return changed and WCUtil.copy(changed) or nil
 end
+
+-- w_hud restarted during a visit comes back with its HUD shown: it is hidden again for the rest of
+-- the visit (exit gives it back as usual)
+AddEventHandler('onClientResourceStart', function(resource)
+    if resource == 'w_hud' and active and changed and changed.hud then pcall(SetPlayerHudVisible, false) end
+end)
 
 --- Did a w_creators flow hold the player when the resource stopped?
 local function heldByUs(c)

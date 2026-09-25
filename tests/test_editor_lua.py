@@ -426,12 +426,16 @@ class OperationTests(EditorBase):
         r = self.action(op='set', control='clothing.hats.variant', value=1)
         self.assertFalse(r.ok)
         self.assertEqual(r.code, 'BUSY')
-        r = self.rt.g.nui('editor:camera', self.rt.table({'id': self.rt.eval('sid()'), 'preset': 'head'}))
-        self.assertFalse(r.ok)
+        # a camera request is not refused: it waits for the operation (parked, answered later) ...
+        self.rt.run("NuiCallbacks['editor:camera']({ id = sid(), preset = 'head' }, function(r) CamAnswer = r end)")
+        self.assertIsNone(self.rt.g.CamAnswer)
         self.rt.g.tick(600)
         self.assertTrue(self.rt.g.SlowResult.ok)
         self.assertTrue(self.rt.g.SlowResult.closed)
         self.assertIsNone(self.rt.eval('WCEditor.session()'))
+        # ... and this operation closed the session: there is no view left to move
+        self.assertFalse(self.rt.g.CamAnswer.ok)
+        self.assertEqual([c.name for c in lua_list(self.rt.g.CamCalls) if c.name == 'focus'], [])
 
     def test_save_and_cancel(self):
         self.open_creator()
