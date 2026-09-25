@@ -336,8 +336,8 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .menu-row:hover:not(:disabled)::before, .menu-row:focus-visible::before { opacity: 1; }
 .menu-row:active:not(:disabled)::before { background: var(--w-paper-dim); }
 /* one cursor: while the mouse is over the list, the row it is on carries the band, not the focused one */
-.menu-list:hover .menu-row:focus-visible:not(:hover) { color: var(--w-paper); border-bottom-color: var(--w-rule); }
-.menu-list:hover .menu-row:focus-visible:not(:hover)::before { opacity: 0; }
+.menu-list:hover .menu-row:focus-visible:not(:hover), .component:hover ~ .menu-list .menu-row:focus-visible { color: var(--w-paper); border-bottom-color: var(--w-rule); }
+.menu-list:hover .menu-row:focus-visible:not(:hover)::before, .component:hover ~ .menu-list .menu-row:focus-visible::before { opacity: 0; }
 .menu-row:disabled { opacity: .4; }
 .row-label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .row-value {
@@ -371,8 +371,8 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .row-value[data-badge=new] { box-shadow: inset 0 -.14em 0 var(--w-red); }
 .menu-row:hover:not(:disabled) .row-value[data-badge], .menu-row:focus-visible .row-value[data-badge] { border-color: rgba(11, 10, 8, .45); color: var(--w-ink); }
 .menu-row:hover:not(:disabled) .row-value[data-badge=equipped], .menu-row:focus-visible .row-value[data-badge=equipped] { background: var(--w-ink); border-color: var(--w-ink); color: var(--w-paper); }
-.menu-list:hover .menu-row:focus-visible:not(:hover) .row-value[data-badge] { border-color: rgba(237, 230, 214, .35); color: var(--w-paper-dim); }
-.menu-list:hover .menu-row:focus-visible:not(:hover) .row-value[data-badge=equipped] { background: var(--w-paper); border-color: var(--w-paper); color: var(--w-ink); }
+.menu-list:hover .menu-row:focus-visible:not(:hover) .row-value[data-badge], .component:hover ~ .menu-list .menu-row:focus-visible .row-value[data-badge] { border-color: rgba(237, 230, 214, .35); color: var(--w-paper-dim); }
+.menu-list:hover .menu-row:focus-visible:not(:hover) .row-value[data-badge=equipped], .component:hover ~ .menu-list .menu-row:focus-visible .row-value[data-badge=equipped] { background: var(--w-paper); border-color: var(--w-paper); color: var(--w-ink); }
 .row-art { width: 1.2rem; height: 1.2rem; opacity: .85; }
 .row-arrow { width: .62rem; height: .62rem; opacity: .7; }
 /* the game's clothing icon (a white sketch) in an ink disc: it stays readable on the paper band */
@@ -498,13 +498,16 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .range-track { position: relative; display: block; height: 1.1rem; direction: ltr; --track: rgba(237, 230, 214, .25); --fill: var(--w-paper); }
 .slider-field:hover .range-track, .slider-field:focus-within .range-track { --track: rgba(11, 10, 8, .3); --fill: var(--w-ink); }
 .slider-field[data-off=true]:hover .range-track { --track: rgba(237, 230, 214, .25); --fill: var(--w-paper); }
-/* one cursor (as the menu rows): while the mouse is over the controls, only the row under it carries
-   the band; the row that kept focus from an earlier click or key goes back to rest */
-.component:hover .choice:focus-within:not(:hover), .component:hover .slider-field:focus-within:not(:hover) { color: var(--w-paper); border-bottom-color: var(--w-rule); }
-.component:hover .choice:focus-within:not(:hover)::before, .component:hover .slider-field:focus-within:not(:hover)::before { opacity: 0; }
-.component:hover .choice:focus-within:not(:hover) .choice-control > button { color: var(--w-paper-dim); }
-.component:hover .choice:focus-within:not(:hover) .choice-value { border-color: rgba(237, 230, 214, .35); }
-.component:hover .slider-field:focus-within:not(:hover) .range-track { --track: rgba(237, 230, 214, .25); --fill: var(--w-paper); }
+/* one cursor (as the menu rows): while the mouse is over the controls, or over the rows that follow
+   them, only the row under it carries the band; a row that kept focus from an earlier click or key
+   goes back to rest (the menu rows' side is at .menu-list:hover above) */
+.component:hover .choice:focus-within:not(:hover), .component:hover .slider-field:focus-within:not(:hover),
+.menu-list:hover ~ .component .choice:focus-within, .menu-list:hover ~ .component .slider-field:focus-within { color: var(--w-paper); border-bottom-color: var(--w-rule); }
+.component:hover .choice:focus-within:not(:hover)::before, .component:hover .slider-field:focus-within:not(:hover)::before,
+.menu-list:hover ~ .component .choice:focus-within::before, .menu-list:hover ~ .component .slider-field:focus-within::before { opacity: 0; }
+.component:hover .choice:focus-within:not(:hover) .choice-control > button, .menu-list:hover ~ .component .choice:focus-within .choice-control > button { color: var(--w-paper-dim); }
+.component:hover .choice:focus-within:not(:hover) .choice-value, .menu-list:hover ~ .component .choice:focus-within .choice-value { border-color: rgba(237, 230, 214, .35); }
+.component:hover .slider-field:focus-within:not(:hover) .range-track, .menu-list:hover ~ .component .slider-field:focus-within .range-track { --track: rgba(237, 230, 214, .25); --fill: var(--w-paper); }
 .range-track::before { content: ''; position: absolute; left: 0; right: 0; top: calc(50% - .5px); height: 1px; background: var(--track); pointer-events: none; }
 .range-track::after { content: ''; position: absolute; left: 0; top: calc(50% - 1px); width: var(--range-fill); height: 2px; background: var(--fill); pointer-events: none; }
 input[type=range] {
