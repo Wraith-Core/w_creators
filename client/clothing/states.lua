@@ -479,10 +479,11 @@ end
 --    picture per garment instead of one per state group: rows of one garment share `itemId`;
 --    `category` is the equipped category (a cloak under the poncho group, a closed coat under the
 --    coat group), `icon` / `iconUrl` its own clothing icon from the taxonomy, `name` its catalogue
---    name as the store writes it ("القبعة 07 · 03"), `kind` 'body' for the body-part fix, and
---    `stateShort` the word for a non-default state ('' when default or taken off).
+--    name as the store writes it ("القبعة 07 · 03"), `section` its taxonomy group ('الرأس'),
+--    `kind` 'body' for the body-part fix, and `stateShort` the word for a non-default state ('' when
+--    default or taken off).
 ---@return table { status, rows = { { group, value, label, item, itemId, icon, iconUrl, category,
----                categoryLabel, name, kind, stateShort, control, current } } }
+---                categoryLabel, section, name, kind, stateShort, control, current } } }
 function C.actionList()
     if not enabled() then return { status = 'disabled', rows = {} } end
     if type(WCState.appearance) ~= 'table' then return { status = 'no_character', rows = {} } end
@@ -550,6 +551,7 @@ function C.actionList()
                     iconUrl = g.iconUrl,
                     category = g.category,
                     categoryLabel = g.categoryLabel,
+                    section = tostring(L(group.label or '')), -- the taxonomy group ('الرأس')
                     name    = g.name,
                     kind    = g.kind,
                     stateShort = stateShort(groupId, current),

@@ -81,22 +81,62 @@ class ParkedCameraTests(EditorBase):
         self.assertEqual(self.calls('focus'), ['feet'])
         self.assertEqual(self.e('CamAnswers.b.camera'), 'feet')
 
-    def test_turns_add_up_after_the_view_and_a_new_view_drops_them(self):
+    def test_turns_add_up_and_a_preset_keeps_them_and_the_zoom(self):
         self.assertTrue(self.e(STORE))
         self.preview()
-        self.rt.run("camReq('t0', { rotate = 90 }); camReq('v', { preset = 'upperBody' })")
-        self.assertFalse(self.e('CamAnswers.t0.ok'))     # the new view would undo it
-        self.rt.run("camReq('t1', { rotate = 30 }); camReq('t2', { rotate = 40 }); camReq('z', { zoom = 1 })")
-        self.assertFalse(self.e('CamAnswers.t1.ok'))     # folded into the next turn
+        # a drag and a wheel step, then a category: no view resets the heading and a preset keeps the
+        # zoom, so none of them is lost to the view (applied free, in this order, they would all stay)
+        self.rt.run("camReq('t0', { rotate = 90 }); camReq('z0', { zoom = 1 }); camReq('v', { preset = 'upperBody' })")
+        self.assertIsNone(self.e('CamAnswers.t0'))
+        self.assertIsNone(self.e('CamAnswers.z0'))
+        self.rt.run("camReq('t1', { rotate = 30 }); camReq('t2', { rotate = 40 }); camReq('z1', { zoom = 1 })")
+        self.assertFalse(self.e('CamAnswers.t0.ok'))     # folded into the next turn
+        self.assertFalse(self.e('CamAnswers.t1.ok'))
+        self.assertFalse(self.e('CamAnswers.z0.ok'))
         self.rt.run('tick(250)')
         self.assertEqual(self.calls('focus'), ['upperBody'])
-        self.assertEqual(self.calls('rotate'), [70])
-        self.assertEqual(self.calls('zoom'), [1])
-        for tag in ('v', 't2', 'z'):
+        self.assertEqual(self.calls('rotate'), [160])
+        self.assertEqual(self.calls('zoom'), [2])
+        for tag in ('v', 't2', 'z1'):
             self.assertTrue(self.e('CamAnswers.%s.ok' % tag), tag)
-        # applied in order: the view, then the turn on it
+        # applied in order: the view, then the turn and the zoom on it
         order = [c.name for c in lua_list(self.rt.g.CamCalls) if c.name in ('focus', 'rotate', 'zoom')]
         self.assertEqual(order, ['focus', 'rotate', 'zoom'])
+
+    def test_a_long_drag_wraps_and_a_wheel_burst_is_not_cut_to_one_step(self):
+        self.assertTrue(self.e(STORE))
+        self.preview()
+        # 340° of drag is a -20° turn (not stopped at 180°); three +2 notches are +6, more than one
+        # request may carry (4): applied as 4 then 2, the last step answering the request
+        self.rt.run("camReq('t0', { rotate = 170 }); camReq('t1', { rotate = 170 })"
+                    "; camReq('z0', { zoom = 2 }); camReq('z1', { zoom = 2 }); camReq('z2', { zoom = 2 })")
+        self.rt.run('tick(250)')
+        self.assertEqual(self.calls('rotate'), [-20])
+        self.assertEqual(self.calls('zoom'), [4, 2])
+        self.assertTrue(self.e('CamAnswers.t1.ok'))
+        self.assertTrue(self.e('CamAnswers.z2.ok'))
+        self.assertFalse(self.e('CamAnswers.z0.ok'))
+
+    def test_a_reset_or_a_pick_drops_the_zoom_it_zeroes_but_keeps_the_turn(self):
+        for view, applied in (("{ reset = true }", 'reset'),
+                              ("{ pick = { x = 0.5, y = 0.2, aspect = 1.7 } }", 'pick')):
+            with self.subTest(view=applied):
+                self.setUp()
+                self.assertTrue(self.e(STORE))
+                self.preview()
+                self.rt.run("camReq('t', { rotate = 45 }); camReq('z', { zoom = 2 }); camReq('v', %s)" % view)
+                self.assertFalse(self.e('CamAnswers.z.ok'))   # the view zeroes it: dropped at once
+                self.assertIsNone(self.e('CamAnswers.t'))
+                # a zoom that comes after the view still counts
+                self.rt.run("camReq('z2', { zoom = -1 })")
+                self.rt.run('tick(250)')
+                order = [(c.name, c.args[1]) for c in lua_list(self.rt.g.CamCalls)
+                         if c.name in (applied, 'rotate', 'zoom')]
+                self.assertEqual([n for n, _ in order], [applied, 'rotate', 'zoom'])
+                self.assertEqual(self.calls('rotate'), [45])
+                self.assertEqual(self.calls('zoom'), [-1])
+                for tag in ('v', 't', 'z2'):
+                    self.assertTrue(self.e('CamAnswers.%s.ok' % tag), tag)
 
     def test_the_hide_toggle_keeps_its_own_slot_and_lands_before_the_answer(self):
         self.assertTrue(self.e("openEditor('creator', 'male', { identity = {} })"))

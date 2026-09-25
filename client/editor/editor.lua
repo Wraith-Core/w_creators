@@ -600,8 +600,11 @@ E.mouth = mouth
 --  preview, the camera stayed on the whole body and the header kept naming it. Such a request is
 --  parked instead, applied the moment the operation ends (before the next one can start) and only
 --  then answered, so the view the NUI names is always the one the camera took. Latest wins, per slot:
---    view  a preset, a pick or a reset frames the character anew and faces it forward: a newer one
---          replaces the parked one, and drops the parked turn / zoom it would undo anyway;
+--    view  a preset, a pick or a reset: a newer one replaces the parked one. It is applied before
+--          the parked turn / zoom, so a pick hits the framing the player clicked on. No view resets
+--          the heading the player gave the character and a preset keeps the zoom, so those stay and
+--          end where arrival order leaves them; a reset or a pick zeroes the zoom, so it drops a
+--          parked zoom (applied after it, the zoom would land on the new framing);
 --    turn, zoom  relative steps (a drag sends many): a newer step is added to the parked one;
 --    hide  the hide-clothes toggle changes what is drawn, not where the camera looks: its own slot,
 --          so the clothing stage's "put the clothes back on" is never lost to the view sent with it.
@@ -609,7 +612,13 @@ E.mouth = mouth
 --  latest one lands.
 -- ---------------------------------------------------------------------
 local PARK_ORDER = { 'hide', 'view', 'turn', 'zoom' }
-local PARK_STEPS = { turn = { key = 'rotate', min = -180, max = 180 }, zoom = { key = 'zoom', min = -4, max = 4 } }
+local PARK_STEPS = {
+    -- a turn is an angle: the sum wraps (a 340° drag is -20°) instead of stopping at 180°
+    turn = { key = 'rotate', min = -180, max = 180, wrap = true },
+    -- one zoom request is 4 at most (E.cameraAction), but a wheel burst adds up past it: the sum is
+    -- kept up to the camera's whole range (40) and applied in steps of 4 (applyParked)
+    zoom = { key = 'zoom', min = -4, max = 4, total = 40 },
+}
 
 local function answerCamera(cb, out)
     if type(cb) ~= 'function' then return end
@@ -640,17 +649,20 @@ local function parkCamera(s, data, cb)
         if not value then return false end
         local prev = parked[slot]
         if prev then
-            value = math.max(step.min, math.min(step.max, value + prev.data[step.key]))
+            value = value + prev.data[step.key]
+            if step.wrap then
+                value = (value + 180) % 360 - 180
+            else
+                value = math.max(-step.total, math.min(step.total, value))
+            end
             answerCamera(prev.cb, { ok = false })
         end
         req.data = { id = data.id, [step.key] = value }
     else
         if parked[slot] then answerCamera(parked[slot].cb, { ok = false }) end
-        if slot == 'view' then
-            for _, other in ipairs({ 'turn', 'zoom' }) do
-                if parked[other] then answerCamera(parked[other].cb, { ok = false }) end
-                parked[other] = nil
-            end
+        if slot == 'view' and (data.reset or type(data.pick) == 'table') and parked.zoom then
+            answerCamera(parked.zoom.cb, { ok = false })
+            parked.zoom = nil
         end
     end
     parked[slot] = req
@@ -658,15 +670,30 @@ local function parkCamera(s, data, cb)
     return true
 end
 
+--- Apply one parked request. A summed zoom can be larger than one request may be (E.cameraAction
+--  takes 4 at most): it goes in steps, and the last step's answer is the request's.
+local function applyParked(slot, data)
+    local left = data.zoom
+    if slot ~= 'zoom' or type(left) ~= 'number' then return E.cameraAction(data) end
+    local max = PARK_STEPS.zoom.max
+    local out
+    repeat
+        local stepValue = math.max(-max, math.min(max, left))
+        out = E.cameraAction({ id = data.id, zoom = stepValue })
+        left = left - stepValue
+    until not out.ok or math.abs(left) < 1e-6
+    return out
+end
+
 --- Apply what was parked, now that the editor is free, each answered with what it did. A parked
 --  hide renders (the editor is busy again meanwhile): what arrives then is parked and applied by
 --  this same loop.
 local function flushCamera(s)
     while current == s and not s.busy and s.parkedCamera do
-        local parked, req = s.parkedCamera, nil
+        local parked, req, taken = s.parkedCamera, nil, nil
         for _, slot in ipairs(PARK_ORDER) do
             if parked[slot] then
-                req, parked[slot] = parked[slot], nil
+                req, taken, parked[slot] = parked[slot], slot, nil
                 break
             end
         end
@@ -674,7 +701,7 @@ local function flushCamera(s)
             s.parkedCamera = nil
             break
         end
-        local ok, out = pcall(E.cameraAction, req.data)
+        local ok, out = pcall(applyParked, taken, req.data)
         if not ok then WCDebug.warn('editor', 'parked camera request failed: %s', tostring(out)) end
         answerCamera(req.cb, ok and out or { ok = false })
     end

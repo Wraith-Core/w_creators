@@ -883,9 +883,10 @@ stored −1..1 and shown −100..100.
 - `editor:camera` `{id, preset?|rotate?|zoom?|reset?|pick?|hide?}`. A request that arrives while an
   operation runs (a live preview, a set) is not refused: it is parked and applied the moment the
   operation ends, then answered, so the view the NUI names is the one the camera took. Latest wins
-  per slot (a view — preset, pick, reset — replaces the parked view and drops parked turns / zooms;
-  turns and zooms add up; the hide toggle has its own slot); a replaced request answers `ok = false`,
-  and so does one still parked when the session closes.
+  per slot (a view — preset, pick, reset — replaces the parked view and is applied before the parked
+  turn / zoom; turns and zooms add up; a reset or a pick zeroes the zoom, so it drops a parked zoom;
+  the hide toggle has its own slot); a replaced request answers `ok = false`, and so does one still
+  parked when the session closes.
 - `panel:action` `{id, control, value?}`, `panel:close` `{id}`
 - One NUI action = one Lua operation: the NUI locks while a request is pending; Lua rejects
   concurrent ops per session (`BUSY`); the server replays a duplicate `opId` (§3.3 `WCSessions.commit`).
