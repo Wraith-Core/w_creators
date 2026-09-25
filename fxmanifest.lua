@@ -134,7 +134,7 @@ files {
     'web/build/tex/cloth/*.png',   -- the game's clothing icons (config/clothing.lua `icon`; also read by w_wheel)
     -- the tint sliders' palette strips (docs/CLOTHING.md §5.2): none ship; the owner exports them
     -- into web/public/tex/palettes, and undeclared they would 404 in game like any other asset
-    'web/build/tex/palettes/*.png',
+    -- 'web/build/tex/palettes/*.png',
     'web/build/fonts/*.woff2',
     'web/build/sounds/*.mp3',
     'web/build/img/*.jpg',
