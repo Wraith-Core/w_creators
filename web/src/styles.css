@@ -746,7 +746,7 @@ input[type=range]:disabled { cursor: default; }
   padding: 1.55rem 1.6rem 1.35rem;
   background: var(--w-note);
   color: var(--w-note-ink);
-  box-shadow: inset 0 0 2.4rem rgba(90, 70, 40, .28);
+  box-shadow: inset 0 0 2.4rem var(--w-note-glow);
   -webkit-mask-box-image: var(--w-tex-tear) 64 fill / 1.1rem round;
 }
 .growth.review-sheet::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background-image: var(--w-tex-grain); background-size: 256px 256px; opacity: .45; }
@@ -1009,7 +1009,7 @@ input[type=range]:disabled { cursor: default; }
   animation: wc-rise 220ms var(--w-ease) both;
 }
 .confirmation > .wc-frame { filter: drop-shadow(0 .8rem 1.4rem rgba(0, 0, 0, .6)); }
-.confirmation > .wc-frame .wc-sheet { background-color: var(--w-note); background-image: none; box-shadow: inset 0 0 2.4rem rgba(90, 70, 40, .28); }
+.confirmation > .wc-frame .wc-sheet { background-color: var(--w-note); background-image: none; box-shadow: inset 0 0 2.4rem var(--w-note-glow); }
 .confirmation > .wc-frame .wc-sheet::after { opacity: .45; mix-blend-mode: normal; filter: none; }
 .confirmation h2 {
   font-family: var(--w-f-title);
@@ -1072,7 +1072,8 @@ input[type=range]:disabled { cursor: default; }
 .save-outfit input::placeholder { color: var(--w-note-dim); }
 .confirmation-actions { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .6rem 1.2rem; margin-top: 1.4rem; }
 /* the pause menu's choices: ink at 60%, full ink with the red underline under the cursor; the
-   commit is an ink band, a destructive one the red band (the only filled red on the server) */
+   commit is an ink band, a destructive one the same ink band with the red underline always under
+   it (red is a mark, never a fill: black and white like the game's own menus) */
 .confirmation-actions button {
   padding: .35rem .8rem .5rem;
   white-space: nowrap;
@@ -1092,9 +1093,9 @@ input[type=range]:disabled { cursor: default; }
 .confirmation-actions .primary:hover:not(:disabled), .confirmation-actions .primary:focus-visible { color: var(--w-paper); }
 .confirmation-actions .primary:hover:not(:disabled)::before, .confirmation-actions .primary:focus-visible::before { background: var(--w-ink-4); }
 .confirmation-actions .danger, .confirmation-actions .danger:hover:not(:disabled), .confirmation-actions .danger:focus-visible { padding: .4rem 1.25rem .5rem; color: var(--w-paper); }
-.confirmation-actions .danger::before { background: var(--w-red); opacity: 1; }
-.confirmation-actions .danger:hover:not(:disabled)::before, .confirmation-actions .danger:focus-visible::before { background: var(--w-red-deep); }
-.confirmation-actions .danger::after { display: none; }
+.confirmation-actions .danger::before { background: var(--w-ink-2); opacity: 1; }
+.confirmation-actions .danger:hover:not(:disabled)::before, .confirmation-actions .danger:focus-visible::before { background: var(--w-ink-4); }
+.confirmation-actions .danger::after { inset-inline: 10%; bottom: -.38rem; height: .18rem; opacity: 1; }
 .confirmation-actions button:disabled { opacity: .45; }
 .confirmation-actions .primary span { font-family: 'EB Garamond', var(--w-f-text); font-weight: 500; font-variant-numeric: lining-nums tabular-nums; font-variant-caps: normal; letter-spacing: 0; font-size: .9em; opacity: .8; }
 
