@@ -64,7 +64,8 @@ local running = 0    -- placements in progress
 local lockHeld = 0   -- placements holding the WCState 'spawn' lock
 
 local function pedExists(ped)
-    return type(ped) == 'number' and ped ~= 0 and DoesEntityExist(ped) == true
+    -- BOOL natives answer 1 (not true) on this runtime: never compare them with == true
+    return type(ped) == 'number' and ped ~= 0 and not not DoesEntityExist(ped)
 end
 
 -- A named native that may be missing on a build: never throws.
@@ -131,7 +132,7 @@ local function settle(ped, x, y, z, h)
     SetEntityHeading(ped, h)
     local collided = WCUtil.waitUntil(function()
         RequestCollisionAtCoord(x, y, z)
-        return HasCollisionLoadedAroundEntity(ped) == true or nil
+        return HasCollisionLoadedAroundEntity(ped) or nil
     end, Sp.COLLISION_TIMEOUT, 0)
     if not collided then return nil, 'NO_COLLISION' end
     if snapEnabled() then

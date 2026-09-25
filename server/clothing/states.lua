@@ -55,9 +55,36 @@ function Actions.states(src, app, charid)
     return out
 end
 
+--- The player state bag other resources read for a raised bandana (Config.ClothingStates.bandanaStateBag).
+local function bandanaBag()
+    local name = Config.ClothingStates and Config.ClothingStates.bandanaStateBag
+    return type(name) == 'string' and name ~= '' and name or nil
+end
+
+--- Publish whether the player's face is covered by the bandana: a replicated player state bag, so
+--  a wanted or police resource can read it without asking this one. Only a change is written.
+local function publishBandana(src, up)
+    local bag = bandanaBag()
+    if not bag then return end
+    local ok, err = pcall(function()
+        local state = Player(src).state
+        if (state[bag] == true) ~= (up == true) then state:set(bag, up == true, true) end
+    end)
+    if not ok then WCDebug.log('clothing', 'bandana state bag of %s: %s', tostring(src), tostring(err)) end
+end
+
+--- Is the player's bandana raised (the runtime state of the current character)?
+function Actions.bandanaUp(src)
+    local entry = runtime[tonumber(src) or src]
+    return entry ~= nil and entry.states.bandana == 'up'
+end
+
 --- Forget the runtime states of a player (disconnect, character change, new appearance).
 function Actions.forget(src)
-    runtime[tonumber(src) or src] = nil
+    local key = tonumber(src) or src
+    local had = runtime[key] ~= nil and runtime[key].states.bandana == 'up'
+    runtime[key] = nil
+    if had then publishBandana(key, false) end
 end
 
 local function persist(src, charid, group, value)
@@ -113,6 +140,7 @@ function Actions.setState(src, group, value)
             runtime[tonumber(src) or src] = entry
         end
         entry.states[group] = value
+        if group == 'bandana' then publishBandana(tonumber(src) or src, value == 'up') end
     end
 
     WCSync.broadcastState(src, group, value)

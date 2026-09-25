@@ -23,8 +23,8 @@ WCEditorTree = {}
 local T = WCEditorTree
 
 -- Camera presets (§8.6)
-T.PRESETS = { 'fullBody', 'upperBody', 'lowerBody', 'head', 'face', 'eyes', 'hair', 'facialHair', 'hands',
-              'feet', 'accessories' }
+T.PRESETS = { 'fullBody', 'upperBody', 'lowerBody', 'head', 'face', 'eyes', 'teeth', 'hair', 'facialHair',
+              'hands', 'handLeft', 'handRight', 'feet', 'accessories' }
 T.PRESET_SET = {}
 for _, name in ipairs(T.PRESETS) do T.PRESET_SET[name] = true end
 
@@ -52,7 +52,7 @@ local MORPH_CAMERA = {
     ['face.nose'] = 'face', ['face.cheeks'] = 'face', ['face.mouth'] = 'face', ['face.mouth.left'] = 'face',
     ['face.mouth.right'] = 'face', ['face.lips'] = 'face', ['face.lips.upper'] = 'face',
     ['face.lips.lower'] = 'face', ['face.ears'] = 'head', ['face.eyes'] = 'eyes', ['face.eyebrows'] = 'eyes',
-    ['face.teeth'] = 'face',
+    ['face.teeth'] = 'teeth',
     body = 'fullBody', ['body.build'] = 'fullBody', ['body.upper'] = 'upperBody', ['body.torso'] = 'upperBody',
     ['body.legs'] = 'lowerBody', ['body.neck'] = 'upperBody',
 }
@@ -83,6 +83,21 @@ local K = {
     noChanges = 'لا توجد تغييرات', price = 'السعر', free = 'مجاني',
     reviewHint = 'راجع اختياراتك ثم اضغط إنهاء الشخصية.', surgeryHint = 'راجع التعديلات ثم أكّد العملية.',
     owned = 'مملوكة', equipped = 'مرتداة',
+    build = 'بنية الجسم', buildDefault = 'البنية الافتراضية',
+    builds = { 'بنية نحيلة', 'بنية رياضية', 'بنية متوسطة', 'بنية ممتلئة', 'بنية ضخمة' },
+    color2 = 'اللون الثاني', color3 = 'اللون الثالث',
+    browColor = 'لون الحاجبين', followHair = 'مثل لون الشعر', ownColor = 'لون مختار',
+    extraScar = 'ندبة إضافية %s', eyeTint = 'لون العين المخصص', custom = 'مخصص',
+    heightMetres = '%s م', heightFeet = '%s قدم',
+    -- the clothing store / wardrobe
+    undress = 'خلع كل الملابس', payment = 'الدفع', goldAmount = '%s ذهب',
+    currencies = { cash = 'نقدًا', gold = 'ذهب' },
+    ownedColors = 'ألوانك المملوكة', colorway = 'لون القطعة',
+    resell = 'بيع القطعة', resellBody = 'ستُباع هذه القطعة للمتجر مقابل %s، وتخرج من ملابسك.',
+    suggestions = 'اقتراحات الخيّاط', savedOutfits = 'أطقمك المحفوظة',
+    wrap = 'لفّها في الحقيبة', wrapBody = 'ستخرج القطعة من ملابسك وتصبح غرضًا في حقيبتك يمكن إهداؤه.',
+    share = 'مشاركة كبطاقة', saveOutfit = 'احفظ هذا المظهر كطقم (اختياري)',
+    missingCurrency = 'بعض القطع لا تُباع بهذه العملة: %s',
 }
 
 -- AppearanceSchema section -> label key (review lines)
@@ -98,9 +113,13 @@ end
 
 local function pad2(n) return ('%02d'):format(n) end
 
-local function money(n)
-    return ('$%.2f'):format(tonumber(n) or 0)
+--- An amount as the store shows it: '$12.50' in cash, '0.25 ذهب' in gold.
+local function money(n, currency)
+    local amount = ('%.2f'):format(tonumber(n) or 0)
+    if currency == 'gold' then return L(K.goldAmount, amount) end
+    return '$' .. amount
 end
+T.money = money
 
 local function catalog(s, category)
     return WCCatalog.forSex(s.working.sex)[category]
@@ -219,6 +238,57 @@ end
 T.ownedTint = ownedTint
 T.ownedEntry = ownedEntry
 
+local function sameTintOf(a, b)
+    a = type(a) == 'table' and a.palette and a or nil
+    b = type(b) == 'table' and b.palette and b or nil
+    if a == nil or b == nil then return a == b end
+    return a.palette == b.palette and a.tint0 == b.tint0 and a.tint1 == b.tint1 and a.tint2 == b.tint2
+end
+
+--- Every colour the character owns of an item (colourways; the server's WCOwnership.colorsOf): the
+--  colour it was last worn in first, then the others, each a structurally valid stored tint.
+local function ownedColors(s, category, hash)
+    local out = {}
+    local entry = ownedEntry(s, hash)
+    if not entry then return out end
+    local function push(t)
+        if type(t) ~= 'table' or not t.palette or not WCCatalog.validStoredTint(category, t) then return end
+        for _, have in ipairs(out) do
+            if sameTintOf(have, t) then return end
+        end
+        out[#out + 1] = { palette = t.palette, tint0 = math.tointeger(t.tint0), tint1 = math.tointeger(t.tint1),
+                          tint2 = math.tointeger(t.tint2) }
+    end
+    push(ownedTint(s, category, hash))
+    for _, t in ipairs(type(entry.colors) == 'table' and entry.colors or {}) do push(t) end
+    return out
+end
+T.ownedColors = ownedColors
+
+--- Does the character own this colour of the item? The original colour always (with the item).
+local function ownsColor(s, category, hash, tint)
+    if not ownedEntry(s, hash) then return false end
+    if type(tint) ~= 'table' or not tint.palette then return true end
+    for _, t in ipairs(ownedColors(s, category, hash)) do
+        if sameTintOf(t, tint) then return true end
+    end
+    return false
+end
+T.ownsColor = ownsColor
+
+--- The currency the store charges in: the Payment choice, else the first currency the store takes
+--  (store:open `currencies`; 'cash' when it named none). A store that takes one currency shows no
+--  choice, so that one must be the default, even when it is not cash.
+local function currencyOf(s)
+    local chosen = s.draft and s.draft.currency
+    if type(chosen) == 'string' and WCCatalog.CURRENCY_SET[chosen] then return chosen end
+    local list = type(s.context) == 'table' and s.context.currencies or nil
+    local first = type(list) == 'table' and list[1] or nil
+    if type(first) == 'string' and WCCatalog.CURRENCY_SET[first] then return first end
+    return 'cash'
+end
+T.currencyOf = currencyOf
+
 -- ---------------------------------------------------------------------
 --  Body parts
 -- ---------------------------------------------------------------------
@@ -234,16 +304,68 @@ local function flatIndex(s, category, hash)
     return list, current
 end
 
-local function flatChoice(reg, s, control, label, category, get, set)
+--- The game's name of one catalogue variant (the teeth: one variant per style), else its number.
+local function variantLabel(s, category, hash, index)
+    local cat = catalog(s, category)
+    local info = cat and cat.hashes[hash]
+    local key = info and WCCatalog.variantStyleKey({ hash = hash, name = info.name }) or nil
+    return key and L(WCCatalog.STYLE_NAMES[key]) or pad2(index)
+end
+
+local function flatChoice(reg, s, control, label, category, get, set, named)
     local list, current = flatIndex(s, category, get(s.working))
     if #list == 0 then return nil end
     local options = {}
-    for i = 1, #list do options[i] = { value = i, label = pad2(i) } end
+    for i = 1, #list do
+        options[i] = { value = i, label = named and variantLabel(s, category, list[i], i) or pad2(i) }
+    end
     return choice(reg, control, label, current, options, function(app, value)
         local hash = list[value]
         if not hash then return 'INVALID_COMPONENT' end
         set(app, hash)
     end)
+end
+
+--- The body build (AppearanceSchema.BODY_BUILDS): the game's five MP builds, or none (the body
+--  every character had before builds were offered).
+local function bodyShape(reg, s)
+    local builds = AppearanceSchema.BODY_BUILDS
+    local options = { { value = 0, label = L(K.buildDefault) } }
+    for i = 1, #builds do options[#options + 1] = { value = i, label = L(K.builds[i] or pad2(i)) } end
+    return choice(reg, 'body.shape', L(K.build), s.working.body.build or 0, options, function(app, value)
+        app.body.build = value ~= 0 and value or nil
+    end)
+end
+
+--- The height slider's readout (Config.Creator.heightUnit = 'm' | 'ft'): the character's standing
+--  height in metres or feet instead of the bare ×100 scale. The game measures the edited ped at the
+--  scale it wears now (WCNative.ped.height); dividing by that scale gives the height at 1.0, so the
+--  NUI can show the height live while the slider is dragged (value × that base). No measure (no ped
+--  yet, an answer outside a person's range) or the unit off keeps the plain scale, as before.
+local METRE_IN_FOOT_UNITS = 3.28084   -- one metre is this many feet
+local function heightDisplay(s)
+    local plain = { scale = 100, decimals = 1 }
+    local unit = Config.Creator and Config.Creator.heightUnit
+    if (unit ~= 'm' and unit ~= 'ft') or type(WCNative) ~= 'table' or type(WCNative.ped) ~= 'table'
+        or type(WCNative.ped.height) ~= 'function' then
+        return plain
+    end
+    local ok, measured = pcall(WCNative.ped.height, s.ped)
+    local scale = tonumber(s.working.body.height)
+    if not ok or type(measured) ~= 'number' or not scale or scale <= 0 then return plain end
+    local base = measured / scale
+    -- an adult MP character at scale 1.0 stands well inside this; anything else is not a height
+    if base < 1.3 or base > 2.3 then return plain end
+    if unit == 'ft' then return { scale = base * METRE_IN_FOOT_UNITS, decimals = 2, format = L(K.heightFeet) } end
+    return { scale = base, decimals = 2, format = L(K.heightMetres) }
+end
+T.heightDisplay = heightDisplay
+
+--- The height as the review lists it: in the readout's unit when there is one, else the ×100 scale.
+local function heightText(s, height)
+    local d = heightDisplay(s)
+    if d.format then return (d.format:gsub('%%s', ('%.2f'):format(height * d.scale), 1)) end
+    return ('%d'):format(math.floor(height * 100 + 0.5))
 end
 
 local function bodyType(reg, s)
@@ -280,10 +402,18 @@ local function skinTone(reg, s)
             tones[#tones + 1] = tone
         end
     end
-    table.sort(tones)
+    -- lightest first (Config.Swatches.skinOrder): the game numbers the tones, but not by shade
+    local sw = Config.Swatches or {}
+    local rank = {}
+    for i, tone in ipairs(type(sw.skinOrder) == 'table' and sw.skinOrder or {}) do rank[tone] = i end
+    table.sort(tones, function(a, b)
+        local ra, rb = rank[a] or (100 + a), rank[b] or (100 + b)
+        return ra < rb
+    end)
     if #tones == 0 then return nil end
+    local chips = type(sw.skin) == 'table' and sw.skin or {}
     local options = {}
-    for i, tone in ipairs(tones) do options[i] = { value = tone, label = pad2(tone) } end
+    for i, tone in ipairs(tones) do options[i] = { value = tone, label = pad2(tone), swatch = chips[tone] } end
     return choice(reg, 'skin.tone', L(K.skinTone), AppearanceSchema.skinTone(s.working) or 0, options,
         function(app, value)
             if not AppearanceSchema.setSkinTone(app, value) then return 'INVALID_COMPONENT' end
@@ -295,9 +425,35 @@ local function eyeColor(reg, s)
         function(app) return app.head.eyes end, function(app, hash) app.head.eyes = hash end)
 end
 
+--- A custom eye tint (Config.Creator.customEyeColor): off (the eye colour above) or the game's eye
+--  palette with its three tints, drawn on top of the chosen eyes.
+local function eyeTintControls(reg, s)
+    if not (Config.Creator and Config.Creator.customEyeColor) then return {} end
+    local tint = s.working.head.eyesTint
+    local max = AppearanceSchema.EYE_TINT_MAX
+    local nodes = {}
+    nodes[1] = choice(reg, 'eyes.tint', L(K.eyeTint), tint and 1 or 0,
+        { { value = 0, label = L(K.originalColor) }, { value = 1, label = L(K.custom) } },
+        function(app, value)
+            if value == 0 then
+                app.head.eyesTint = nil
+            elseif not app.head.eyesTint then
+                app.head.eyesTint = { tint0 = 0, tint1 = 0, tint2 = 0 }
+            end
+        end)
+    for i, key in ipairs({ 'tint0', 'tint1', 'tint2' }) do
+        nodes[i + 1] = slider(reg, 'eyes.tint.' .. key, L(K[key]), tint and tint[key] or 0, 0, max, 1,
+            { scale = 1, decimals = 0 }, function(app, value)
+                if not app.head.eyesTint then return 'INVALID_TINT' end
+                app.head.eyesTint[key] = math.tointeger(value)
+            end, { disabled = tint == nil or nil })
+    end
+    return nodes
+end
+
 local function teeth(reg, s)
     return flatChoice(reg, s, 'face.teeth', L(K.teeth), 'teeth',
-        function(app) return app.head.teeth end, function(app, hash) app.head.teeth = hash end)
+        function(app) return app.head.teeth end, function(app, hash) app.head.teeth = hash end, true)
 end
 
 -- ---------------------------------------------------------------------
@@ -320,7 +476,9 @@ local function hairControls(reg, s, category, slot, prefix)
     local hash = s.working.hair[slot] or 0
     local info = hash ~= 0 and cat.hashes[hash] or nil
     local styles = { { value = 0, label = L('بدون') } }
-    for m = 1, #cat.models do styles[#styles + 1] = { value = m, label = WCCatalog.styleLabel(category, m) } end
+    for m = 1, #cat.models do
+        styles[#styles + 1] = { value = m, label = WCCatalog.styleName(s.working.sex, category, m) }
+    end
     local nodes = {}
     nodes[1] = choice(reg, prefix .. '.style', L(K.style), info and info.model or 0, styles, function(app, value)
         if value == 0 then
@@ -338,8 +496,11 @@ local function hairControls(reg, s, category, slot, prefix)
         app.hair[slot] = pick.hash
     end)
     if info then
+        local chips = Config.Swatches and Config.Swatches.hair or {}
         local colours = {}
-        for i, v in ipairs(cat.models[info.model]) do colours[i] = { value = i, label = colourLabel(v.name, i) } end
+        for i, v in ipairs(cat.models[info.model]) do
+            colours[i] = { value = i, label = colourLabel(v.name, i), swatch = chips[WCCatalog.colorSuffix(v.name) or ''] }
+        end
         nodes[2] = choice(reg, prefix .. '.color', L(K.color), info.variant, colours, function(app, value)
             local current = app.hair[slot] ~= 0 and cat.hashes[app.hair[slot]] or nil
             local variant = current and cat.models[current.model][value]
@@ -363,28 +524,108 @@ local function overlayTintable(layer)
 end
 T.overlayTintable = overlayTintable
 
+--- The label of a layer's style: the game's style name when the layer has names, else its number.
+local function overlayStyleLabel(layer, style)
+    local key = layer.names and layer.names[style]
+    return key and L(key) or pad2(style)
+end
+
+--- A style choice: named options (none first) when the layer has style names, else a numbered range.
+local function styleChoice(reg, s, control, label, layer, value, apply, extra)
+    if not layer.names then return rangeChoice(reg, control, label, value, 1, layer.styles, true, apply, extra) end
+    local options = { { value = 0, label = L('بدون') } }
+    for i = 1, layer.styles do options[#options + 1] = { value = i, label = overlayStyleLabel(layer, i) } end
+    local node = choice(reg, control, label, value, options, apply, extra)
+    -- validated as the numbered range it replaces: a value past the last style is clamped to it
+    if reg[control] then reg[control] = { kind = 'choice', range = { min = 0, max = layer.styles }, apply = apply } end
+    return node
+end
+
+--- Stacked instances of a layer (the scars: `extra` more on top of the first one). Instance n can
+--  be added once the one before it exists; clearing one closes the gap.
+local function overlayExtraControls(reg, s, layer, o, nodes)
+    local list = o and type(o.extra) == 'table' and o.extra or {}
+    for n = 1, layer.extra or 0 do
+        local e = list[n]
+        local id = 'overlay.' .. layer.id .. '.extra' .. n
+        local blocked = o == nil or n > #list + 1
+        nodes[#nodes + 1] = styleChoice(reg, s, id .. '.style', L(K.extraScar, tostring(n)), layer, e and e.style or 0,
+            function(app, value)
+                local cur = app.overlays[layer.id]
+                if not cur then return 'INVALID_COMPONENT' end
+                local extra = type(cur.extra) == 'table' and cur.extra or {}
+                if value == 0 then
+                    if extra[n] then table.remove(extra, n) end
+                elseif extra[n] then
+                    extra[n].style = value
+                elseif n == #extra + 1 then
+                    extra[n] = { style = value, opacity = 1.0 }
+                else
+                    return 'INVALID_COMPONENT'
+                end
+                cur.extra = #extra > 0 and extra or nil
+            end, { disabled = blocked or nil })
+        nodes[#nodes + 1] = slider(reg, id .. '.opacity', L(K.opacity), e and e.opacity or 1.0, 0, 1, 0.01,
+            { scale = 100, decimals = 0 }, function(app, value)
+                local cur = app.overlays[layer.id]
+                local entry = cur and type(cur.extra) == 'table' and cur.extra[n] or nil
+                if not entry then return 'INVALID_COMPONENT' end
+                entry.opacity = value + 0.0
+            end, { disabled = e == nil or nil })
+    end
+end
+
 local function overlayControls(reg, s, layer)
     local o = s.working.overlays[layer.id]
     local id = 'overlay.' .. layer.id
     local nodes = {}
-    nodes[1] = rangeChoice(reg, id .. '.style', L(K.style), o and o.style or 0, 1, layer.styles, true,
+    nodes[1] = styleChoice(reg, s, id .. '.style', L(K.style), layer, o and o.style or 0,
         function(app, value)
             if value == 0 then
                 app.overlays[layer.id] = nil
                 return nil
             end
             local cur = app.overlays[layer.id]
-            app.overlays[layer.id] = { style = value, color = cur and cur.color or 1,
-                                       opacity = cur and cur.opacity or 1.0 }
+            if cur then
+                -- a new style keeps everything else of the layer (colours, stacked scars...)
+                cur.style = value
+                return nil
+            end
+            app.overlays[layer.id] = { style = value, color = 1, opacity = 1.0,
+                -- new eyebrows in the creator follow the hair, as the starting look does
+                matchHair = (layer.id == 'eyebrows' and s.mode == 'creator' and Config.Creator
+                    and Config.Creator.eyebrowsFollowHair) and true or nil }
         end)
     local off = o == nil
+    local matching = layer.id == 'eyebrows' and o ~= nil and o.matchHair == true
+    if layer.id == 'eyebrows' then
+        -- the eyebrows take the hair's own colour (re-read whenever the hair changes) or their own
+        nodes[#nodes + 1] = choice(reg, id .. '.match', L(K.browColor), matching and 1 or 0,
+            { { value = 1, label = L(K.followHair) }, { value = 0, label = L(K.ownColor) } },
+            function(app, value)
+                local cur = app.overlays[layer.id]
+                if not cur then return 'INVALID_COMPONENT' end
+                cur.matchHair = value == 1 or nil
+            end, { disabled = off or nil })
+    end
     if overlayTintable(layer) then
         nodes[#nodes + 1] = rangeChoice(reg, id .. '.color', L(K.color), o and o.color or 1, 1, WCOverlays.COLORS, false,
             function(app, value)
                 local cur = app.overlays[layer.id]
                 if not cur then return 'INVALID_COMPONENT' end
                 cur.color = value
-            end, { disabled = off or nil })
+            end, { disabled = (off or matching) or nil })
+        -- the 2nd / 3rd tint of a multi-tint texture; colour 1 is tint 0, the value it has without one
+        for n, key in ipairs({ 'color2', 'color3' }) do
+            if (layer.tints or 1) > n then
+                nodes[#nodes + 1] = rangeChoice(reg, id .. '.' .. key, L(K[key]), o and o[key] or 1, 1, WCOverlays.COLORS,
+                    false, function(app, value)
+                        local cur = app.overlays[layer.id]
+                        if not cur then return 'INVALID_COMPONENT' end
+                        cur[key] = value ~= 1 and value or nil
+                    end, { disabled = off or nil })
+            end
+        end
     end
     nodes[#nodes + 1] = slider(reg, id .. '.opacity', L(K.opacity), o and o.opacity or 1.0, 0, 1, 0.01,
         { scale = 100, decimals = 0 }, function(app, value)
@@ -392,6 +633,7 @@ local function overlayControls(reg, s, layer)
             if not cur then return 'INVALID_COMPONENT' end
             cur.opacity = value + 0.0
         end, { disabled = off or nil })
+    overlayExtraControls(reg, s, layer, o, nodes)
     return nodes
 end
 
@@ -400,7 +642,7 @@ local function overlayGroup(reg, s, layer)
     local o = s.working.overlays[layer.id]
     return group('overlay.' .. layer.id, L(layer.label), overlayControls(reg, s, layer), {
         camera = OVERLAY_CAMERA[layer.id] or 'face',
-        summary = o and pad2(o.style) or L('بدون'),
+        summary = o and overlayStyleLabel(layer, o.style) or L('بدون'),
     })
 end
 
@@ -434,8 +676,10 @@ local function morphLeaves(reg, s, fields)
             used[a], used[b] = true, true
             local fa, fb = WCMorph.byId[a], WCMorph.byId[b]
             local ca, cb = 'morph.' .. a, 'morph.' .. b
-            reg[ca] = { kind = 'slider', min = -1, max = 1, apply = morphApply(a) }
-            reg[cb] = { kind = 'slider', min = -1, max = 1, apply = morphApply(b) }
+            -- morph = true / pose: the editor turns the character to its profile for a depth
+            -- (WCMorph field pose) and back to the front for any other morphology control
+            reg[ca] = { kind = 'slider', min = -1, max = 1, apply = morphApply(a), morph = true, pose = fa.pose }
+            reg[cb] = { kind = 'slider', min = -1, max = 1, apply = morphApply(b), morph = true, pose = fb.pose }
             out[#out + 1] = {
                 id = 'pad.' .. a .. '.' .. b, kind = 'pad', label = L(fa.label) .. ' / ' .. L(fb.label),
                 x = { control = ca, label = L(fa.label), value = morphValue(s, a) },
@@ -449,6 +693,8 @@ local function morphLeaves(reg, s, fields)
             local field = WCMorph.byId[id]
             out[#out + 1] = slider(reg, 'morph.' .. id, L(field.label), morphValue(s, id), -1, 1, 0.01,
                 { scale = 100, decimals = 0 }, morphApply(id))
+            local entry = reg['morph.' .. id]
+            if entry then entry.morph, entry.pose = true, field.pose end
         end
     end
     return out
@@ -459,15 +705,24 @@ local function extraControls(reg, s, extra)
     local sec = s.sections
     if extra == 'face.head' and sec.face then return { baseHead(reg, s) } end
     if extra == 'face.teeth' and sec.face then return { teeth(reg, s) } end
-    if extra == 'eyes.color' and sec.eyes then return { eyeColor(reg, s) } end
+    if extra == 'eyes.color' and sec.eyes then
+        -- the custom tint is a row of its own: the eyes node carries pads, and a node with pads
+        -- folds its loose sliders into "additional details" at the bottom, far from the toggle
+        local tint = eyeTintControls(reg, s)
+        local custom = #tint > 0 and group('eyes.custom', L(K.eyeTint), tint, {
+            camera = 'eyes', summary = L(s.working.head.eyesTint and K.custom or K.originalColor),
+        }) or nil
+        return { eyeColor(reg, s), custom }
+    end
     if extra == 'overlay.eyebrows' and sec.eyebrows then
         return { overlayGroup(reg, s, WCOverlays.byId.eyebrows) }
     end
     if sec.body then
         if extra == 'body.type' then return { bodyType(reg, s) } end
+        if extra == 'body.shape' then return { bodyShape(reg, s) } end
         if extra == 'body.height' then
             return { slider(reg, 'body.height', L(K.height), s.working.body.height, 0.9, 1.1, 0.005,
-                { scale = 100, decimals = 1 }, function(app, value) app.body.height = value + 0.0 end) }
+                heightDisplay(s), function(app, value) app.body.height = value + 0.0 end) }
         end
         if extra == 'body.weight' then
             return { slider(reg, 'body.weight', L(K.weight), s.working.body.weight, 1, 21, 1,
@@ -549,6 +804,38 @@ local function categoryPrice(s, category)
 end
 T.categoryPrice = categoryPrice
 
+--- The price of one item in the chosen currency, as the server prices it (display only): a model
+--  with its own price (Config.Clothing.modelPrices) at that price, any other at its category's
+--  price (the store's own list). nil = not sold for that currency.
+local function itemPrice(s, category, hash)
+    local currency = currencyOf(s)
+    local sex = s.working.sex
+    if hash and WCCatalog.modelPriceEntry(sex, category, hash) ~= nil then
+        local spec = WCCatalog.priceSpecOf(category, hash, s.context.pricingProfile, sex)
+        return spec and spec[currency] or nil
+    end
+    if currency == 'cash' then return categoryPrice(s, category) end
+    local specs = s.context.priceSpecs
+    local spec = type(specs) == 'table' and specs[category]
+        or WCCatalog.priceSpecOf(category, nil, s.context.pricingProfile, sex)
+    return type(spec) == 'table' and tonumber(spec[currency]) or nil
+end
+T.itemPrice = itemPrice
+
+--- The price of a colour the character does not own yet, in the chosen currency: a number, 0 when
+--  colours are free, nil when they are not sold for that currency.
+local function colourPrice(s)
+    local currency = currencyOf(s)
+    local spec = s.context.tintPrices
+    if type(spec) ~= 'table' then
+        local cash = tonumber(s.context.tintPrice)
+        spec = cash and { cash = cash } or WCCatalog.tintPriceSpec() or {}
+    end
+    if next(spec) == nil then return 0 end
+    return tonumber(spec[currency])
+end
+T.colourPrice = colourPrice
+
 -- A tint as the server compares it (WCOwnership.sameTint): anything without a palette is no tint.
 local function sameTint(a, b)
     a = type(a) == 'table' and a.palette and a or nil
@@ -597,7 +884,7 @@ end
 --  (WCOwnership.settleStates on the commit: WCClothingStore.plan, the clinic's ownedClothing). A
 --  saved state is kept only while its items are still the saved ones and it still applies; a swapped
 --  or removed item is shown in its default state. Neither mode edits states, so the saved states are
---  the ones settled.
+--  the ones settled. A state whose garment is only hidden (a shirt taken off) is kept, as on the server.
 local function settleStates(s, app)
     local out = {}
     local savedStates = s.saved.clothing.states or {}
@@ -609,7 +896,7 @@ local function settleStates(s, app)
             for _, category in ipairs(def.categories or {}) do
                 if eq[category] ~= savedEq[category] then swapped = true break end
             end
-            if not swapped and WCClothingStates.applicable(app, def.id) then out[def.id] = value end
+            if not swapped and WCClothingStates.applicable(app, def.id, true) then out[def.id] = value end
         end
     end
     return out
@@ -648,11 +935,56 @@ local function equipItem(s, app, category, hash)
     return nil
 end
 
-local function tintNodes(reg, s, category)
+--- The display name of a colour: its palette's label and its three tints ('Leather · 12/40/3').
+local function colourName(tint)
+    local labels = Config.Clothing.tints and Config.Clothing.tints.labels or {}
+    return ('%s · %d/%d/%d'):format(L(labels[tint.palette] or tint.palette), tint.tint0 or 0, tint.tint1 or 0,
+        tint.tint2 or 0)
+end
+
+--- The colour track of a palette's tint sliders: the strip exported from the game's own palette
+--  texture (web/build/tex/palettes/<palette>.png), when Config.Clothing.tints.swatches is on.
+local function paletteTrack(palette)
+    local tints = Config.Clothing.tints or {}
+    if tints.swatches == false or type(palette) ~= 'string' or not palette:match('^[%w_]+$') then return nil end
+    return 'tex/palettes/' .. palette .. '.png'
+end
+
+--- The owned colours of an item as one choice (colourways): the original colour, then each colour
+--  the character owns of it. `original` is the value the original colour is written as: nil in the
+--  store (no dye), false in the wardrobe (an explicit "original", not "the colour it had").
+local function colorwayChoice(reg, s, category, hash, control, label, original)
+    local colors = ownedColors(s, category, hash)
+    if #colors == 0 then return nil end
+    local tint = s.working.clothing.tints[category]
+    local options = { { value = 0, label = L(K.originalColor) } }
+    local current = (type(tint) == 'table' and tint.palette) and -1 or 0
+    for i, t in ipairs(colors) do
+        options[#options + 1] = { value = i, label = colourName(t) }
+        if sameTintOf(tint, t) then current = i end
+    end
+    if current == -1 then
+        -- a new colour being tried (store): shown as its own entry, not as an owned one
+        options[#options + 1] = { value = #colors + 1, label = L(K.custom) }
+        current = #colors + 1
+    end
+    return choice(reg, control, label, current, options, function(app, value)
+        if value == 0 then
+            app.clothing.tints[category] = original
+            return nil
+        end
+        local t = colors[value]
+        if not t then return nil end -- the "being tried" entry: nothing to change
+        app.clothing.tints[category] = WCUtil.copy(t)
+    end)
+end
+
+local function tintNodes(reg, s, category, hash)
     local palettes = WCCatalog.tintable(category)
     if not palettes then return nil end
     local labels = Config.Clothing.tints and Config.Clothing.tints.labels or {}
     local tint = s.working.clothing.tints[category]
+    if type(tint) ~= 'table' then tint = nil end
     local options = { { value = 0, label = L(K.originalColor) } }
     local current = 0
     for i, name in ipairs(palettes) do
@@ -661,23 +993,37 @@ local function tintNodes(reg, s, category)
     end
     local id = 'clothing.' .. category
     local children = {}
-    children[1] = choice(reg, id .. '.palette', L(K.palette), current, options, function(app, value)
+    -- the colours already owned first: picking one costs nothing
+    add(children, colorwayChoice(reg, s, category, hash, id .. '.owned', L(K.ownedColors), nil))
+    children[#children + 1] = choice(reg, id .. '.palette', L(K.palette), current, options, function(app, value)
         if value == 0 then
             app.clothing.tints[category] = nil
             return nil
         end
-        local cur = app.clothing.tints[category] or {}
-        app.clothing.tints[category] = { palette = palettes[value], tint0 = cur.tint0 or 0, tint1 = cur.tint1 or 0,
-                                         tint2 = cur.tint2 or 0 }
+        local cur = type(app.clothing.tints[category]) == 'table' and app.clothing.tints[category] or {}
+        local palette = palettes[value]
+        -- the kept tints move inside the new palette's limits
+        local lo, hi = WCCatalog.tintLimits(palette)
+        local function fit(v) return math.max(lo, math.min(hi, v or lo)) end
+        app.clothing.tints[category] = { palette = palette, tint0 = fit(cur.tint0), tint1 = fit(cur.tint1),
+                                         tint2 = fit(cur.tint2) }
     end)
-    for i, key in ipairs({ 'tint0', 'tint1', 'tint2' }) do
-        children[i + 1] = slider(reg, id .. '.' .. key, L(K[key]), tint and tint[key] or 0, 0, 254, 1,
+    -- the sliders follow the palette's limits (Config.Clothing.tints.limits) and skip its disabled
+    -- indices; each draws the palette's own colours as its track when a strip exists
+    local lo, hi, disabled = 0, 254, {}
+    if tint then lo, hi, disabled = WCCatalog.tintLimits(tint.palette) end
+    local skip = {}
+    for i in pairs(disabled) do skip[#skip + 1] = i end
+    table.sort(skip)
+    for _, key in ipairs({ 'tint0', 'tint1', 'tint2' }) do
+        children[#children + 1] = slider(reg, id .. '.' .. key, L(K[key]), tint and tint[key] or lo, lo, hi, 1,
             { scale = 1, decimals = 0 }, function(app, value)
                 local cur = app.clothing.tints[category]
-                if not cur then return 'INVALID_TINT' end
+                if type(cur) ~= 'table' then return 'INVALID_TINT' end
                 cur[key] = math.tointeger(value)
                 if not WCCatalog.validTint(category, cur) then return 'INVALID_TINT' end
-            end, { disabled = tint == nil or nil })
+            end, { disabled = tint == nil or nil, track = tint and paletteTrack(tint.palette) or nil,
+                   skip = #skip > 0 and skip or nil })
     end
     return group(id .. '.color', L(K.color), children)
 end
@@ -739,40 +1085,86 @@ local function clothingSub(reg, s, sub)
         -- a dye of an item the character does not own is a purchase of the item (the server rule):
         -- offered only where the store sells it (a worn uniform it does not sell is not dyed here)
         if s.mode == 'store' and (ownedEntry(s, hash) or WCCatalog.available(s.context.storeProfile, sex, category, hash)) then
-            add(children, tintNodes(reg, s, category))
+            add(children, tintNodes(reg, s, category, hash))
+        end
+        -- the wardrobe wears an owned item in any colour the character owns of it (colourways)
+        if s.mode == 'wardrobe' then
+            add(children, colorwayChoice(reg, s, category, hash, id .. '.colorway', L(K.colorway), false))
         end
         if removable then
             children[#children + 1] = action(reg, id .. '.remove', L(K.remove), {
                 apply = function(app) return equipItem(s, app, category, 0) end,
             })
         end
+        add(children, T.resellNode(reg, s, category, hash))
+        add(children, T.wrapNode(reg, s, category, hash))
     end
 
-    local node = group('item.' .. category, L(sub.label), children, { camera = sub.camera, art = sub.art })
+    local node = group('item.' .. category, L(sub.label), children, { camera = sub.camera, art = sub.art, icon = sub.icon })
+    local currency = currencyOf(s)
     if hash and s.mode ~= 'creator' then
         -- owned is the ownership row only: the saved item is worn ('equipped'), and a worn item
-        -- without a row (a uniform) is bought by any change, so its price shows (WCClothingStore.plan)
+        -- without a row (a uniform) is bought by any change, so its price shows (WCClothingStore.plan).
+        -- The price is the model's own when the config names one, in the chosen currency.
         local owned = ownedEntry(s, hash) ~= nil
-        local price = (s.mode == 'store' and not owned) and categoryPrice(s, category) or nil
+        local price = (s.mode == 'store' and not owned) and itemPrice(s, category, hash) or nil
         node.badge = hash == s.saved.clothing.equipped[category] and 'equipped' or (owned and 'owned' or nil)
         node.badgeLabel = badgeLabel(node.badge)
-        if price then node.summary = money(price) end
+        if price then node.summary = money(price, currency) end
         if s.mode == 'store' then
+            local colors = owned and #ownedColors(s, category, hash) or 0
             children[#children + 1] = {
                 id = id .. '.card', kind = 'itemcard', label = L(K.itemCard),
                 item = { name = WCCatalog.styleLabel(category, info and info.model or 0) .. ' · ' .. pad2(info and info.variant or 0),
-                         price = price, owned = owned, equipped = hash == s.saved.clothing.equipped[category],
-                         variants = current and #current.variants or 0 },
+                         price = price, priceLabel = price and money(price, currency) or nil, currency = currency,
+                         owned = owned, equipped = hash == s.saved.clothing.equipped[category],
+                         variants = current and #current.variants or 0, colors = colors > 0 and colors or nil },
             }
         end
     elseif hash then
         node.summary = WCCatalog.styleLabel(category, info and info.model or 0)
     elseif s.mode == 'store' then
         -- nothing worn: the category's price (per category, §16 store:open) before any try-on
-        local price = categoryPrice(s, category)
-        if price then node.summary = money(price) end
+        local price = itemPrice(s, category, nil)
+        if price then node.summary = money(price, currency) end
     end
     return node
+end
+
+--- "Sell back": an item this character bought here (a recorded price), selected in the working look
+--  but not worn in the saved one. The server re-checks everything (not worn, in no saved outfit,
+--  bought, the price it paid) and pays the refund; the working look then puts the saved item back.
+function T.resellNode(reg, s, category, hash)
+    local cfg = s.context.resell
+    if type(cfg) ~= 'table' or cfg.enabled ~= true or type(s.opts.onResell) ~= 'function' then return nil end
+    if s.mode ~= 'store' and not (s.mode == 'wardrobe' and cfg.inWardrobe == true) then return nil end
+    local entry = ownedEntry(s, hash)
+    local paid = entry and tonumber(entry.pricePaid)
+    if not paid or paid <= 0 or entry.source ~= 'store' or not WCCatalog.CURRENCY_SET[entry.currency] then return nil end
+    if hash == s.saved.clothing.equipped[category] then return nil end
+    local refund = WCUtil.round2(paid * (tonumber(cfg.percent) or 0)) or 0
+    local amount = money(refund, entry.currency)
+    return action(reg, 'clothing.' .. category .. '.resell', L(K.resell), {
+        call = function(session) return session.opts.onResell(hash) end,
+        -- sold: the category goes back to what the saved look wears there
+        after = function(app) return equipItem(s, app, category, s.saved.clothing.equipped[category] or 0) end,
+    }, { danger = true, summary = amount, confirmBody = L(K.resellBody, amount) })
+end
+
+--- "Wrap as item" (Config.Clothing.items): an owned item, not worn in the saved look and not a
+--  starting one, leaves the character's clothes and becomes a garment item in the inventory. The
+--  server re-checks it (and that it is in no saved outfit) and hands the item over.
+function T.wrapNode(reg, s, category, hash)
+    local items = Config.Clothing and Config.Clothing.items
+    if s.mode ~= 'wardrobe' or type(items) ~= 'table' or items.enabled ~= true then return nil end
+    if type(s.opts.onItem) ~= 'function' then return nil end
+    local entry = ownedEntry(s, hash)
+    if not entry or entry.worn or entry.source == 'starter' or entry.source == 'worn' then return nil end
+    if hash == s.saved.clothing.equipped[category] then return nil end
+    return action(reg, 'clothing.' .. category .. '.wrap', L(K.wrap), {
+        call = function(session) return session.opts.onItem('wrap', hash) end,
+        after = function(app) return equipItem(s, app, category, s.saved.clothing.equipped[category] or 0) end,
+    }, { danger = true, confirmBody = L(K.wrapBody) })
 end
 
 local function startingCategories(s)
@@ -802,7 +1194,7 @@ T.ordered = ordered
 local function presetItems(sex, preset, only)
     local equipped = {}
     for _, item in ipairs(preset.items or {}) do
-        local hash = WCCatalog.resolve(sex, item.category, { item.model, item.variant })
+        local hash = WCCatalog.presetHash(sex, item)
         if hash and WCCatalog.offered(sex, item.category) and (not only or only[item.category]) then
             equipped[item.category] = hash
         end
@@ -842,12 +1234,12 @@ function T.taxonomy(reg, s)
             local category = sub.category or sub.id
             if not only or only[category] then add(subs, clothingSub(reg, s, sub)) end
         end
-        add(out, group('tax.' .. g.id, L(g.label), subs, { camera = g.camera, searchable = #subs > 6 or nil }))
+        add(out, group('tax.' .. g.id, L(g.label), subs, { camera = g.camera, icon = g.icon, searchable = #subs > 6 or nil }))
     end
     if s.mode == 'creator' then
         local presets = Config.StartingOutfits and Config.StartingOutfits[s.working.sex]
         if type(presets) == 'table' and #presets > 0 then
-            add(out, group('tax.outfits', L(K.outfits), { starterPresets(reg, s, only) }, { camera = 'fullBody' }))
+            add(out, group('tax.outfits', L(K.outfits), { starterPresets(reg, s, only) }, { camera = 'fullBody', icon = 'outfit' }))
         end
     end
     return out
@@ -957,14 +1349,31 @@ local function outfitEquip(s, outfit)
             if h and ownedEntry(s, h) then equipped[category] = h end
         end
         equipped = WCRules.normalize(equipped)
+        -- each item in the outfit's colour when the character still owns it (colourways: false is the
+        -- original colour), else in its owned (last worn) colour, as an outfit saved before colours
+        local saved = type(data.tints) == 'table' and data.tints or {}
         local tints = {}
-        for category, h in pairs(equipped) do tints[category] = ownedTint(s, category, h) end
+        for category, h in pairs(equipped) do
+            local want = saved[category]
+            if want == false then
+                tints[category] = s.mode == 'wardrobe' and false or nil
+            elseif type(want) == 'table' and ownsColor(s, category, h, want) then
+                tints[category] = WCUtil.copy(want)
+            else
+                tints[category] = ownedTint(s, category, h)
+            end
+        end
         local states = {}
         for groupId, value in pairs(type(data.states) == 'table' and data.states or {}) do
             if WCClothingStates.isValid(groupId, value) then states[groupId] = value end
         end
         app.clothing.equipped, app.clothing.tints, app.clothing.states = equipped, tints, states
         app.clothing.outfit = WCUtil.int(outfit.id, 1, nil, nil)
+        -- a store only sells: the saved states it keeps are its own rule (WCClothingStore.plan)
+        if SETTLES_STATES[s.mode] then
+            app.clothing.outfit = nil
+            app.clothing.states = settleStates(s, app)
+        end
     end
 end
 
@@ -976,15 +1385,27 @@ local function outfitCall(op, id, valueOf)
     end
 end
 
+--- The working clothes as an outfit: the items, their states and each item's colour (colourways:
+--  its tint, or false for its original colour).
 local function currentClothes(s, name)
+    local tints = {}
+    for category in pairs(s.working.clothing.equipped) do
+        local tint = s.working.clothing.tints[category]
+        tints[category] = (type(tint) == 'table' and tint.palette) and WCUtil.copy(tint) or false
+    end
     return { name = name, equipped = WCUtil.copy(s.working.clothing.equipped),
-             states = WCUtil.copy(s.working.clothing.states) }
+             states = WCUtil.copy(s.working.clothing.states), tints = tints }
 end
 
 local function outfitsNode(reg, s)
     local ctx = s.context
     if ctx.outfitsEnabled == false or (WCServices and not WCServices.enabled('savedOutfits')) then return nil end
     local maxName = Config.Wardrobe and Config.Wardrobe.outfitNameMax or 24
+    -- a store offers the saved outfits to put on only (a starting look to buy around); the wardrobe
+    -- also updates, renames, deletes and (with the inventory items) shares them
+    local equipOnly = s.mode == 'store'
+    local items = Config.Clothing and Config.Clothing.items
+    local sharing = not equipOnly and type(items) == 'table' and items.enabled == true
     local children = {}
     for _, outfit in ipairs(outfitsOf(s)) do
         local oid = WCUtil.int(outfit.id, 1, nil, nil)
@@ -996,19 +1417,28 @@ local function outfitsNode(reg, s)
                 apply = outfitEquip(s, outfit),
                 hook = s.opts.onOutfit and function(session) return s.opts.onOutfit('equip', oid, nil, session) end or nil,
             })
-            sub[2] = action(reg, prefix .. '.update', L(K.outfitUpdate), {
-                call = outfitCall('update', oid, function(session) return currentClothes(session) end),
-            })
-            sub[3] = text(reg, prefix .. '.rename', L(K.outfitRename), name, maxName, {
-                call = outfitCall('rename', oid),
-            })
-            sub[4] = action(reg, prefix .. '.delete', L(K.outfitDelete), { call = outfitCall('delete', oid) },
-                { danger = true, confirmBody = L(K.outfitDeleteBody) })
+            if not equipOnly then
+                sub[#sub + 1] = action(reg, prefix .. '.update', L(K.outfitUpdate), {
+                    call = outfitCall('update', oid, function(session) return currentClothes(session) end),
+                })
+                sub[#sub + 1] = text(reg, prefix .. '.rename', L(K.outfitRename), name, maxName, {
+                    call = outfitCall('rename', oid),
+                })
+                if sharing then
+                    sub[#sub + 1] = action(reg, prefix .. '.share', L(K.share), { call = outfitCall('share', oid) })
+                end
+                sub[#sub + 1] = action(reg, prefix .. '.delete', L(K.outfitDelete), { call = outfitCall('delete', oid) },
+                    { danger = true, confirmBody = L(K.outfitDeleteBody) })
+            end
             local equipped = s.working.clothing.outfit == oid
             children[#children + 1] = group(prefix, name, sub, {
                 badge = equipped and 'equipped' or nil, badgeLabel = equipped and badgeLabel('equipped') or nil,
             })
         end
+    end
+    if equipOnly then
+        -- the store: the outfits only, under their own heading (saving goes with the purchase)
+        return group('outfits', L(K.savedOutfits), children, { camera = 'fullBody' })
     end
     local max = WCUtil.int(ctx.maxOutfits or (Config.Wardrobe and Config.Wardrobe.maxSavedOutfits), 0, nil, 0)
     local full = #outfitsOf(s) >= max
@@ -1059,7 +1489,8 @@ local function creatorReview(s)
     local upper = catalog(s, 'BODIES_UPPER')
     local info = upper and upper.hashes[app.body.upper]
     if info then items[#items + 1] = { label = L(K.bodyType), value = WCCatalog.styleLabel('BODIES_UPPER', info.model) } end
-    items[#items + 1] = { label = L(K.height), value = ('%d'):format(math.floor(app.body.height * 100 + 0.5)) }
+    if app.body.build then items[#items + 1] = { label = L(K.build), value = L(K.builds[app.body.build] or K.buildDefault) } end
+    items[#items + 1] = { label = L(K.height), value = heightText(s, app.body.height) }
     local heads = catalog(s, 'heads')
     local head = heads and heads.hashes[app.head.head]
     if head then items[#items + 1] = { label = L(K.head), value = WCCatalog.styleLabel('heads', head.model) } end
@@ -1067,11 +1498,11 @@ local function creatorReview(s)
     if tone then items[#items + 1] = { label = L(K.skinTone), value = pad2(tone) } end
     local hairCat = catalog(s, 'hair')
     local hair = app.hair.style ~= 0 and hairCat and hairCat.hashes[app.hair.style]
-    items[#items + 1] = { label = L(K.hair), value = hair and (WCCatalog.styleLabel('hair', hair.model) .. ' · ' .. colourLabel(hair.name, hair.variant)) or L('بدون') }
+    items[#items + 1] = { label = L(K.hair), value = hair and (WCCatalog.styleName(app.sex, 'hair', hair.model) .. ' · ' .. colourLabel(hair.name, hair.variant)) or L('بدون') }
     if app.sex == 'male' then
         local beardCat = catalog(s, 'mustache')
         local beard = app.hair.facial ~= 0 and beardCat and beardCat.hashes[app.hair.facial]
-        items[#items + 1] = { label = L(K.beard), value = beard and WCCatalog.styleLabel('mustache', beard.model) or L('بدون') }
+        items[#items + 1] = { label = L(K.beard), value = beard and WCCatalog.styleName(app.sex, 'mustache', beard.model) or L('بدون') }
     end
     local count = 0
     for _ in pairs(app.clothing.equipped) do count = count + 1 end
@@ -1088,7 +1519,7 @@ local function changesReview(s, hint)
     end
     local items = { { label = L(K.changed), value = #names > 0 and table.concat(names, L('، ')) or L(K.noChanges) } }
     local price = T.price(s)
-    if price then items[#items + 1] = { label = L(K.price), value = money(price.total) } end
+    if price then items[#items + 1] = { label = L(K.price), value = money(price.total, price.currency) } end
     return { id = 'review', kind = 'review', label = L(K.review), hint = L(hint), items = items, camera = 'fullBody' }
 end
 
@@ -1104,22 +1535,35 @@ function T.price(s)
             total = total + amount
         end
     end
+    local currency, missing = nil, nil
     if s.mode == 'store' then
         -- WCClothingStore.plan per worn category: an unowned item changed in any way (a dye of the
-        -- worn uniform included) is bought, and a tint differing from the item's own colour is a dye
+        -- worn uniform included) is bought, and a tint differing from the item's own colour is a dye.
+        -- A colour the character owns of the item costs nothing (colourways); every price is in the
+        -- chosen currency, and an item without a price in it is listed as missing (the save waits).
+        currency = currencyOf(s)
+        missing = {}
         local equipped, tints = s.working.clothing.equipped, s.working.clothing.tints
-        local tintPrice = tonumber(s.context.tintPrice) or (Config.Clothing.tints and Config.Clothing.tints.price) or 0
+        local perColour = colourPrice(s)
         local dyes = {}
         for _, category in ipairs(WCUtil.sortedKeys(equipped)) do
             local hash, tint = equipped[category], tints[category]
-            if isPurchase(s, category, hash, tint) then line(L(WCCatalog.label(category)), categoryPrice(s, category)) end
+            if isPurchase(s, category, hash, tint) then
+                local price = itemPrice(s, category, hash)
+                if price == nil then missing[#missing + 1] = L(WCCatalog.label(category)) end
+                line(L(WCCatalog.label(category)), price)
+            end
             -- the saved item with its saved tint is free even when its owned tint differs
             if type(tint) == 'table' and tint.palette and not untouched(s, category, hash, tint)
-                and not sameTint(tint, baselineTint(s, category, hash)) then
+                and not sameTint(tint, baselineTint(s, category, hash))
+                and (not ownedEntry(s, hash) or not ownsColor(s, category, hash, tint)) then
                 dyes[#dyes + 1] = category
             end
         end
-        for _, category in ipairs(dyes) do line(L(K.color) .. ' · ' .. L(WCCatalog.label(category)), tintPrice) end
+        for _, category in ipairs(dyes) do
+            if perColour == nil then missing[#missing + 1] = L(K.color) .. ' · ' .. L(WCCatalog.label(category)) end
+            line(L(K.color) .. ' · ' .. L(WCCatalog.label(category)), perColour)
+        end
     elseif s.mode == 'barber' then
         local changed = AppearanceSchema.changedSections(s.saved, s.working)
         local services = type(s.context.services) == 'table' and s.context.services or
@@ -1158,7 +1602,8 @@ function T.price(s)
     else
         return nil
     end
-    return { total = WCUtil.round2(total) or 0, lines = lines }
+    return { total = WCUtil.round2(total) or 0, lines = lines, currency = currency,
+             missing = (missing and #missing > 0) and missing or nil }
 end
 
 -- ---------------------------------------------------------------------
@@ -1289,9 +1734,106 @@ local function barberTree(reg, s)
     return children
 end
 
+--- The store's Payment choice: shown when it takes more than one currency (an item on sale is
+--  priced in gold). It changes no garment: the currency is the session's, sent with the commit.
+local function paymentNode(reg, s)
+    local list = s.context.currencies
+    if type(list) ~= 'table' or #list < 2 then return nil end
+    local options, current = {}, 1
+    local chosen = currencyOf(s)
+    for i, c in ipairs(list) do
+        options[#options + 1] = { value = i, label = L(K.currencies[c] or c) }
+        if c == chosen then current = i end
+    end
+    return choice(reg, 'store.currency', L(K.payment), current, options, function(_, value, session)
+        local c = list[value]
+        if not WCCatalog.CURRENCY_SET[c] then return 'INVALID_PAYLOAD' end
+        session.draft.currency = c
+    end)
+end
+
+--- "Take off every garment": every removable item of the working look comes off at once (the
+--  essential body parts stay). Saved by the normal commit, free; undo puts them back.
+local function undressNode(reg, s)
+    local any = false
+    for category in pairs(s.working.clothing.equipped) do
+        if WCRules.canRemove(category) then any = true break end
+    end
+    return action(reg, 'clothing.undress', L(K.undress), {
+        apply = function(app)
+            for _, category in ipairs(WCUtil.sortedKeys(app.clothing.equipped)) do
+                if app.clothing.equipped[category] and WCRules.canRemove(category) then
+                    local err = equipItem(s, app, category, 0)
+                    if err then return err end
+                end
+            end
+        end,
+    }, { disabled = not any or nil })
+end
+
+--- The tailor's suggestions (Config.Clothing.suggestions, and the creator's starting outfits when
+--  useStartingOutfits is on): each dresses the working look in the items of it this store sells
+--  (or the character owns), priced as usual. The essential body parts stay.
+local function suggestionsNode(reg, s)
+    local cfg = Config.Clothing and Config.Clothing.suggestions
+    if type(cfg) ~= 'table' then return nil end
+    local sex = s.working.sex
+    local list = {}
+    for _, p in ipairs(type(cfg[sex]) == 'table' and cfg[sex] or {}) do list[#list + 1] = p end
+    if cfg.useStartingOutfits then
+        for _, p in ipairs(Config.StartingOutfits and Config.StartingOutfits[sex] or {}) do list[#list + 1] = p end
+    end
+    local children = {}
+    for i, preset in ipairs(list) do
+        if type(preset) == 'table' and type(preset.items) == 'table' then
+            local look = {}
+            for _, item in ipairs(preset.items) do
+                local hash = WCCatalog.presetHash(sex, item)
+                if hash and (ownedEntry(s, hash) or WCCatalog.available(s.context.storeProfile, sex, item.category, hash)) then
+                    look[item.category] = hash
+                end
+            end
+            look = WCRules.normalize(look)
+            if next(look) then
+                children[#children + 1] = action(reg, 'suggestion.' .. i, L(preset.label or K.suggestions), {
+                    apply = function(app)
+                        local equipped = {}
+                        for category, h in pairs(app.clothing.equipped) do
+                            if not WCRules.canRemove(category) then equipped[category] = h end
+                        end
+                        for category, h in pairs(look) do equipped[category] = h end
+                        local tints = {}
+                        for category, h in pairs(equipped) do
+                            -- each item in its own colour (the owned one, or the saved one when it is
+                            -- the saved item: then it is untouched, never a purchase)
+                            local tint = ownedTint(s, category, h)
+                            if tint == nil and h == s.saved.clothing.equipped[category] then
+                                tint = s.saved.clothing.tints[category] and WCUtil.copy(s.saved.clothing.tints[category]) or nil
+                            end
+                            tints[category] = tint
+                        end
+                        app.clothing.equipped, app.clothing.tints, app.clothing.outfit = equipped, tints, nil
+                        app.clothing.states = settleStates(s, app)
+                    end,
+                })
+            end
+        end
+    end
+    return group('suggestions', L(K.suggestions), children, { camera = 'fullBody' })
+end
+
 local function storeTree(reg, s)
     if not sectionAllowed(s, 'clothing') then return {} end
-    return T.taxonomy(reg, s)
+    local out = {}
+    add(out, paymentNode(reg, s))
+    for _, node in ipairs(T.taxonomy(reg, s)) do out[#out + 1] = node end
+    -- the 8th group, Outfits: the saved outfits (to put on) and the tailor's suggestions
+    local looks = {}
+    if type(s.context.outfits) == 'table' then add(looks, outfitsNode(reg, s)) end
+    add(looks, suggestionsNode(reg, s))
+    add(out, group('tax.outfits', L(K.outfits), looks, { camera = 'fullBody', icon = 'outfit' }))
+    add(out, undressNode(reg, s))
+    return out
 end
 
 local function persists(groupId)
@@ -1306,6 +1848,7 @@ local function wardrobeTree(reg, s)
         -- Outfits is the 8th taxonomy group (§5.3): the saved outfits sit beside Head … Accessories
         local groups = T.taxonomy(reg, s)
         add(groups, outfits)
+        add(groups, undressNode(reg, s))
         add(children, group('items', L(K.clothing), groups, { camera = 'fullBody', searchable = true }))
     else
         add(children, outfits)
@@ -1351,8 +1894,64 @@ function T.stages(s, root)
     return out
 end
 
---- Random creator appearance: valid face / body / hair only, moderate morphology (±0.25).
+--- A random variant of a hair-like model in a colour: the variant whose colour suffix matches (a
+--  beard in the hair's colour), else a random one.
+local function variantInColour(variants, suffix)
+    if suffix then
+        for _, v in ipairs(variants) do
+            if WCCatalog.colorSuffix(v.name) == suffix then return v end
+        end
+    end
+    return variants[math.random(1, #variants)]
+end
+
+--- Random creator appearance: valid parts only and moderate values (morphology ±0.25). Covers the
+--  head, skin tone, body model, build, weight and height, eyes, teeth, hair, the beard (in the
+--  hair's colour, male), the eyebrows and a light ageing. Never adds makeup, face paint or clothes.
 function T.randomize(app)
+    T.randomizeFace(app)
+    local sex = app.sex
+    local cats = WCCatalog.forSex(sex)
+    -- teeth: one of the catalogue's
+    local teethCat = cats.teeth
+    if teethCat and #teethCat.models > 0 then
+        local variants = teethCat.models[math.random(1, #teethCat.models)]
+        app.head.teeth = variants[math.random(1, #variants)].hash
+    end
+    -- body: build (or none), weight and height kept near the middle
+    app.body.build = math.random(0, #AppearanceSchema.BODY_BUILDS)
+    if app.body.build == 0 then app.body.build = nil end
+    app.body.weight = math.random(6, 16)
+    app.body.height = math.random(95, 105) / 100
+    -- the beard in the hair's colour (about a third of the men shaved)
+    local hairCat = cats.hair
+    local hairInfo = hairCat and app.hair.style ~= 0 and hairCat.hashes[app.hair.style] or nil
+    local suffix = hairInfo and WCCatalog.colorSuffix(hairInfo.name) or nil
+    local beards = cats.mustache
+    if sex == 'male' and beards and #beards.models > 0 and math.random(1, 3) > 1 then
+        app.hair.facial = variantInColour(beards.models[math.random(1, math.min(#beards.models, 18))], suffix).hash
+    elseif sex == 'male' then
+        app.hair.facial = 0
+    end
+    -- the eyebrows (following the hair colour) and, now and then, a few wrinkles
+    local brows = WCOverlays.byId.eyebrows
+    if brows then
+        local cur = app.overlays.eyebrows or {}
+        app.overlays.eyebrows = { style = math.random(1, brows.styles), color = cur.color or 1,
+                                  opacity = math.random(75, 100) / 100,
+                                  matchHair = (Config.Creator and Config.Creator.eyebrowsFollowHair) and true or nil }
+    end
+    local ageing = WCOverlays.byId.ageing
+    if ageing and math.random(1, 2) == 1 then
+        app.overlays.ageing = { style = math.random(1, ageing.styles), color = 1, opacity = math.random(10, 35) / 100 }
+    else
+        app.overlays.ageing = nil
+    end
+    return app
+end
+
+--- The face / body model / tone / eyes / hair / morphology part of the random appearance.
+function T.randomizeFace(app)
     local sex = app.sex
     local cats = WCCatalog.forSex(sex)
     local function model(category, cap)

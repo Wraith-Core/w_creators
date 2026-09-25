@@ -223,7 +223,7 @@ class RestartRecoveryTests(Flow):
         self.assertTrue(r.data.needsAppearance)
 
     def test_a_dead_player_is_still_refused(self):
-        self.rt.run('charids[1] = "vorp:1"; health[1] = 0')
+        self.rt.run('charids[1] = "vorp:1"; dead[1] = true')
         self.assertEqual(self.call('scene:prepare', 1).code, 'BUSY')
         self.assertEqual(self.bucket(), 0)
 

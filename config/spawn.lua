@@ -61,8 +61,11 @@ Config.Spawn = {
     -- lowest order first).
     bounds = { minX = -8000.0, maxX = 5000.0, minY = -6000.0, maxY = 3000.0, minZ = -150.0, maxZ = 1500.0 },
 
-    -- A last location within this radius of the creator scene anchor is rejected.
-    sceneExclusionRadius = 150.0,
+    -- A last location within this radius of the creator scene anchor is rejected (a character that
+    -- was saved while standing in the scene). The scene is the Saint Denis theatre now, so this
+    -- covers the stage only: a wider radius would throw every character saved in central Saint
+    -- Denis back to the fallback spawn.
+    sceneExclusionRadius = 12.0,
 
     -- -----------------------------------------------------------------
     --  The spawn points

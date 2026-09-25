@@ -52,7 +52,9 @@ function GetPlayerServerId(player) if player == 0 then return MyServerId end ret
 RemotePlayers = {}   -- [serverId] = ped handle (in scope)
 function GetPlayerFromServerId(sid) if RemotePlayers[sid] then return sid end if sid == MyServerId then return 0 end return -1 end
 function GetPlayerPed(player) if player == 0 then return MyPed end return RemotePlayers[player] or 0 end
-function DoesEntityExist(e) return type(e) == 'number' and Peds[e] ~= nil end
+-- BOOL natives answer 1 (not true) on the RedM runtime: the stubs do the same so a strict == true
+-- comparison against a native fails here before it fails in the game.
+function DoesEntityExist(e) if type(e) == 'number' and Peds[e] ~= nil then return 1 end return false end
 function IsEntityAPed(e) return Peds[e] ~= nil end
 function IsPedAPlayer(e) if e == MyPed then return true end for _, p in pairs(RemotePlayers) do if p == e then return true end end return false end
 function GetEntityModel(e) return Peds[e] and Peds[e].model or 0 end
@@ -77,7 +79,7 @@ for _, name in ipairs({ 'ClearPedTasksImmediately', 'ClearPedTasks', 'SetEntityC
     'RequestIplByHash', 'StartPlayerTeleport', 'RemoveIplByHash' }) do
     _ENV[name] = function(...) rec(name, ...) end
 end
-function HasCollisionLoadedAroundEntity() return true end
+function HasCollisionLoadedAroundEntity() return 1 end
 IplInactive = {}      -- [hash] = true: the map is not active until requested
 function IsIplActiveByHash(hash) return not IplInactive[hash] end
 function IsPlayerTeleportActive() return false end
@@ -109,7 +111,7 @@ function SetPlayerModel(player, model) rec('SetPlayerModel', player, model)
 Cams = {}
 NextCam = 0
 function CreateCam() NextCam = NextCam + 1; Cams[NextCam] = true; rec('CreateCam', NextCam) return NextCam end
-function DoesCamExist(c) return Cams[c] == true end
+function DoesCamExist(c) if Cams[c] == true then return 1 end return false end
 function DestroyCam(c) rec('DestroyCam', c) Cams[c] = nil end
 function RenderScriptCams(b) rec('RenderScriptCams', b) end
 for _, name in ipairs({ 'SetCamCoord', 'PointCamAtCoord', 'SetCamFov', 'SetCamActiveWithInterp', 'SetCamActive' }) do

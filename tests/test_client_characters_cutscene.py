@@ -138,7 +138,8 @@ class StaticRulesTests(unittest.TestCase):
             names |= set(re.findall(r"await\('([^']+)'", read(RESOURCE / path)))
         allowed = {'w_creators:characters:list', 'w_creators:characters:select', 'w_creators:characters:loaded',
                    'w_creators:characters:beginCreate', 'w_creators:characters:create',
-                   'w_creators:characters:cancelCreate', 'w_creators:characters:delete'}
+                   'w_creators:characters:cancelCreate', 'w_creators:characters:keepAlive',
+                   'w_creators:characters:delete'}
         self.assertEqual(names - allowed, set())
         self.assertTrue({'w_creators:characters:list', 'w_creators:characters:select',
                          'w_creators:characters:loaded', 'w_creators:characters:create'} <= names)

@@ -146,7 +146,24 @@ local function registerLogTypes()
             key = 'clothing_purchased', label = 'Clothing Purchased',
             channel = 'clothing-store', severity = 'info', class = 'economy',
             description = 'شراء قطع ملابس (وألوانها) من متجر الملابس.',
-            schema = { charid = { type = 'string', required = true }, items = 'any', price = 'any', store = 'any' },
+            schema = { charid = { type = 'string', required = true }, items = 'any', price = 'any', currency = 'any',
+                       store = 'any' },
+        })
+
+        logger.RegisterLogType({
+            key = 'clothing_sold', label = 'Clothing Sold Back',
+            channel = 'clothing-store', severity = 'info', class = 'economy',
+            description = 'بيع قطعة ملابس مشتراة إلى المتجر مقابل جزء من ثمنها.',
+            schema = { charid = { type = 'string', required = true }, hash = 'any', category = 'any', price = 'any',
+                       currency = 'any', paid = 'any', store = 'any' },
+        })
+
+        logger.RegisterLogType({
+            key = 'clothing_item', label = 'Clothing Wrapped / Unwrapped',
+            channel = 'clothing-items', severity = 'info', class = 'economy',
+            description = 'قطعة ملابس لُفّت في الحقيبة أو فُتحت منها، أو بطاقة طقم أُعطيت.',
+            schema = { charid = { type = 'string', required = true }, action = 'any', hash = 'any', category = 'any',
+                       item = 'any' },
         })
 
         logger.RegisterLogType({
@@ -463,13 +480,15 @@ end
 --  confirms the row is gone). An explicit false is a refusal: w_core's DeleteCharacter answers
 --  false when the economy is not ready, the bank refuses (w_centralbank CanDeleteCharacter: an
 --  open loan) or its transaction failed.
+--- Returns accepted, reason. w_core answers `false, reason` ('economy_not_ready' | 'funds' |
+--- 'loan' | 'assets' | 'database'); the upstream cores answer nothing, which is accepted.
 local function coreDelete(source, citizenid)
-    local called, answer
+    local called, answer, reason
     if Bridge.Name == 'rsg' then
-        called, answer = pcall(function() return rsgCore().Player.DeleteCharacter(source, citizenid) end)
+        called, answer, reason = pcall(function() return rsgCore().Player.DeleteCharacter(source, citizenid) end)
     elseif Bridge.Name == 'qbr' then
         if GetResourceState('qbr-core') ~= 'started' then return false end
-        called, answer = pcall(function() return exports.w_lib:FwNativeCoreCall('DeleteCharacter', source, citizenid) end)
+        called, answer, reason = pcall(function() return exports.w_lib:FwNativeCoreCall('DeleteCharacter', source, citizenid) end)
     else
         return false
     end
@@ -477,7 +496,8 @@ local function coreDelete(source, citizenid)
         WCDebug.warn('bridge', 'deleting %s: the core failed: %s', tostring(citizenid), tostring(answer))
         return false
     end
-    return answer ~= false
+    if answer == false then return false, reason end
+    return true
 end
 
 --- An approximate date of birth from the age (in YYYY-MM-DD form).
@@ -857,7 +877,8 @@ function Bridge.DeleteFrameworkCharacter(source, charid)
         return raw ~= nil and (pcall(w.database.query.await,
             ('DELETE FROM %s WHERE charidentifier = ?'):format(Config.Characters.tables.vorp), { raw })) == true
     end
-    return coreDelete(source, charid) == true
+    local accepted, reason = coreDelete(source, charid)
+    return accepted == true, reason
 end
 
 --- Deleting a character: the framework row, then the appearance, owned clothes and outfits (one

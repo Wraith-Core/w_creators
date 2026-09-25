@@ -190,7 +190,8 @@ class PipelineTests(unittest.TestCase):
         wearable = self.rt.py(self.e('''(function() local out = {}
             for _, e in ipairs(entries("component.setWearableState")) do out[e.args[2]] = e.args[4] end
             return out end)()'''))
-        self.assertEqual(wearable, {'neckwear': 'mask_up', 'boots': 'under_pants'})
+        # the vest over the pants (vestTuck's default) is set too, like the collar below
+        self.assertEqual(wearable, {'neckwear': 'mask_up', 'boots': 'under_pants', 'vests': 'base'})
         self.assertEqual(self.e('count("component.sleeveRoll")'), 1)
         self.assertEqual(self.e('count("component.collarClose")'), 1)   # the default is still set
         # the states come after the clothing and before the refresh
@@ -205,14 +206,18 @@ class PipelineTests(unittest.TestCase):
         calls = self.rt.py(self.e('''(function() local out = {}
             for _, e in ipairs(entries("component.setWearableState")) do out[#out + 1] = { e.args[2], e.args[4] } end
             return out end)()'''))
-        self.assertEqual(list(calls.values()), [{1: 'boots', 2: 'base'}])
+        # (the vest has its own tuck state, vestTuck, which needs the pants too: reset to base as well)
+        self.assertEqual(list(calls.values()), [{1: 'boots', 2: 'base'}, {1: 'vests', 2: 'base'}])
         self.assertGreater(self.e('indexOf("component.setWearableState")'), self.e('(applied("boots"))'))
         # the reset reads the committed boots back: it follows the body commit
         self.assertGreater(self.e('indexOf("component.setWearableState")'), self.e('entries("updateVariation")[2].i'))
         self.assertLess(self.e('indexOf("component.setWearableState")'), self.e('lastIndex("updateVariation")'))
-        # nothing is reset when the boots are not equipped either
+        # nothing is reset for the boots when they are not equipped either
         self.restore('app.clothing.equipped.boots = nil')
-        self.assertEqual(self.e('count("component.setWearableState")'), 0)
+        boots = self.e('''(function() local n = 0
+            for _, e in ipairs(entries("component.setWearableState")) do if e.args[2] == "boots" then n = n + 1 end end
+            return n end)()''')
+        self.assertEqual(boots, 0)
 
     def test_invalid_ped_and_model_mismatch_do_not_throw(self):
         self.run('clearLog(); ok, err = Appearance.RestoreCharacter(99999, app)')
@@ -367,7 +372,8 @@ class ApplyDiffTests(unittest.TestCase):
         calls = self.rt.py(self.e('''(function() local out = {}
             for _, e in ipairs(entries("component.setWearableState")) do out[#out + 1] = { e.args[2], e.args[4] } end
             return out end)()'''))
-        self.assertEqual(list(calls.values()), [{1: 'boots', 2: 'base'}])
+        # (the vest's tuck state also needs the pants: it goes back to base with them)
+        self.assertEqual(list(calls.values()), [{1: 'boots', 2: 'base'}, {1: 'vests', 2: 'base'}])
         # the pants back on: the stored 'under' is applied again
         self.run('before = WCUtil.copy(after); after = WCUtil.copy(app); after.clothing.states.boots = "under"')
         self.assertTrue(self.diff(''))

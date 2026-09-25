@@ -23,16 +23,19 @@ local OUTFIT_CALLS = {
     update = 'w_creators:outfits:update',
     rename = 'w_creators:outfits:rename',
     delete = 'w_creators:outfits:delete',
+    share = 'w_creators:outfits:share',
 }
 
 --- The clothes an outfit operation sends: those the editor passed, else its working appearance.
+--  tints: each item's colour (a tint, or false for its original colour; colourways).
 local function clothesOf(value)
     local v = type(value) == 'table' and value or {}
     local working = WCEditor.working() or {}
     local clothing = type(working.clothing) == 'table' and working.clothing or {}
     local equipped = type(v.equipped) == 'table' and v.equipped or clothing.equipped or {}
     local states = type(v.states) == 'table' and v.states or clothing.states or {}
-    return equipped, states
+    local tints = type(v.tints) == 'table' and v.tints or nil
+    return equipped, states, tints
 end
 
 --- The editor's onOutfit hook (§3.2, §5.6). 'equip' is a veto hook: nil lets the editor apply the
@@ -46,11 +49,11 @@ local function outfitOp(flow, context, op, id, value)
     local result
     if op == 'save' then
         if type(value) ~= 'table' or type(value.name) ~= 'string' then return WCResult.fail('INVALID_OUTFIT_NAME') end
-        local equipped, states = clothesOf(value)
-        result = WCServiceFlow.call(name, flow.token, value.name, equipped, states)
+        local equipped, states, tints = clothesOf(value)
+        result = WCServiceFlow.call(name, flow.token, value.name, equipped, states, tints)
     elseif op == 'update' then
-        local equipped, states = clothesOf(value)
-        result = WCServiceFlow.call(name, flow.token, id, equipped, states)
+        local equipped, states, tints = clothesOf(value)
+        result = WCServiceFlow.call(name, flow.token, id, equipped, states, tints)
     elseif op == 'rename' then
         if type(value) ~= 'string' then return WCResult.fail('INVALID_OUTFIT_NAME') end
         result = WCServiceFlow.call(name, flow.token, id, value)
@@ -70,6 +73,19 @@ local function stateOp(groupId, value)
     return nil
 end
 
+--- The editor's onResell hook (Config.Clothing.resell.inWardrobe): sell an owned item back.
+local function resellOp(flow, hash)
+    if flow.finished or type(flow.token) ~= 'string' then return WCResult.fail('SESSION_NOT_FOUND') end
+    return WCServiceFlow.call('w_creators:store:resell', flow.token, hash)
+end
+
+--- The editor's onItem hook (Config.Clothing.items): wrap an owned item into an inventory item.
+local function itemOp(flow, op, hash)
+    if op ~= 'wrap' then return WCResult.fail('INVALID_PAYLOAD') end
+    if flow.finished or type(flow.token) ~= 'string' then return WCResult.fail('SESSION_NOT_FOUND') end
+    return WCServiceFlow.call('w_creators:wardrobe:wrap', flow.token, hash)
+end
+
 local function options(flow, data, loc)
     local context = {
         owned = data.owned,
@@ -77,6 +93,7 @@ local function options(flow, data, loc)
         maxOutfits = data.maxOutfits,
         outfitsEnabled = data.outfitsEnabled,
         remote = data.remote,
+        resell = data.resell,
         location = loc,
     }
     return {
@@ -87,6 +104,8 @@ local function options(flow, data, loc)
         camera = loc and loc.camera or 'fullBody',
         onOutfit = function(op, id, value) return outfitOp(flow, context, op, id, value) end,
         onState = function(groupId, value) return stateOp(groupId, value) end,
+        onResell = function(hash) return resellOp(flow, hash) end,
+        onItem = function(op, hash) return itemOp(flow, op, hash) end,
     }
 end
 

@@ -1,4 +1,5 @@
-"""WCCreator (client/creator/creator.lua): the server grant first, the gender scene, beginCreate(sex),
+"""WCCreator (client/creator/creator.lua): the server grant first, the gender scene (pick = open, drafts
+per gender, beginCreate(sex) at the save),
 the creator editor (sections, identity, facial hair by sex), commit → render → loaded, cancel paths
 that release the grant, the repair (appearance-only) path, the lost grant and the resource stop.
 
@@ -70,6 +71,10 @@ class CreatorGenderSceneTests(unittest.TestCase):
         self.run('clearLog(); press("RETURN")')
         settle(self.rt)
 
+    def ped(self, sex):
+        return self.e('(function() for _, p in ipairs(CreatorScene.peds()) do '
+                      'if GetEntityModel(p) == GetHashKey("mp_%s") then return p end end end)()' % sex)
+
     def test_gender_scene_as_before(self):
         e = self.e
         self.assertEqual(e('WCCreator.stage()'), 'gender')
@@ -79,26 +84,50 @@ class CreatorGenderSceneTests(unittest.TestCase):
         self.assertEqual(models, sorted([e('GetHashKey("mp_male")'), e('GetHashKey("mp_female")')]))
         self.assertEqual(e('count("giveWeapon")'), 2)       # holstered revolvers
         self.assertEqual(e('count("startScenario")'), 2)    # scenario idles
+        # each character stands on its own spot of the stage
+        for sex in ('male', 'female'):
+            self.assertAlmostEqual(e('Peds[%d].coords.x' % self.ped(sex)), e('Config.Scene.peds.%s[1]' % sex))
+        # picking is accepting: LEFT / RIGHT / BACK, no separate confirm prompt
         group = 'liveGroup()'
-        for key in ('LEFT', 'RIGHT', 'RETURN', 'BACK'):
+        for key in ('LEFT', 'RIGHT', 'BACK'):
             self.assertIsNotNone(e('%s.prompts.%s' % (group, key)), key)
+        self.assertIsNone(e('%s.prompts.RETURN' % group))
+        # the camera frames the pair, not one of them
         self.assertTrue(e('WCCamera.isOpen()'))
-        self.assertEqual(e('GetEntityModel(WCCamera.ped()) == GetHashKey("mp_male")'), True)
+        self.assertEqual(e('WCCamera.current()'), 'pair')
+        self.assertIsNone(e('WCCamera.ped()'))
+        # the server has not been told a sex: the grant of the start holds none
+        self.assertEqual(e('called("w_creators:characters:beginCreate")'), 1)
+        self.assertIsNone(e('callArgs("w_creators:characters:beginCreate")[2]'))
         self.run('clearLog()')
         settle(self.rt, 0, 2, barrier=False)
         self.assertGreater(e('count("DrawLightWithRange")'), 0)  # the lights loop
+        # the ambient population is held at zero every frame (the stage is in Saint Denis)
+        self.assertGreater(e('count(string.format("native:0x%X", 0xAB0D553FE20A6E25))'), 0)
         self.assertNotIn(e('MyPed'), list(peds.values()))
 
-    def test_switching_gender_moves_the_camera(self):
-        self.run('press("RIGHT")')
+    def test_right_opens_the_woman_at_once_where_she_stands(self):
+        female = self.ped('female')
+        spot = self.e('Peds[%d].coords.x' % female)
+        self.run('clearLog(); press("RIGHT")')
         settle(self.rt, 0, 3, barrier=False)
-        self.assertEqual(self.e('GetEntityModel(WCCamera.ped()) == GetHashKey("mp_female")'), True)
-        self.assertGreater(self.e('count("PlaySoundFrontend")'), 0)
+        e = self.e
+        self.assertEqual(e('WCCreator.stage()'), 'editor')
+        self.assertEqual(e(SESSION + '.saved.sex'), 'female')
+        self.assertEqual(e('WCCamera.ped()'), female)
+        self.assertGreater(e('count("PlaySoundFrontend")'), 0)
+        # edited in place (Config.Scene.editingPed = nil), the other character hidden
+        self.assertEqual(e('Peds[%d].coords.x' % female), spot)
+        self.assertFalse(e('Peds[%d].visible' % self.ped('male')))
+        # the camera glides from the pair shot to her over Config.Scene.cameras.glideMs
+        self.assertEqual(e('Log[indexOf("SetCamActiveWithInterp")].args[3]'), e('Config.Scene.cameras.glideMs'))
+        self.assertEqual(e('called("w_creators:characters:beginCreate")'), 0)
 
     def test_back_releases_the_grant_and_returns_to_the_selection(self):
         self.run('clearLog(); press("BACK")')
         settle(self.rt)
         e = self.e
+        self.assertEqual(e('#Dialogs'), 0)   # nothing was built: no question
         self.assertEqual(e('called("w_creators:characters:cancelCreate")'), 1)
         self.assertEqual(e('callArgs("w_creators:characters:cancelCreate")[2]'), 'tok-1')
         self.assertFalse(e('WCCreator.active()'))
@@ -106,13 +135,10 @@ class CreatorGenderSceneTests(unittest.TestCase):
         self.assertEqual(e('#CreatorScene.peds()'), 1)  # only the selection preview
         self.assertEqual(e('liveGroups()'), 1)
 
-    def test_female_accept_locks_the_sex_and_never_offers_facial_hair(self):
+    def test_female_pick_opens_her_editor_and_never_offers_facial_hair(self):
         self.run('press("RIGHT")')
         settle(self.rt, 0, 3, barrier=False)
-        self.run('clearLog(); press("RETURN")')
-        settle(self.rt)
         e = self.e
-        self.assertEqual(e('callArgs("w_creators:characters:beginCreate")[2]'), 'female')
         self.assertEqual(e('WCCreator.stage()'), 'editor')
         self.assertEqual(e(SESSION + '.mode'), 'creator')
         self.assertEqual(e(SESSION + '.saved.sex'), 'female')
@@ -123,26 +149,73 @@ class CreatorGenderSceneTests(unittest.TestCase):
         self.assertIsNotNone(e('lastNui("editor").identity'))
         self.assertTrue(e(SESSION + '.context.startingClothing == Config.Creator.startingClothing'))
         self.assertTrue(e(SESSION + '.context.presets == Config.StartingOutfits.female'))
+        # the root Back is "change the sex" and closes without the unsaved-changes question
+        self.assertEqual(e('lastNui("editor").backLabel'), e('locale("تغيير الجنس")'))
+        self.assertTrue(e('lastNui("editor").backDirect'))
         # the gender prompts are gone: the only live group is the editor's own hint group
         self.assertEqual(e('liveGroups()'), 1)
         self.assertIsNone(e('liveGroup().prompts.BACK'))
         # the male ped is hidden, out of the wide shots
-        male = e('(function() for _, p in ipairs(CreatorScene.peds()) do if GetEntityModel(p) == GetHashKey("mp_male") then return p end end end)()')
-        self.assertFalse(e('Peds[%d].visible' % male))
+        self.assertFalse(e('Peds[%d].visible' % self.ped('male')))
 
     def test_male_creator_offers_facial_hair(self):
-        self.run('press("RETURN")')
-        settle(self.rt)
+        self.run('press("LEFT")')
+        settle(self.rt, 0, 3, barrier=False)
+        self.assertEqual(self.e(SESSION + '.saved.sex'), 'male')
         self.assertTrue(self.e(SESSION + '.sections.facialHair'))
         self.assertGreater(facial_nodes(self.rt), 0)
 
-    def test_beginCreate_refused_on_accept_keeps_the_scene(self):
-        self.run('''CallbackResults["w_creators:characters:beginCreate"] = WCResult.fail("RATE_LIMITED")
-            press("RETURN")''')
+    def test_each_gender_keeps_its_own_draft_and_the_typed_name(self):
+        e = self.e
+        self.run('press("LEFT")')
+        settle(self.rt, 0, 3, barrier=False)
+        self.run('r = WCEditor.action({ id = WCEditor.session().id, op = "set", control = "body.weight", value = 5 })')
+        self.assertTrue(e('r.ok'))
+        male = self.ped('male')
+        self.run('''clearLog(); r = WCEditor.action({ id = WCEditor.session().id, op = "cancel",
+            identity = { firstname = "John", lastname = "", dob = "" } })''')
+        settle(self.rt, 0, 3, barrier=False)
+        self.assertTrue(e('r.ok'))
+        self.assertEqual(e('WCCreator.stage()'), 'gender')
+        self.assertEqual(e('WCCreator.draft("male").body.weight'), 5)
+        # back on the pair without a re-render: the man still wears his draft, both are shown again
+        self.assertEqual(e('count("preset")'), 0)
+        self.assertTrue(e('Peds[%d].visible' % self.ped('female')))
+        self.assertEqual(e('WCCamera.current()'), 'pair')
+        self.assertEqual(e('called("w_creators:characters:cancelCreate")'), 0)
+        # the woman opens with her own look and the name typed for the man
+        self.run('press("RIGHT")')
+        settle(self.rt, 0, 3, barrier=False)
+        self.assertEqual(e(SESSION + '.saved.sex'), 'female')
+        self.assertEqual(e(SESSION + '.working.body.weight'), 11)
+        self.assertEqual(e(SESSION + '.opts.identity.firstname'), 'John')
+        self.run('r = WCEditor.action({ id = WCEditor.session().id, op = "cancel" })')
+        settle(self.rt, 0, 3, barrier=False)
+        # and the man resumes his draft; Reset still means the starting look
+        self.run('press("LEFT")')
+        settle(self.rt, 0, 3, barrier=False)
+        self.assertEqual(e(SESSION + '.ped'), male)
+        self.assertEqual(e(SESSION + '.working.body.weight'), 5)
+        self.assertEqual(e(SESSION + '.saved.body.weight'), 11)
+        self.assertTrue(e('WCEditor.dirty()'))
+
+    def test_leaving_with_a_draft_asks_first(self):
+        e = self.e
+        self.run('press("LEFT")')
+        settle(self.rt, 0, 3, barrier=False)
+        self.run('WCEditor.action({ id = WCEditor.session().id, op = "set", control = "body.weight", value = 5 })')
+        self.run('WCEditor.action({ id = WCEditor.session().id, op = "cancel" })')
+        settle(self.rt, 0, 3, barrier=False)
+        self.run('AlertAnswer = "cancel"; clearLog(); press("BACK")')
         settle(self.rt)
-        self.assertEqual(self.e('WCCreator.stage()'), 'gender')
-        self.assertTrue(self.e('noted(WCResult.messageKey("RATE_LIMITED"))'))
-        self.assertFalse(self.e('WCEditor.isOpen()'))
+        self.assertEqual(e('#Dialogs'), 1)
+        self.assertEqual(e('WCCreator.stage()'), 'gender')
+        self.assertEqual(e('called("w_creators:characters:cancelCreate")'), 0)
+        self.run('AlertAnswer = "confirm"; press("BACK")')
+        settle(self.rt)
+        self.assertEqual(e('#Dialogs'), 2)
+        self.assertEqual(e('called("w_creators:characters:cancelCreate")'), 1)
+        self.assertTrue(e('WCSelector.active()'))
 
 
 class CreatorEditorTests(unittest.TestCase):
@@ -152,7 +225,7 @@ class CreatorEditorTests(unittest.TestCase):
         self.run = self.rt.run
         self.run('press("RETURN")')
         settle(self.rt)
-        self.run('press("RETURN")')  # accept male
+        self.run('press("LEFT")')  # pick the man: his editor opens at once
         settle(self.rt)
         self.assertEqual(self.e('WCCreator.stage()'), 'editor')
 
@@ -169,6 +242,10 @@ class CreatorEditorTests(unittest.TestCase):
         e = self.e
         self.assertTrue(e('saveResult.ok'))
         self.assertTrue(e('saveResult.closed'))
+        # the sex reaches the server at the save, on the same grant, right before the create
+        self.assertEqual(e('callArgs("w_creators:characters:beginCreate")[2]'), 'male')
+        self.assertLess(e('indexOf("callback:w_creators:characters:beginCreate")'),
+                        e('indexOf("callback:w_creators:characters:create")'))
         args = e('callArgs("w_creators:characters:create")')
         self.assertEqual(args[2], 'tok-1')
         self.assertEqual(args[3]['firstname'], 'John')
@@ -199,12 +276,46 @@ class CreatorEditorTests(unittest.TestCase):
         self.assertEqual(self.e('called("w_creators:characters:loaded")'), 0)
         self.assertTrue(self.e('WCEditor.isOpen()'))
         self.assertEqual(self.e('WCCreator.stage()'), 'editor')
-        # the retry reuses the same token (the server replays the same create)
+        # the retry reuses the same token (the server replays the same create); the sex is settled once
         self.run('RestoreFails = false')
         self.save()
         self.assertTrue(self.e('saveResult.ok'))
         self.assertEqual(self.e('callArgs("w_creators:characters:create", 2)[2]'), 'tok-1')
+        self.assertEqual(self.e('called("w_creators:characters:beginCreate")'), 1)
         self.assertEqual(self.e('called("w_creators:characters:loaded")'), 1)
+
+    def test_a_refused_sex_at_the_save_keeps_the_editor(self):
+        self.run('''CallbackResults["w_creators:characters:beginCreate"] = WCResult.fail("RATE_LIMITED")
+            clearLog()''')
+        self.save()
+        e = self.e
+        self.assertFalse(e('saveResult.ok'))
+        self.assertEqual(e('saveResult.code'), 'RATE_LIMITED')
+        self.assertEqual(e('called("w_creators:characters:create")'), 0)   # never against an unsettled grant
+        self.assertTrue(e('WCEditor.isOpen()'))
+        self.assertEqual(e('WCCreator.stage()'), 'editor')
+
+    def test_a_sex_locked_by_the_server_is_refused_and_kept(self):
+        # a half-finished creation locked the grant to the woman: the man cannot be saved on it
+        self.run('''CallbackResults["w_creators:characters:beginCreate"] = WCResult.ok({ token = "tok-1", sex = "female" })
+            clearLog()''')
+        self.save()
+        e = self.e
+        self.assertFalse(e('saveResult.ok'))
+        self.assertEqual(e('saveResult.message'), e('locale("جنس هذه الشخصية ثابت الآن ولا يمكن تغييره")'))
+        self.assertEqual(e('called("w_creators:characters:create")'), 0)
+        self.assertTrue(e('WCEditor.isOpen()'))
+        # back at the pair, only the locked sex can be picked
+        self.run('WCEditor.action({ id = WCEditor.session().id, op = "cancel" })')
+        settle(self.rt, 0, 3, barrier=False)
+        self.run('clearLog(); press("LEFT")')
+        settle(self.rt, 0, 3, barrier=False)
+        self.assertEqual(e('WCCreator.stage()'), 'gender')
+        self.assertTrue(e('noted(locale("جنس هذه الشخصية ثابت الآن ولا يمكن تغييره"))'))
+        self.run('press("RIGHT")')
+        settle(self.rt, 0, 3, barrier=False)
+        self.assertEqual(e('WCCreator.stage()'), 'editor')
+        self.assertEqual(e(SESSION + '.saved.sex'), 'female')
 
     def test_lost_grant_closes_the_editor_and_returns_to_the_selection(self):
         self.run('''CallbackResults["w_creators:characters:create"] = WCResult.fail("CREATION_NOT_GRANTED")
@@ -223,6 +334,7 @@ class CreatorEditorTests(unittest.TestCase):
             identity = { firstname = "J", lastname = "", dob = "x" } })''')
         self.assertFalse(self.e('r.ok'))
         self.assertEqual(self.e('called("w_creators:characters:create")'), 0)
+        self.assertEqual(self.e('called("w_creators:characters:beginCreate")'), 0)
 
     def test_cancel_returns_to_the_gender_scene_and_keeps_the_grant(self):
         self.run('clearLog(); r = WCEditor.action({ id = WCEditor.session().id, op = "cancel" })')
@@ -235,7 +347,10 @@ class CreatorEditorTests(unittest.TestCase):
         self.assertEqual(e('#CreatorScene.peds()'), 2)
         self.assertEqual(e('liveGroups()'), 1)
         self.assertTrue(e('WCCamera.isOpen()'))
-        # back from there releases the grant
+        # the camera stayed up (the editor left it to the creator) and glides back to the pair
+        self.assertEqual(e('count("DestroyCam")'), 0)
+        self.assertEqual(e('WCCamera.current()'), 'pair')
+        # back from there releases the grant (nothing was built: no question)
         self.run('press("BACK")')
         settle(self.rt)
         self.assertEqual(e('called("w_creators:characters:cancelCreate")'), 1)
@@ -305,7 +420,7 @@ class CreatorRepairTests(unittest.TestCase):
     def test_repair_without_a_sex_runs_the_gender_scene(self):
         rt = self.make(None)
         self.assertEqual(rt.eval('WCCreator.stage()'), 'gender')
-        rt.run('press("RETURN")')
+        rt.run('press("LEFT")')
         settle(rt)
         self.assertEqual(rt.eval('called("w_creators:characters:beginCreate")'), 0)
         self.assertEqual(rt.eval('WCCreator.stage()'), 'editor')

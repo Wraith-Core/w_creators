@@ -20,7 +20,8 @@ local changed = nil -- what enter() changed (nil while inactive)
 local thread = nil  -- true while the control thread runs
 
 local function pedExists(ped)
-    return type(ped) == 'number' and ped ~= 0 and DoesEntityExist(ped) == true
+    -- BOOL natives answer 1 (not true) on this runtime: never compare them with == true
+    return type(ped) == 'number' and ped ~= 0 and not not DoesEntityExist(ped)
 end
 
 --- Call a named native only when the runtime provides it (optional presentation natives).
@@ -30,14 +31,42 @@ local function call(name, ...)
     return (pcall(fn, ...))
 end
 
+--- The fitting-room light (opts.light): drawn every frame at an offset from the previewed ped, so
+--  it follows the ped as it turns.
+local function drawLight(c)
+    local l = c.light
+    if not l or not pedExists(c.ped) then return end
+    local ok, at = pcall(GetOffsetFromEntityInWorldCoords, c.ped, l.x, l.y, l.z)
+    if not ok or not at then return end
+    DrawLightWithRange(at.x + 0.0, at.y + 0.0, at.z + 0.0, l.r, l.g, l.b, l.range, l.intensity)
+end
+
 local function controlLoop()
     thread = true
     while active do
         if changed and changed.controls then DisableAllControlActions(0) end
         if changed and changed.suppress then SuppressGameHud() end
+        if changed and changed.light then drawLight(changed) end
         Wait(0)
     end
     thread = nil
+end
+
+--- A light spec from config ({ enabled, intensity, range, offset = {x, y, z}, color = {r, g, b} }),
+--  cleaned, or nil (off or malformed).
+function Env.lightOf(cfg)
+    if type(cfg) ~= 'table' or cfg.enabled == false then return nil end
+    local o = type(cfg.offset) == 'table' and cfg.offset or {}
+    local c = type(cfg.color) == 'table' and cfg.color or {}
+    return {
+        x = WCUtil.number(o[1] or o.x, -10, 10, 0.0) + 0.0,
+        y = WCUtil.number(o[2] or o.y, -10, 10, 0.0) + 0.0,
+        z = WCUtil.number(o[3] or o.z, -10, 10, 0.0) + 0.0,
+        r = WCUtil.int(c[1] or c.r, 0, 255, 255), g = WCUtil.int(c[2] or c.g, 0, 255, 255),
+        b = WCUtil.int(c[3] or c.b, 0, 255, 255),
+        range = WCUtil.number(cfg.range, 0.5, 100, 15.0) + 0.0,
+        intensity = WCUtil.number(cfg.intensity, 0, 100, 10.0) + 0.0,
+    }
 end
 
 --- Enter the preview environment.
@@ -53,6 +82,7 @@ end
 --    coords     move the ped there ({x, y, z, heading}); restored on exit [nil]
 --    time       { hour, minute } clock override [nil]
 --    weather    weather type name override [nil]
+--    light      a light drawn every frame at an offset from the ped (Env.lightOf) [nil]
 ---@return boolean entered (false when already active)
 function Env.enter(opts)
     if active then return false end
@@ -112,10 +142,11 @@ function Env.enter(opts)
         c.weather = call('SetWeatherType', GetHashKey(opts.weather), true, true, true, 0.0, true)
     end
     c.controls = opts.controls ~= false
+    if type(opts.light) == 'table' then c.light = opts.light end
 
     changed = c
     active = true
-    if (c.controls or c.suppress) and not thread then CreateThread(controlLoop) end
+    if (c.controls or c.suppress or c.light) and not thread then CreateThread(controlLoop) end
     return true
 end
 

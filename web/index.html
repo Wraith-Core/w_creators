@@ -10,6 +10,8 @@
   <body class="wst-root wst-creators" style="background: transparent !important; background-color: transparent !important;">
     <div id="app"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <link rel="stylesheet" href="https://cfx-nui-w_lib/nui/assets/store-theme.css" />
+    <!-- The server's one theme (w_lib/nui/theme: tokens, the Arabic and Latin faces, the w-* parts),
+         linked at run time after the app's own CSS. Not imported from src/: Vite would rewrite the URL. -->
+    <link rel="stylesheet" href="https://cfx-nui-w_lib/nui/assets/wraith-theme.css" />
   </body>
 </html>

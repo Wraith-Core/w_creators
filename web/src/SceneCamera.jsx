@@ -1,7 +1,9 @@
 import React,{useEffect,useRef} from 'react';
 import {Glyph} from './Chrome';
 
-export default function SceneCamera({camera,part,text,disabled}) {
+// hide = { hidden, onToggle }: the creator's "hide clothes" toggle (a view of the look, never a change
+// of it) sits in the camera plate with the other view tools; absent in every other mode.
+export default function SceneCamera({camera,part,text,disabled,hide}) {
   const drag=useRef(null),frame=useRef(null),rotation=useRef(0),send=useRef(camera);
   send.current=camera;
   const flush=()=>{
@@ -40,6 +42,8 @@ export default function SceneCamera({camera,part,text,disabled}) {
     <aside className="scene-tools" aria-label={text.camera}>
       <div className="wst-plate camera-help"><span className="camera-view"><Glyph tex="weapon_kit_camera"/><span aria-live="polite">{text['view.'+part]||text['view.fullBody']}</span></span>
         <span>{text.clickZoom}</span><span>{text.dragRotate}</span><span>{text.rightReset}</span>
+        {hide&&<button type="button" className={'wst-button camera-toggle'+(hide.hidden?' selected':'')} aria-pressed={!!hide.hidden}
+          disabled={disabled} onClick={()=>hide.onToggle(!hide.hidden)}>{hide.hidden?text.showClothes:text.hideClothes}</button>}
       </div>
     </aside>
   </>;

@@ -27,7 +27,15 @@ export default function Editor({payload, onPayload, onClose}) {
   const [identity, setIdentity] = useState(saved.identity || initialIdentity(payload.identity));
   const [request, dispatch] = useReducer(requestReducer, idleRequest);
   const [confirm, setConfirm] = useState(null);
+  // the store's "save this look as an outfit" name, typed in the save confirmation (optional)
+  const [outfitName, setOutfitName] = useState('');
   const [cameraPart, setCameraPart] = useState(payload.camera || 'fullBody');
+  // the creator's "hide clothes" view (Lua owns it: payload.hidden / the camera answer)
+  const [hidden, setHidden] = useState(!!payload.hidden);
+  useEffect(() => { setHidden(!!payload.hidden); }, [payload.hidden]);
+  // ★ Per-field identity verdicts from Lua. The rules live in WCIdentity and are asked for while the
+  //   player types, so a bad name is caught in the identity tab instead of at the final save.
+  const [identityErrors, setIdentityErrors] = useState({});
   const lock = useRef(false), main = useRef(null), returnRow = useRef(null);
   const busy = isPending(request);
 
@@ -39,21 +47,55 @@ export default function Editor({payload, onPayload, onClose}) {
   const missing = missingIdentity(payload.identity, identity);
 
   useEffect(() => { remember(memory, sessionId, {path: validPath, search, identity, origin}); }, [sessionId, validPath.join('/'), search, identity, origin]);
+  // Debounced so a burst of keystrokes is one call; a dropped answer simply leaves the marks as they
+  // were — the save still validates server-side, this only tells the player sooner.
+  useEffect(() => {
+    if (!payload.identity || payload.identity.locked) return undefined;
+    const timer = setTimeout(async () => {
+      try {
+        const result = await nuiSend('editor:identity', {id: sessionId, identity});
+        if (result?.ok) setIdentityErrors(result.fields || {});
+      } catch { /* never interrupts an appearance edit */ }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [sessionId, identity.firstname, identity.lastname, identity.dob, payload.identity]);
   useEffect(() => { if (validPath.length !== path.length) setPath(validPath); }, [validPath.join('/'), path.length]);
 
   const camera = async data => {
     try {
       const result = await nuiSend('editor:camera', {...data, id: sessionId});
       if (result?.ok && result.camera) setCameraPart(result.camera);
+      if (result && typeof result.hidden === 'boolean') setHidden(result.hidden);
     } catch { /* a missed camera input never interrupts an appearance edit */ }
   };
   const focusCamera = list => { const preset = cameraFor(list); if (preset) camera({preset}); };
+  // entering the clothing stage puts the clothes back on: the player is about to dress the character
+  const showClothesFor = next => { if (hidden && next[0] === 'clothing') camera({hide: false}); };
+
+  // Live preview channel. One request in flight at a time and the newest values win, so a drag
+  // never queues up behind itself; nothing is dispatched into the request state, so the pad and
+  // the sliders stay enabled while the hand is down; and a real action waits for the last
+  // preview to land, so Lua never sees two operations at once (it would answer BUSY).
+  const previewQ = useRef({inflight: null, latest: undefined});
+  const pumpPreview = () => {
+    const q = previewQ.current;
+    if (q.inflight || q.latest === undefined) return;
+    const values = q.latest; q.latest = undefined;
+    q.inflight = nuiSend('editor:action', {op: 'preview', values: values || {}, id: sessionId, opId: nextOpId(sessionId)})
+      .catch(() => {})
+      .finally(() => { q.inflight = null; pumpPreview(); });
+  };
+  const preview = values => { previewQ.current.latest = values; pumpPreview(); };
 
   async function action(data) {
     if (lock.current) return false;
     lock.current = true;
     dispatch({type: 'start'});
     try {
+      // an unsent frame is dropped, but a queued RESTORE (null) must still land before the action
+      const q = previewQ.current;
+      if (q.latest !== null) q.latest = undefined;
+      while (q.inflight || q.latest !== undefined) { pumpPreview(); await q.inflight; }
       const result = await nuiSend('editor:action', {...data, id: sessionId, opId: nextOpId(sessionId)});
       if (result?.payload) onPayload(result.payload);
       if (result?.ok) dispatch({type: 'success'});
@@ -75,10 +117,12 @@ export default function Editor({payload, onPayload, onClose}) {
       const next = openPath(validPath, node);
       setOrigin(searchOrigin(validPath, next, search));
       setPath(next); setSearch('');
+      showClothesFor(next);
       focusCamera(resolvePath(payload.tree, next).nodes);
     },
     set: (control, value) => action({op: 'set', control, value}),
     setMany: values => action({op: 'setMany', values}),
+    preview,
     invoke: (control, value) => action({op: 'invoke', control, value}),
     // a destructive action (node.danger) runs only after the confirmation modal
     confirm: node => setConfirm({kind: 'invoke', node, where: current.label}),
@@ -88,15 +132,17 @@ export default function Editor({payload, onPayload, onClose}) {
     returnRow.current = null;
     setOrigin(null);
     setPath([id]); setSearch('');
+    showClothesFor([id]);
     focusCamera(resolvePath(payload.tree, [id]).nodes);
   };
 
-  const save = () => action({op: 'save', identity});
+  const save = () => action({op: 'save', identity, ...(payload.saveOutfit && outfitName.trim() ? {outfitName: outfitName.trim()} : {})});
   const back = () => {
     if (lock.current) return;
     // a typed creator identity is unsaved input too: leaving asks Save / Discard / Stay
     const dirty = !!payload.dirty || identityDirty(payload.identity, identity);
-    const next = backAction({confirm, pathLength: validPath.length, dirty, search});
+    // payload.backDirect: the creator's root Back keeps the look as a draft, so it never asks
+    const next = backAction({confirm, pathLength: validPath.length, dirty, search, direct: !!payload.backDirect});
     if (next === 'dismiss') setConfirm(null);
     else if (next === 'clearSearch') setSearch('');
     else if (next === 'pop') {
@@ -106,7 +152,8 @@ export default function Editor({payload, onPayload, onClose}) {
       setPath(up.path); setSearch(up.search);
       focusCamera(resolvePath(payload.tree, up.path).nodes);
     } else if (next === 'confirmLeave') setConfirm('leave');
-    else action({op: 'cancel'});
+    // the typed name travels with the cancel: the creator keeps it for the next gender it opens
+    else action({op: 'cancel', identity});
   };
   const backRef = useRef(back); backRef.current = back;
   useEffect(() => {
@@ -133,15 +180,24 @@ export default function Editor({payload, onPayload, onClose}) {
 
   const price = payload.price;
   const atRoot = validPath.length === 0;
+  // the masthead's "03 / 09" and the hairline progress under the stage index
+  const stageIndex = stages ? stages.findIndex(s => s.id === stage) : -1;
+  const pad2 = n => String(n).padStart(2, '0');
   const confirmCopy = payload.confirm || {};
   const creatorName = session.mode === 'creator' && payload.identity;
-  // what is charged, line by line (store items and dyes, barber services) above the total
-  const lines = creatorName ? [] : priceLines(price);
-  const total = price ? `${S.total || ''} · ${formatMoney(price.total)}` : '';
+  // what is charged, line by line (store items and dyes, barber services) above the total, in the
+  // store's chosen currency
+  const money = n => formatMoney(n, price?.currency, S);
+  // '$6.00' reads left to right in both languages; a gold amount carries the payload's own word
+  // ('0.30 ذهب' / '0.30 gold'), so it takes the direction of that word instead of a forced LTR
+  const amountDir = price?.currency === 'gold' ? 'auto' : 'ltr';
+  const lines = creatorName ? [] : priceLines(price, S);
+  const total = price ? `${S.total || ''} · ${money(price.total)}` : '';
   const saveBody = creatorName
     ? `${identity.firstname} ${identity.lastname}`.trim()
     : [confirmCopy.body, lines.length ? '' : total].filter(Boolean).join(' — ');
-  const modal = modalFor(confirm, {strings: S, copy: confirmCopy, saveBody, lines, total: price ? formatMoney(price.total) : ''});
+  const modal = modalFor(confirm, {strings: S, copy: confirmCopy, saveBody, lines, total: price ? money(price.total) : ''});
+  const outfitField = confirm === 'save' && payload.saveOutfit;
   const confirmAction = () => {
     const next = confirmRequest(confirm);
     if (next?.op === 'save') save();
@@ -149,11 +205,15 @@ export default function Editor({payload, onPayload, onClose}) {
   };
 
   return <div className="editor-shell" dir={session.dir || (session.locale === 'ar' ? 'rtl' : 'ltr')}>
-    <SceneCamera camera={camera} part={cameraPart} text={S} disabled={busy || !!confirm}/>
+    <SceneCamera camera={camera} part={cameraPart} text={S} disabled={busy || !!confirm}
+      hide={payload.canHide ? {hidden, onToggle: next => camera({hide: next})} : null}/>
     <section className="wst-panel atelier" aria-label={session.title} aria-busy={busy}>
-      <Frame/>
-      <header className="wst-header"><small className="wst-title atelier-brand">{BRAND}</small><h1>{session.title}</h1>{session.subtitle && <small className="wst-title atelier-brand">{session.subtitle}</small>}<span className="wst-rule header-rule" aria-hidden="true"/></header>
-      {stages && <nav className="atelier-sections" aria-label={S.appearance}>{stages.map((s, i) => <button key={s.id} type="button" disabled={busy || s.disabled} className={`wst-tab ${stage === s.id ? 'selected' : ''}`} aria-current={stage === s.id ? 'page' : undefined} onClick={() => chooseStage(s.id)}><b>{String(i + 1).padStart(2, '0')}</b>{s.label}{s.id === 'identity' && missing && <i/>}</button>)}</nav>}
+      <div className="wc-mast"><span className="wc-mark" dir="ltr">{BRAND}</span><span className="wc-mast-rule" aria-hidden="true"/>{stageIndex >= 0 && <span className="wc-mast-step" dir="ltr"><b>{pad2(stageIndex + 1)}</b> / {pad2(stages.length)}</span>}</div>
+      <div className="wc-card wc-head"><Frame/>
+      <header className="wst-header"><h1>{session.title}</h1>{session.subtitle && <p className="wc-sub">{session.subtitle}</p>}</header>
+      {stages && <nav className="atelier-sections" aria-label={S.appearance} style={{'--p': `${stageIndex >= 0 ? (stageIndex + 1) / stages.length * 100 : 0}%`}}>{stages.map((s, i) => <button key={s.id} type="button" disabled={busy || s.disabled} className={`wst-tab ${stage === s.id ? 'selected' : ''}`} aria-current={stage === s.id ? 'page' : undefined} onClick={() => chooseStage(s.id)}><b>{String(i + 1).padStart(2, '0')}</b>{s.label}{s.id === 'identity' && missing && <i/>}</button>)}<span className="wc-progress" aria-hidden="true"><span className="wc-progress-fill"/></span></nav>}
+      </div>
+      <div className="wc-card wc-work"><Frame/>
       <div className="wst-plate menu-heading">
         {!atRoot && <button className="wst-button menu-back" aria-label={S.back} disabled={busy} onClick={back}><Glyph tex="selection_arrow_left"/></button>}
         <h2>{headingFor(nodes)}</h2>
@@ -162,27 +222,32 @@ export default function Editor({payload, onPayload, onClose}) {
         {current.searchable && <span className="wst-field input-plate search-plate"><input className="wst-input search" aria-label={S.search} placeholder={S.search} value={search} onChange={e => setSearch(e.target.value)}/></span>}
         <fieldset className="fields" disabled={busy}>
           <NodeView node={current} nodes={children} strings={S} disabled={busy} handlers={handlers}
-            identity={payload.identity} identityForm={identity} onIdentity={setIdentity}/>
+            identity={payload.identity} identityForm={identity} onIdentity={setIdentity} identityErrors={identityErrors}/>
           {atRoot && payload.canRandom && <nav className="menu-list"><div className="wst-rule wc-hr"/><MenuRow id="random" label={S.random} action onClick={() => action({op: 'random'})}/></nav>}
           {current.kind === 'group' && children.length === 0 && <p className="empty-search" role="status">{S.empty}</p>}
         </fieldset>
       </main>
+      </div>
+      <div className="wc-card wc-foot"><Frame/>
       <footer>
         {request.status === 'error' && request.error && <p className="error" role="alert">{request.error}</p>}
+        {payload.saveBlocked && <p className="menu-help save-blocked" role="status">{payload.saveBlocked}</p>}
         {(!atRoot || !stages) && <div className="tools"><button className="wst-button" disabled={busy || !payload.canUndo} onClick={() => action({op: 'undo'})}>{S.undo}</button><button className="wst-button" disabled={busy || !payload.dirty} onClick={() => setConfirm('reset')}>{S.reset}</button></div>}
         {atRoot && stages && <p className="menu-help">{missing ? S.nameHint : S.details}</p>}
-        <div className="commit"><button className="wst-button" disabled={busy} onClick={back}>{S.back}</button><button className="wst-button primary" disabled={busy || !payload.canSave || missing} onClick={() => setConfirm('save')}>{busy ? S.saving : payload.saveLabel}{price && <span dir="ltr">{formatMoney(price.total)}</span>}</button></div>
+        <div className="commit"><button className="wst-button" disabled={busy} onClick={back}>{atRoot && payload.backLabel ? payload.backLabel : S.back}</button><button className="wst-button primary" disabled={busy || !payload.canSave || missing} onClick={() => setConfirm('save')}>{busy ? S.saving : payload.saveLabel}{price && <span dir={amountDir}>{money(price.total)}</span>}</button></div>
       </footer>
+      </div>
     </section>
     {modal && <div className="modal-shade"><section className="wst-panel confirmation" role="dialog" aria-modal="true" aria-labelledby="confirmation-title"><Frame/>
       <h2 id="confirmation-title">{modal.title}</h2><div className="wst-rule wc-hr"/>
       <p>{modal.body}</p>
-      {modal.lines && <dl className="price-lines">{modal.lines.map((l, i) => <div key={i}><dt>{l.label}</dt><dd dir="ltr">{l.value}</dd></div>)}<div className="price-total"><dt>{S.total}</dt><dd dir="ltr">{modal.total}</dd></div></dl>}
+      {modal.lines && <dl className="price-lines">{modal.lines.map((l, i) => <div key={i}><dt>{l.label}</dt><dd dir={amountDir}>{l.value}</dd></div>)}<div className="price-total"><dt>{S.total}</dt><dd dir={amountDir}>{modal.total}</dd></div></dl>}
+      {outfitField && <label className="save-outfit">{payload.saveOutfit.label}<span className="wst-field input-plate"><input className="wst-input" autoComplete="off" maxLength={payload.saveOutfit.maxLength || undefined} placeholder={payload.saveOutfit.placeholder || undefined} disabled={busy} value={outfitName} onChange={e => setOutfitName(e.target.value)}/></span></label>}
       {confirm === 'leave'
         ? <div className="confirmation-actions">
             <button className="wst-button" disabled={busy} onClick={() => setConfirm(null)}>{S.stay}</button>
-            <button className="wst-button destructive danger" disabled={busy} onClick={() => action({op: 'cancel'})}>{S.discard}</button>
-            <button className="wst-button primary" disabled={busy || !payload.canSave || missing} onClick={() => setConfirm(LEAVE_SAVE_NEXT)}>{payload.saveLabel}{price && <span dir="ltr">{formatMoney(price.total)}</span>}</button>
+            <button className="wst-button destructive danger" disabled={busy} onClick={() => action({op: 'cancel', identity})}>{S.discard}</button>
+            <button className="wst-button primary" disabled={busy || !payload.canSave || missing} onClick={() => setConfirm(LEAVE_SAVE_NEXT)}>{payload.saveLabel}{price && <span dir={amountDir}>{money(price.total)}</span>}</button>
           </div>
         : <div className="confirmation-actions">
             <button className="wst-button" disabled={busy} onClick={() => setConfirm(null)}>{S.stay}</button>

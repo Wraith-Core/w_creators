@@ -73,6 +73,22 @@ function WCNative.ped.placeOnGround(entity)
     return ok
 end
 
+--- _GET_PED_HEIGHT (GetPedHeight)
+-- hash: 0x1D491CCF7211FB74 · confidence: Likely (rdr3 native reference; the MP character creators
+--   read the character's height from it right after SET_PED_SCALE, so it follows the scale)
+-- params: ped (entity) · returns: the standing height in metres (float), or nil
+-- limitations: read-only; an answer outside 0.5..3.0 m (a ped not rendered yet) is reported as nil,
+--   so the caller keeps its plain readout (the creator's height slider, WCEditorTree.heightDisplay)
+-- tested models: none here (needs an in-game check) · MP safe: yes (read only) · OneSync tested here: no
+function WCNative.ped.height(ped)
+    if not H.ped(ped) then return H.fail('height', 'invalid ped %s', tostring(ped)) end
+    local asFloat = Citizen.ResultAsFloat and Citizen.ResultAsFloat() or nil
+    local ok, value = H.invoke(0x1D491CCF7211FB74, ped, asFloat)
+    value = ok and tonumber(value) or nil
+    if not value or value ~= value or value < 0.5 or value > 3.0 then return nil end
+    return value + 0.0
+end
+
 --- SET_PED_KEEP_TASK
 -- hash: 0x971D38760FBC02EF · confidence: Verified (pre-v3 first-spawn wagon driver)
 -- params: ped (entity), toggle (bool) · returns: nothing

@@ -151,6 +151,11 @@ function Scene.isolate(src, startSwitch)
     -- Tracked but moved elsewhere by another resource since: that bucket is the one to come back to.
     tracked[src] = { src = src, bucket = src, previous = current, reason = reason, at = GetGameTimer(),
                      seenInRoom = seenInRoom }
+    -- A private scene has no ambient population: the creator stage sits in busy Saint Denis and a
+    -- fitting room in a town shop, and passers-by streamed into the bucket would walk into the shot.
+    -- pcall: an older server build without the native still isolates (the client suppresses the
+    -- population per frame as well).
+    pcall(SetRoutingBucketPopulationEnabled, src, false)
     SetPlayerRoutingBucket(src, src)
     logBucket(src, 'player', src, reason == 'fitting' and 'عزل غرفة القياس' or 'عزل مشهد الاختيار/الإنشاء',
         { before = current })

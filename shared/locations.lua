@@ -15,8 +15,9 @@ local TYPES = { clothing = true, barber = true, surgery = true, wardrobe = true 
 local function merge(defaults, loc)
     local out = WCUtil.copy(defaults or {})
     for k, v in pairs(loc) do out[k] = WCUtil.copy(v) end
-    -- Config values are kept as given (vectors stay vectors)
-    out.coords, out.preview = loc.coords, loc.preview
+    -- Config values are kept as given (vectors stay vectors): WCUtil.copy would turn a vector4
+    -- into a plain table and lose its heading field names
+    out.coords, out.preview, out.book = loc.coords, loc.preview, loc.book
     if loc.npc ~= nil then out.npc = loc.npc end
     return out
 end
@@ -111,6 +112,39 @@ function WCLocations.active(locationType)
         if WCLocations.isUsable(loc) then out[#out + 1] = loc end
     end
     return out
+end
+
+--- The access rule of a location (Config.Locations[].access), cleaned:
+--  { jobs = { [jobName] = minGrade }, ace = 'permission' | nil }, or nil when anyone may use it.
+function WCLocations.access(loc)
+    local rule = type(loc) == 'table' and loc.access
+    if type(rule) ~= 'table' then return nil end
+    local jobs, any = {}, false
+    for name, grade in pairs(type(rule.jobs) == 'table' and rule.jobs or {}) do
+        if type(name) == 'string' and name ~= '' then
+            jobs[name] = WCUtil.int(grade, 0, nil, 0)
+            any = true
+        end
+    end
+    local ace = type(rule.ace) == 'string' and rule.ace ~= '' and rule.ace or nil
+    if not any and not ace then return nil end
+    return { jobs = jobs, ace = ace }
+end
+
+--- May a player with this job and grade use the location? `hasAce` is the answer to the rule's ACE
+--  permission: true | false, or nil when it cannot be asked (the client). Returns true | false, or
+--  nil when only the server can tell (an ACE rule the job does not satisfy, asked without hasAce).
+---@return boolean|nil
+function WCLocations.allows(loc, job, grade, hasAce)
+    local rule = WCLocations.access(loc)
+    if not rule then return true end
+    local min = type(job) == 'string' and rule.jobs[job] or nil
+    if min and (tonumber(grade) or 0) >= min then return true end
+    if rule.ace then
+        if hasAce == nil then return nil end
+        return hasAce == true
+    end
+    return false
 end
 
 --- The proximity anchor of a location (vector3 when available, else { x, y, z }).

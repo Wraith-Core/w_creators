@@ -109,7 +109,8 @@ local function xyz(c)
 end
 
 local function entityExists(e)
-    return type(e) == 'number' and e ~= 0 and DoesEntityExist(e) == true
+    -- BOOL natives answer 1 (not true) on this runtime: never compare them with == true
+    return type(e) == 'number' and e ~= 0 and not not DoesEntityExist(e)
 end
 
 local function storyNotify(key, duration)

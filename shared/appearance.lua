@@ -5,11 +5,11 @@
 --
 --  app = {
 --    version = 3, sex = 'male' | 'female',
---    body = { upper = u32, lower = u32, height = 0.9..1.1, weight = 1..21 },
---    head = { head = u32, eyes = u32, teeth = u32 },
+--    body = { upper = u32, lower = u32, height = 0.9..1.1, weight = 1..21, build = 1..5 | absent },
+--    head = { head = u32, eyes = u32, teeth = u32, eyesTint = { tint0, tint1, tint2 } | absent },
 --    morph = { [expressionName] = -1..1 },               -- 0 values omitted
 --    hair = { style = u32 | 0, facial = u32 | 0 },        -- facial = 0 for female
---    overlays = { [layerId] = { style, color, opacity } },
+--    overlays = { [layerId] = { style, color, opacity, color2?, color3?, matchHair?, extra? } },
 --    clothing = { equipped = { [category] = u32 }, tints = { [category] = tint },
 --                 states = { [groupId] = value }, outfit = id | nil },
 --    grooming = { hair = { stage, seconds }, beard = { stage, seconds } },
@@ -33,6 +33,16 @@ S.WAIST_TYPES = {
     -1837436619, 1736416063, 2040610690, -1173634986, -867801909,
     1960266524,
 }
+
+--- The body build metaped outfits (the game's MP builds, signed hashes); body.build is the 1-based
+--  index: skinny, athletic, average, heavy, brawny. Absent = no build outfit (the look every
+--  character had before builds existed, so a stored character renders unchanged). Equipped before
+--  the waist outfit (Appearance.SetBuild); the server API exposes it as the bridge's bodyType.
+S.BODY_BUILDS = { -1241887289, 61606861, -369348190, -20262001, 32611963 }
+
+--- The palette of a custom eye tint (head.eyesTint) and the highest tint index it takes.
+S.EYE_PALETTE = 'metaped_tint_eye'
+S.EYE_TINT_MAX = 127
 
 -- The essential part -> the section it belongs to (meta.defaultsUsed reports sections).
 local ESSENTIAL_SECTION = { heads = 'face', teeth = 'face', eyes = 'eyes', BODIES_UPPER = 'body',
@@ -206,6 +216,54 @@ end
 
 local function tableOr(v) return type(v) == 'table' and v or {} end
 
+local function exactInt(v, lo, hi)
+    local n = tonumber(v)
+    if not WCUtil.isFinite(n) or n % 1 ~= 0 or n < lo or n > hi then return nil end
+    return math.tointeger(n)
+end
+
+--- A custom eye tint { tint0, tint1, tint2 } (integers 0..EYE_TINT_MAX) or nil.
+function S.eyeTint(t)
+    if type(t) ~= 'table' then return nil end
+    local out = {}
+    for _, key in ipairs({ 'tint0', 'tint1', 'tint2' }) do
+        out[key] = exactInt(t[key], 0, S.EYE_TINT_MAX)
+        if out[key] == nil then return nil end
+    end
+    return out
+end
+
+--- Copy an overlay's optional fields (WCOverlays: color2 / color3, matchHair, extra) from the
+--  source `o` onto the sanitised `entry`, each only where the layer supports it; bad(field) reports
+--  a value that is dropped.
+function S.overlayExtras(entry, layer, o, bad)
+    for n, key in ipairs({ 'color2', 'color3' }) do
+        if o[key] ~= nil then
+            local v = (layer.tints or 1) > n and WCOverlays.tintable(layer) and exactInt(o[key], 1, WCOverlays.COLORS)
+            if v then entry[key] = v else bad(key) end
+        end
+    end
+    if o.matchHair ~= nil and o.matchHair ~= false then
+        if o.matchHair == true and layer.id == 'eyebrows' then entry.matchHair = true else bad('matchHair') end
+    end
+    if o.extra ~= nil then
+        local list, max = {}, layer.extra or 0
+        if type(o.extra) ~= 'table' or max == 0 then
+            bad('extra')
+        else
+            for _, e in ipairs(o.extra) do
+                local style = type(e) == 'table' and exactInt(e.style, 1, layer.styles) or nil
+                if style and #list < max then
+                    list[#list + 1] = { style = style, opacity = WCUtil.number(e.opacity, 0, 1, 1) + 0.0 }
+                else
+                    bad('extra')
+                end
+            end
+        end
+        if #list > 0 then entry.extra = list end
+    end
+end
+
 --- Validate and repair an appearance. Returns app, violations, defaultsUsed (sections).
 --  Every hash is checked against WCCatalog for the sex, numbers are clamped, unknown keys are
 --  dropped, essentials are enforced (defaults) and WCRules applied.
@@ -258,6 +316,16 @@ function S.sanitize(app, opts)
         eyes = essential('eyes', head.eyes),
         teeth = essential('teeth', head.teeth),
     }
+    -- the optional fields exist only when set, so an appearance without them sanitises to exactly
+    -- what it was before they were added
+    if body.build ~= nil and body.build ~= 0 then
+        local build = WCUtil.int(body.build, 1, #S.BODY_BUILDS, nil)
+        if build and build == tonumber(body.build) then out.body.build = build else violate('body.build', 'invalid') end
+    end
+    if head.eyesTint ~= nil then
+        local tint = S.eyeTint(head.eyesTint)
+        if tint then out.head.eyesTint = tint else violate('eyes.tint', 'invalid') end
+    end
 
     -- Skin tone repair: the bodies adopt the head's tone.
     local tone = toneOf(sex, 'heads', out.head.head)
@@ -308,13 +376,15 @@ function S.sanitize(app, opts)
         if layer and (layer.sexes[sex] or opts.rules == false) and type(o) == 'table' then
             local style = WCUtil.int(o.style, nil, nil, nil)
             if style and style >= 1 then
-                out.overlays[id] = {
+                local entry = {
                     style = math.min(style, layer.styles),
                     -- a layer drawn without its palette stores colour 1: its colour never shows, so a
                     -- colour-only change is no change (never charged, NO_CHANGES)
                     color = WCOverlays.tintable(layer) and WCUtil.int(o.color, 1, WCOverlays.COLORS, 1) or 1,
                     opacity = WCUtil.number(o.opacity, 0, 1, 1) + 0.0,
                 }
+                S.overlayExtras(entry, layer, o, function(field) violate('overlay.' .. tostring(id) .. '.' .. field, 'invalid') end)
+                out.overlays[id] = entry
             end
         else
             violate('overlay.' .. tostring(id), 'invalid')
@@ -403,7 +473,8 @@ function S.fromLegacy(row)
 
     local app = { version = S.VERSION, sex = sex, morph = {}, overlays = {},
                   clothing = { equipped = {}, tints = {}, states = {} } }
-    app.head = { head = essential('heads'), eyes = essential('eyes'), teeth = essential('teeth') }
+    app.head = { head = essential('heads'), eyes = essential('eyes'), teeth = essential('teeth'),
+                 eyesTint = comps.__eyesTint }
     local upper = essential('BODIES_UPPER')
     local lower = part('BODIES_LOWER')
     if not lower and comps.BODIES_LOWER == nil then
@@ -421,6 +492,7 @@ function S.fromLegacy(row)
         upper = upper, lower = lower,
         height = WCUtil.number(comps.__scale, 0.9, 1.1, DEFAULT_HEIGHT),
         weight = WCUtil.int(comps.__waist, 1, 21, DEFAULT_WEIGHT),
+        build = comps.__build,
     }
 
     local hair = comps.hair == nil and d.hair or (part('hair') or 0)
@@ -505,6 +577,10 @@ function S.toLegacy(app)
     comps.__version = 2
     comps.__scale = app.body.height
     comps.__waist = app.body.weight
+    -- the newer optional fields ride along (the previous release ignores them; a later upgrade of
+    -- this row gets them back through fromLegacy)
+    comps.__build = app.body.build
+    comps.__eyesTint = app.head.eyesTint and WCUtil.copy(app.head.eyesTint) or nil
     comps.__expressions = {}
     comps.__grooming = WCUtil.copy(app.grooming)
     local features = {}
@@ -560,13 +636,13 @@ end
 local function project(app, section)
     if section == 'body' then
         return { modelOf(app.sex, 'BODIES_UPPER', app.body.upper), modelOf(app.sex, 'BODIES_LOWER', app.body.lower),
-                 app.body.height, app.body.weight, morphOf(app, 'body') }
+                 app.body.height, app.body.weight, morphOf(app, 'body'), app.body.build or 0 }
     elseif section == 'face' then
         return { modelOf(app.sex, 'heads', app.head.head), app.head.teeth, morphOf(app, 'face') }
     elseif section == 'skin' then
         return { S.skinTone(app) or app.head.head, overlaysOf(app, 'skin') }
     elseif section == 'eyes' then
-        return { app.head.eyes }
+        return { app.head.eyes, app.head.eyesTint or false }
     elseif section == 'eyebrows' then
         return { overlaysOf(app, 'eyebrows') }
     elseif section == 'hair' then
@@ -636,7 +712,10 @@ function S.mergeSections(saved, submitted, allowed, opts)
         out.head.teeth = sub.head.teeth
         takeMorph('face')
     end
-    if allowed.eyes then out.head.eyes = sub.head.eyes end
+    if allowed.eyes then
+        out.head.eyes = sub.head.eyes
+        out.head.eyesTint = sub.head.eyesTint and WCUtil.copy(sub.head.eyesTint) or nil
+    end
     if allowed.hair then out.hair.style = sub.hair.style end
     if allowed.facialHair then out.hair.facial = sub.hair.facial end
     for _, layer in ipairs(WCOverlays.layers) do

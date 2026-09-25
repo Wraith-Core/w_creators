@@ -54,6 +54,11 @@ local STRINGS = {
     center = 'توسيط',
     padHelp = 'اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع',
     advanced = 'تفاصيل إضافية',
+    -- ★ The per-field identity messages. They SAY THE RULE: the old single 'INVALID_NAME' left the
+    --   player guessing why "test2" was refused (the digit), after the whole character was built.
+    INVALID_NAME = 'حروف فقط — بلا أرقام أو رموز (تُقبل المسافة والفاصلة العليا والشرطة)',
+    INVALID_DOB = 'تاريخ ميلاد غير مقبول',
+    identityInvalid = 'قيمة غير صالحة',
     camera = 'الكاميرا',
     clickZoom = 'اضغط على جزء لتقريبه',
     dragRotate = 'اسحب للتدوير',
@@ -68,15 +73,40 @@ local STRINGS = {
     apply = 'تطبيق',
     price = 'السعر',
     variants = 'التنويعات',
+    hideClothes = 'إخفاء الملابس',
+    showClothes = 'إظهار الملابس',
+    -- the store: an amount in gold ('%s' is the number) and the owned colours on an item card
+    goldAmount = '%s ذهب',
+    ownedColors = 'ألوانك المملوكة',
+    -- the date of birth picker (web/src/DateField.jsx): its three parts and the month names; the
+    -- value it sends is still 'YYYY-MM-DD' inside the field's min / max (dobBounds)
+    day = 'اليوم',
+    month = 'الشهر',
+    year = 'السنة',
+    ['month.1'] = 'يناير',
+    ['month.2'] = 'فبراير',
+    ['month.3'] = 'مارس',
+    ['month.4'] = 'أبريل',
+    ['month.5'] = 'مايو',
+    ['month.6'] = 'يونيو',
+    ['month.7'] = 'يوليو',
+    ['month.8'] = 'أغسطس',
+    ['month.9'] = 'سبتمبر',
+    ['month.10'] = 'أكتوبر',
+    ['month.11'] = 'نوفمبر',
+    ['month.12'] = 'ديسمبر',
     ['view.fullBody'] = 'الجسم كاملًا',
     ['view.upperBody'] = 'الجزء العلوي',
     ['view.lowerBody'] = 'الجزء السفلي',
     ['view.head'] = 'الرأس',
     ['view.face'] = 'الوجه',
     ['view.eyes'] = 'العينان',
+    ['view.teeth'] = 'الأسنان',
     ['view.hair'] = 'الشعر',
     ['view.facialHair'] = 'اللحية',
     ['view.hands'] = 'اليدان',
+    ['view.handLeft'] = 'اليد اليسرى',
+    ['view.handRight'] = 'اليد اليمنى',
     ['view.feet'] = 'القدمان',
     ['view.accessories'] = 'الإكسسوارات',
 }
@@ -178,6 +208,7 @@ end
 local CARD_STRINGS = {
     name = 'الاسم', age = 'العمر', dob = 'تاريخ الميلاد', gender = 'الجنس', lastLocation = 'آخر موقع',
     job = 'المهنة', cash = 'النقد', bank = 'البنك', gold = 'الذهب',
+    citizenId = 'رقم المواطن', blocked = 'موقوفة — راجع الإدارة',
 }
 E.CARD_STRINGS = CARD_STRINGS
 
@@ -188,7 +219,7 @@ function E.cardStrings()
     return out
 end
 
-local CARD_FIELDS = { 'name', 'age', 'dob', 'gender', 'lastLocation', 'job', 'cash', 'bank', 'gold' }
+local CARD_FIELDS = { 'citizenId', 'name', 'age', 'dob', 'gender', 'lastLocation', 'job', 'cash', 'bank', 'gold', 'blocked' }
 
 --- The charCard message for a characters:list card ({ name, age, dob, sex|gender, lastLocation,
 --  job, cash, bank, gold }); nil card = hide. lastLocation and a sex are locale keys / values and
@@ -287,6 +318,18 @@ local function dobBounds(referenceYear, minAge, maxAge)
 end
 E.dobBounds = dobBounds
 
+-- The sex line of the identity form: the sex was chosen on the stage, so the NUI shows it as the
+-- two-way switch (choices) with the chosen side marked, never as an input. The hint says how to
+-- change it, only when the editor's root Back returns to the gender choice (opts.keepDraft).
+local SEX_HINT = 'اختير على المسرح، ولتغييره «تغيير الجنس».'
+
+local function sexField(s)
+    return { key = 'sex', label = L('الجنس'), type = 'info',
+             value = L(s.working.sex == 'male' and 'ذكر' or 'أنثى'),
+             choices = { L('ذكر'), L('أنثى') },
+             hint = s.opts.keepDraft == true and L(SEX_HINT) or nil }
+end
+
 local function identityPayload(s)
     local id = s.opts.identity
     if type(id) ~= 'table' then return nil end
@@ -298,8 +341,7 @@ local function identityPayload(s)
                 { key = 'firstname', label = L('الاسم الأول'), type = 'info', value = text(id.firstname) },
                 { key = 'lastname', label = L('اسم العائلة'), type = 'info', value = text(id.lastname) },
                 { key = 'dob', label = L('تاريخ الميلاد'), type = 'info', value = text(id.dob) },
-                { key = 'sex', label = L('الجنس'), type = 'info',
-                  value = L(s.working.sex == 'male' and 'ذكر' or 'أنثى') },
+                sexField(s),
             },
         }
     end
@@ -318,10 +360,20 @@ local function identityPayload(s)
             { key = 'dob', label = L('تاريخ الميلاد'), type = 'date',
               min = dobMin, max = dobMax,
               value = type(id.dob) == 'string' and id.dob or '' },
-            { key = 'sex', label = L('الجنس'), type = 'info',
-              value = L(s.working.sex == 'male' and 'ذكر' or 'أنثى') },
+            sexField(s),
         },
     }
+end
+
+--- The store's "save this look as an outfit" field of the save confirmation: offered while the
+--  store lists the saved outfits (Config.Locations[].outfits, the savedOutfits service) and the
+--  character is under the limit. nil otherwise.
+local function saveOutfitField(s)
+    if s.mode ~= 'store' or s.context.outfitsEnabled ~= true or type(s.context.outfits) ~= 'table' then return nil end
+    local max = WCUtil.int(s.context.maxOutfits, 0, nil, 0)
+    if #s.context.outfits >= max then return nil end
+    return { label = L(WCEditorTree.KEYS.saveOutfit), placeholder = L(WCEditorTree.KEYS.outfitName),
+             maxLength = WCUtil.int(Config.Wardrobe and Config.Wardrobe.outfitNameMax, 1, 64, 24) }
 end
 
 --- Build the NUI payload of a session (rebuilds the tree and the control registry).
@@ -331,6 +383,10 @@ function E.payload(s)
     local root, registry = WCEditorTree.build(s)
     s.registry = registry
     local confirm = CONFIRM[s.mode] or CONFIRM.store
+    local price = WCEditorTree.price(s)
+    -- an item without a price in the chosen currency: the save waits until the player picks another
+    local blocked = price and type(price.missing) == 'table' and #price.missing > 0
+        and L(WCEditorTree.KEYS.missingCurrency, table.concat(price.missing, L('، '))) or nil
     return {
         type = 'editor',
         session = { id = s.id, mode = s.mode, title = L(s.opts.title or TITLES[s.mode]),
@@ -338,13 +394,23 @@ function E.payload(s)
         strings = E.strings(),
         stages = WCEditorTree.stages(s, root),
         tree = root,
-        price = WCEditorTree.price(s),
+        price = price,
         identity = s.mode == 'creator' and identityPayload(s) or nil,
         dirty = isDirty(s),
-        canSave = canSave(s),
+        canSave = canSave(s) and not blocked,
+        saveBlocked = blocked,
+        saveOutfit = saveOutfitField(s),
         canUndo = #s.history > 0,
         canRandom = s.mode == 'creator',
         saveLabel = L(s.opts.saveLabel or SAVE_LABELS[s.mode]),
+        -- The root Back of the creator returns to the gender choice and keeps the look as a draft:
+        -- it gets its own label and closes without the "unsaved changes" question (nothing is lost).
+        backLabel = s.opts.backLabel and L(s.opts.backLabel) or nil,
+        backDirect = s.opts.keepDraft == true or nil,
+        -- the clothes / hair can be taken off the preview to judge the face and body (creator only:
+        -- the private scene; a player ped elsewhere would be seen undressed by others)
+        canHide = s.mode == 'creator' or nil,
+        hidden = s.hidden == true or nil,
         confirm = { title = L(confirm.title), body = L(confirm.body), confirmLabel = L('تأكيد') },
         camera = s.camera,
     }
@@ -357,9 +423,15 @@ end
 -- ---------------------------------------------------------------------
 --  Prompts (the pre-v3 on-screen hints; optional)
 -- ---------------------------------------------------------------------
+-- The board stands at the start side of the screen (the right in Arabic), so the key hints go to
+-- the bottom corner of the other side, where nothing covers them.
+local function promptPosition()
+    return uiDir() == 'rtl' and 'bottom-left' or 'bottom-right'
+end
+
 local function openPrompts(s)
     if type(w) ~= 'table' or type(w.prompt) ~= 'table' or type(w.prompt.createGroup) ~= 'function' then return end
-    local ok, group = pcall(w.prompt.createGroup, L(s.opts.title or TITLES[s.mode]), 'bottom-right')
+    local ok, group = pcall(w.prompt.createGroup, L(s.opts.title or TITLES[s.mode]), promptPosition())
     if not ok or type(group) ~= 'table' then return end
     pcall(function()
         group.addPrompt('MOUSEDRAG', L(PROMPT_ROTATE), false)
@@ -391,9 +463,17 @@ end
 -- Returns s | nil, code; on failure everything taken here is released again.
 local function prepareSession(ped, mode, app, opts)
     local saved = AppearanceSchema.normalize(app)
+    -- opts.working: the look to resume (the creator's draft of this gender, kept while the player
+    -- went back to the gender choice). Reset still goes back to `saved`. A draft of another sex is
+    -- not this session's look and is ignored.
+    local working = WCUtil.copy(saved)
+    if type(opts.working) == 'table' then
+        local draft = AppearanceSchema.normalize(opts.working)
+        if type(draft) == 'table' and draft.sex == saved.sex then working = draft end
+    end
     sequence = sequence + 1
     local s = {
-        id = sequence, mode = mode, ped = ped, saved = saved, working = WCUtil.copy(saved), history = {},
+        id = sequence, mode = mode, ped = ped, saved = saved, working = working, history = {},
         registry = {}, busy = false, opts = opts, revision = 0,
         context = type(opts.context) == 'table' and opts.context or {},
         sections = sectionSet(mode, opts, saved.sex), draft = { outfitName = '' }, cache = {},
@@ -402,7 +482,7 @@ local function prepareSession(ped, mode, app, opts)
     s.ownsLock = lockEditor()
     if type(WCPanel) == 'table' and WCPanel.isOpen() then try(WCPanel.close) end
     if opts.render then
-        local called, done, err = try(Appearance and Appearance.RestoreCharacter, ped, saved)
+        local called, done, err = try(Appearance and Appearance.RestoreCharacter, ped, s.working)
         if not called or not done then
             WCDebug.log('editor', 'initial render failed: %s', tostring(err))
             unlockEditor(s)
@@ -421,11 +501,15 @@ end
 
 --- Open an editor session. Returns true | false, code.
 --  opts: title, subtitle, sections, context, identity (creator), onCommit(working, extra) -> Result,
---        onCancel(), onOutfit(op, id, value, session) -> Result (op 'equip' is a veto hook: nil or
---        ok applies the owned outfit locally, a failed Result refuses it; 'update' | 'rename' |
---        'delete' | 'save' call the server and may return data.outfits), onState(group, value) ->
---        Result, camera,
---        saveLabel, render (true = render `app` on the ped first).
+--        onCancel(working?, identity?), onOutfit(op, id, value, session) -> Result (op 'equip' is a
+--        veto hook: nil or ok applies the owned outfit locally, a failed Result refuses it;
+--        'update' | 'rename' | 'delete' | 'save' call the server and may return data.outfits),
+--        onState(group, value) -> Result, camera,
+--        saveLabel, render (true = render the working look on the ped first),
+--        working (the look to resume instead of a copy of `app`),
+--        keepDraft (cancel leaves the ped showing the working look and hands it, with the typed
+--          identity, to onCancel; the root Back closes without asking), backLabel (its label),
+--        keepCamera (closing leaves WCCamera to the caller, so its next shot glides from here).
 function E.open(ped, mode, app, opts)
     if current or opening then return false, 'BUSY' end
     if not MODES[mode] then return false, 'INVALID_PAYLOAD' end
@@ -457,6 +541,56 @@ function E.open(ped, mode, app, opts)
     return true
 end
 
+-- ---------------------------------------------------------------------
+--  The mouth on the teeth view (Config.Creator.teethAnimation): the game's own "dentistry" face
+--  clips open the mouth so the teeth can be judged; they close again when the view changes.
+-- ---------------------------------------------------------------------
+local MOUTH_DICT_MS, MOUTH_ENTER_MS = 1500, 1500
+
+local function animDictLoaded(dict)
+    if type(RequestAnimDict) ~= 'function' or type(HasAnimDictLoaded) ~= 'function' then return false end
+    pcall(RequestAnimDict, dict)
+    return WCUtil.waitUntil(function()
+        local ok, loaded = pcall(HasAnimDictLoaded, dict)
+        -- BOOL natives answer 1 (not true) on this runtime
+        return (ok and (loaded == true or loaded == 1)) or nil
+    end, MOUTH_DICT_MS, 0) ~= nil
+end
+
+local function clipPlaying(ped, dict, clip)
+    if type(IsEntityPlayingAnim) ~= 'function' then return false end
+    local ok, playing = pcall(IsEntityPlayingAnim, ped, dict, clip, 3)
+    return ok and (playing == true or playing == 1)
+end
+
+--- Open (true) or close (false) the mouth of the session's ped. Upper-body clips (flag 16, looped
+--  17) so a frozen preview ped keeps standing; a newer call supersedes a pending one.
+local function mouth(s, open)
+    local clips = Config.Creator and Config.Creator.teethAnimation
+    if type(clips) ~= 'table' or type(clips.dict) ~= 'string' then return end
+    open = open == true
+    if (s.mouthOpen == true) == open then return end
+    s.mouthOpen = open
+    s.mouthGen = (s.mouthGen or 0) + 1
+    local gen, ped = s.mouthGen, s.ped
+    CreateThread(function()
+        if not animDictLoaded(clips.dict) or s.mouthGen ~= gen then return end
+        if type(TaskPlayAnim) ~= 'function' or not ped or not DoesEntityExist(ped) then return end
+        if not open then
+            pcall(TaskPlayAnim, ped, clips.dict, clips.exit, 4.0, -2.0, -1, 16, 0.0, false, 0, false)
+            return
+        end
+        pcall(TaskPlayAnim, ped, clips.dict, clips.enter, 2.0, -2.0, -1, 16, 0.0, false, 0, false)
+        -- the loop takes over once the opening clip has played (MOUTH_ENTER_MS at most)
+        WCUtil.waitUntil(function()
+            return (s.mouthGen ~= gen or not clipPlaying(ped, clips.dict, clips.enter)) or nil
+        end, MOUTH_ENTER_MS, 50)
+        if s.mouthGen ~= gen or not DoesEntityExist(ped) then return end
+        pcall(TaskPlayAnim, ped, clips.dict, clips.loop, 8.0, -2.0, -1, 17, 0.0, false, 0, false)
+    end)
+end
+E.mouth = mouth
+
 local function closeSession(s)
     if current ~= s then return end
     current = nil
@@ -464,7 +598,10 @@ local function closeSession(s)
     closePrompts(s)
     send({ type = 'editorClose' })
     focus(false)
-    camera('close')
+    -- the ped leaves the editor facing where it did and with its mouth closed
+    mouth(s, false)
+    camera('pose', 'front')
+    if not s.opts.keepCamera then camera('close') end
     unlockEditor(s)
     WCDebug.log('editor', 'close session %d', s.id)
 end
@@ -542,6 +679,7 @@ local function touchedCategories(before, after)
     mark('BODIES_UPPER', bb.upper, ab.upper)
     mark('heads', bh.head, ah.head)
     mark('eyes', bh.eyes, ah.eyes)
+    if not WCUtil.deepEqual(bh.eyesTint, ah.eyesTint) then touched.eyes = true end
     mark('teeth', bh.teeth, ah.teeth)
     local bhair, ahair = tbl(before.hair), tbl(after.hair)
     mark('hair', bhair.style, ahair.style)
@@ -560,7 +698,20 @@ local function touchedCategories(before, after)
     return touched
 end
 
-local function render(s, before, after)
+--- What the ped shows of an appearance: with the clothes hidden (s.hidden, the creator's "hide
+--  clothes" toggle) the clothing, the hair and the beard are left off. Only the view changes:
+--  `working` keeps every piece, so turning the toggle off (or saving) puts them all back.
+local function view(s, app)
+    if not s.hidden or type(app) ~= 'table' then return app end
+    local out = WCUtil.copy(app)
+    out.clothing = { equipped = {}, tints = {}, states = {} }
+    out.hair = { style = 0, facial = 0 }
+    return out
+end
+E.view = view
+
+--- Render the transition between two views on the ped (Appearance.ApplyDiff).
+local function draw(s, before, after)
     local pipeline = Appearance
     if type(pipeline) ~= 'table' or type(pipeline.ApplyDiff) ~= 'function' then return true end
     -- ApplyDiff -> ok, failedCategories, err. A category the edit changed that did not apply is a
@@ -589,8 +740,24 @@ local function render(s, before, after)
 end
 E.touchedCategories = touchedCategories
 
+--- Render the transition from `before` to `after` as the ped shows them (view).
+local function render(s, before, after)
+    return draw(s, view(s, before), view(s, after))
+end
+
 local function restoreOnPed(s, app)
-    if type(Appearance) == 'table' then try(Appearance.RestoreCharacter, s.ped, app) end
+    if type(Appearance) == 'table' then try(Appearance.RestoreCharacter, s.ped, view(s, app)) end
+end
+
+--- Show (hidden = false) or hide the clothes, hair and beard on the ped, from what it shows now.
+local function setHidden(s, hidden)
+    hidden = hidden == true
+    if (s.hidden == true) == hidden then return true end
+    local from = view(s, s.previewed or s.working)
+    s.hidden, s.previewed = hidden, nil
+    if draw(s, from, view(s, s.working)) then return true end
+    restoreOnPed(s, s.working)
+    return false
 end
 
 local function pushHistory(s, app)
@@ -599,10 +766,25 @@ local function pushHistory(s, app)
 end
 
 --- Move the working appearance to `after` (rendered first). Records one undo step.
+--- ! Rendered from what the ped SHOWS (a live preview, if one is up), not from `working`: a drag
+---   previews every frame and commits once, and the diff must start from the last frame drawn.
 local function transition(s, after, record)
     local before = s.working
-    if WCUtil.deepEqual(before, after) then return WCResult.ok() end
-    if not render(s, before, after) then
+    local shown = s.previewed or before
+    s.previewed = nil
+    if WCUtil.deepEqual(before, after) then
+        -- a preview is up and the commit folds back onto working: diff back incrementally, and
+        -- only if that refuses fall back to the full restore
+        if shown ~= before and not WCUtil.deepEqual(shown, after) and not render(s, shown, before) then
+            restoreOnPed(s, before)
+        end
+        return WCResult.ok()
+    end
+    -- a clothing change while the clothes are hidden shows them again: the player is dressing the
+    -- character and has to see what he picks
+    local from = view(s, shown)
+    if s.hidden and not WCUtil.deepEqual(before.clothing, after.clothing) then s.hidden = false end
+    if not draw(s, from, view(s, after)) then
         restoreOnPed(s, before)
         return WCResult.fail('INVALID_COMPONENT')
     end
@@ -637,6 +819,39 @@ OPS.set = function(s, data)
     return mutate(s, { { entry, value } })
 end
 
+--- Live preview of a drag: the values are drawn on the ped and nothing else moves — no history,
+--- no working copy, no revision — so a slider or the two-axis pad follows the hand at frame rate.
+--- values = {} (or absent) puts the working look back: a drag that ended where it began, or was
+--- cancelled. The commit that follows renders from the previewed look (transition), so a preview
+--- never has to be undone by hand.
+OPS.preview = function(s, data)
+    local values = type(data.values) == 'table' and data.values or {}
+    local controls = {}
+    for control in pairs(values) do
+        if type(control) ~= 'string' then return WCResult.fail('INVALID_PAYLOAD') end
+        controls[#controls + 1] = control
+    end
+    if #controls > MAX_MANY then return WCResult.fail('INVALID_PAYLOAD') end
+    table.sort(controls)
+    local after = WCUtil.copy(s.working)
+    for _, control in ipairs(controls) do
+        local entry, value = validate(s, control, values[control], 'set')
+        if not entry then return WCResult.fail(value) end
+        local ok, code = pcall(entry.apply, after, value, s)
+        if not ok then return WCResult.fail('INVALID_COMPONENT') end
+        if code then return WCResult.fail(code) end
+    end
+    local shown = s.previewed or s.working
+    if WCUtil.deepEqual(shown, after) then return WCResult.ok() end
+    if not render(s, shown, after) then
+        restoreOnPed(s, s.working)
+        s.previewed = nil
+        return WCResult.fail('INVALID_COMPONENT')
+    end
+    s.previewed = (#controls > 0) and after or nil
+    return WCResult.ok()
+end
+
 OPS.setMany = function(s, data)
     if type(data.values) ~= 'table' then return WCResult.fail('INVALID_PAYLOAD') end
     local controls = {}
@@ -658,6 +873,11 @@ end
 local function adoptContext(s, result)
     local data = WCResult.is(result) and result.ok and type(result.data) == 'table' and result.data or nil
     if data and type(data.outfits) == 'table' then s.context.outfits = data.outfits end
+    -- a sale or a wrap changed what the character owns: the tree's cached item lists go with it
+    if data and type(data.owned) == 'table' then
+        s.context.owned = data.owned
+        s.cache = {}
+    end
 end
 
 OPS.invoke = function(s, data)
@@ -667,6 +887,11 @@ OPS.invoke = function(s, data)
         local result = entry.call(s, value)
         if not WCResult.is(result) then return WCResult.fail('INTERNAL_ERROR') end
         adoptContext(s, result)
+        -- entry.after: the working look follows what the server did (a sold item comes off)
+        if result.ok and type(entry.after) == 'function' then
+            local followed = mutate(s, { { { apply = entry.after }, value } })
+            if not followed.ok then return followed end
+        end
         return result
     end
     if entry.hook then
@@ -732,10 +957,37 @@ OPS.save = function(s, data)
         local ok, valid, cleaned = pcall(WCIdentity.validate, {
             firstname = submitted.firstname, lastname = submitted.lastname, dob = submitted.dob })
         if not ok then return WCResult.fail('INVALID_PAYLOAD') end
-        if not valid then return WCResult.fail(cleaned) end
+        if not valid then
+            -- ★ Name the offending field. WCIdentity.validate checks firstname, then lastname, then the
+            --   date, and answers one bare code for all three — the player was told "the name is invalid"
+            --   with no way to know which of the two it meant.
+            local field
+            if cleaned == 'INVALID_NAME' then
+                field = (not (WCIdentity.validateName(submitted.firstname))) and 'firstname' or 'lastname'
+            elseif cleaned == 'INVALID_DOB' then
+                field = 'dob'
+            end
+            local result = WCResult.fail(cleaned)
+            result.field = field
+            return result
+        end
         extra.identity = cleaned
     end
     extra.opId = saveOpId(s, data.opId, extra.identity)
+    if s.mode == 'store' then
+        -- the store's payment currency and the optional outfit to save the look as; the server
+        -- re-checks both (the currency it takes, the name, the outfit limit) before any charge
+        -- the currency the prices were shown in (WCEditorTree.currencyOf: the choice, else the store's
+        -- first); cash, the server's default, is left out so a plain purchase stays as it was
+        local currency = WCEditorTree.currencyOf(s)
+        extra.currency = (type(s.draft.currency) == 'string' or currency ~= 'cash') and currency or nil
+        if type(data.outfitName) == 'string' and saveOutfitField(s) then
+            local name = WCUtil.trim(WCUtil.clampString(data.outfitName, 64) or '')
+            if name ~= '' then extra.outfitName = name end
+        end
+    end
+    -- the clothes go back on before the look is committed: what is saved is what the ped shows
+    if s.hidden then setHidden(s, false) end
     local ok, result = pcall(s.opts.onCommit, WCUtil.copy(s.working), extra)
     if not ok then
         WCDebug.warn('editor', 'commit failed: %s', tostring(result))
@@ -749,14 +1001,77 @@ OPS.save = function(s, data)
     return result
 end
 
-OPS.cancel = function(s)
-    restoreOnPed(s, s.saved)
+--- Check an identity field by field, for the form to report while the player is still typing.
+--  ★ The rules live in WCIdentity and ONLY there. The form asks Lua instead of carrying a second
+--    copy of the character classes in JavaScript, so the two can never drift apart.
+--  ⚠️ Until this existed the NUI only checked that the fields were non-empty (missingIdentity in
+--    web/src/treeState.js); the real rules ran once, inside OPS.save, at the very end. A player who
+--    typed a digit in a name ("test2") built the whole character and was only told "الاسم غير صالح"
+--    at the final save, with no field named and no reason given.
+---@return table { ok, fields = { [key] = 'OK' | code } }
+function E.identityCheck(data)
+    local s = current
+    if type(data) ~= 'table' or not s or (data.id ~= nil and data.id ~= s.id) then return { ok = false } end
+    if type(s.opts.identity) ~= 'table' or identityLocked(s) then return { ok = true, fields = {} } end
+    local submitted = type(data.identity) == 'table' and data.identity or {}
+    local fields = {}
+    local function name(key)
+        local value = submitted[key]
+        -- an untouched (empty) field is not "wrong" yet: the form marks it missing, not invalid
+        if value == nil or value == '' then return end
+        local ok, code = WCIdentity.validateName(value)
+        fields[key] = ok and 'OK' or (code or 'INVALID_NAME')
+    end
+    name('firstname')
+    name('lastname')
+    if type(submitted.dob) == 'string' and submitted.dob ~= '' then
+        local ok, code = WCIdentity.validateDob(submitted.dob)
+        fields.dob = ok and 'OK' or (code or 'INVALID_DOB')
+    end
+    local allOk = true
+    for _, state in pairs(fields) do
+        if state ~= 'OK' then allOk = false end
+    end
+    return { ok = true, valid = allOk, fields = fields }
+end
+
+--- The identity typed in the form, as plain strings (never validated here: it is a draft the form
+--  gets back next time, and the save validates it). nil when the session has no editable identity.
+local function identityDraft(s, submitted)
+    if type(s.opts.identity) ~= 'table' or identityLocked(s) or type(submitted) ~= 'table' then return nil end
+    local cfg = Config.Characters and Config.Characters.identity or {}
+    local max = tonumber(cfg.nameMax) or 25
+    local out = {}
+    for key, limit in pairs({ firstname = max, lastname = max, dob = 10 }) do
+        local v = submitted[key]
+        if type(v) == 'string' then out[key] = WCUtil.clampString(v, limit) or '' end
+    end
+    return out
+end
+
+OPS.cancel = function(s, data)
+    local draft
+    if s.opts.keepDraft then
+        -- the look is kept: the ped keeps showing it (clothes back on, a live preview dropped) and
+        -- the caller gets it back with the typed identity
+        if s.hidden or s.previewed then
+            local from = view(s, s.previewed or s.working)
+            s.hidden, s.previewed = false, nil
+            if not draw(s, from, s.working) then restoreOnPed(s, s.working) end
+        end
+        draft = { working = WCUtil.copy(s.working), identity = identityDraft(s, data and data.identity) }
+    else
+        s.hidden = false
+        restoreOnPed(s, s.saved)
+    end
     closeSession(s)
-    if type(s.opts.onCancel) == 'function' then try(s.opts.onCancel) end
+    if type(s.opts.onCancel) == 'function' then
+        if draft then try(s.opts.onCancel, draft.working, draft.identity) else try(s.opts.onCancel) end
+    end
     return WCResult.ok()
 end
 
-local function respond(s, result)
+local function respond(s, result, light)
     local out = { ok = result.ok == true }
     if not out.ok then
         out.code = result.code
@@ -764,10 +1079,30 @@ local function respond(s, result)
     end
     if s.closed then
         out.closed = true
-    elseif current == s then
+    elseif current == s and not light then
         out.payload = E.payload(s)
     end
     return out
+end
+
+--- The pose a change asks for (Config.Creator.profileTurn): 'profile' while a depth control is
+--  moved (registry entry pose = 'profile'), 'front' for any other morphology control, nil for
+--  everything else (a colour or a garment leaves the character as it stands).
+local function poseFor(s, data)
+    if not (Config.Creator and Config.Creator.profileTurn) then return nil end
+    local controls = {}
+    if data.op == 'set' then
+        controls[1] = data.control
+    elseif (data.op == 'setMany' or data.op == 'preview') and type(data.values) == 'table' then
+        for control in pairs(data.values) do controls[#controls + 1] = control end
+    end
+    local pose
+    for _, control in ipairs(controls) do
+        local entry = type(control) == 'string' and s.registry[control] or nil
+        if entry and entry.pose == 'profile' then return 'profile' end
+        if entry and entry.morph then pose = 'front' end
+    end
+    return pose
 end
 
 --- Handle one editor:action request. Returns the NUI response.
@@ -787,6 +1122,8 @@ function E.action(data)
     end
     local handler = type(data.op) == 'string' and OPS[data.op] or nil
     if not handler then return respond(s, WCResult.fail('INVALID_PAYLOAD')) end
+    local pose = poseFor(s, data)
+    if pose then camera('pose', pose) end
     s.busy = true
     local ok, result = pcall(handler, s, data)
     s.busy = false
@@ -796,13 +1133,25 @@ function E.action(data)
     elseif not WCResult.is(result) then
         result = WCResult.fail('INTERNAL_ERROR')
     end
-    return respond(s, result)
+    -- a preview runs at frame rate and the frame does not read its answer: no tree rebuilt for it
+    return respond(s, result, data.op == 'preview')
 end
 
 --- Handle one editor:camera request.
 function E.cameraAction(data)
     local s = current
     if type(data) ~= 'table' or not s or (data.id ~= nil and data.id ~= s.id) or s.busy then return { ok = false } end
+    if data.hide ~= nil then
+        -- the "hide clothes" toggle: a view of the working look, never a change of it
+        if s.mode ~= 'creator' or type(data.hide) ~= 'boolean' then return { ok = false } end
+        s.busy = true
+        local done, shown = pcall(setHidden, s, data.hide)
+        s.busy = false
+        if not done then WCDebug.warn('editor', 'hide clothes failed: %s', tostring(shown)) end
+        return { ok = done and shown ~= false, camera = s.camera, hidden = s.hidden == true }
+    end
+    -- a new view (another part picked, the view reset) faces the character forward again
+    if data.reset or type(data.pick) == 'table' or data.preset ~= nil then camera('pose', 'front') end
     if data.reset then
         camera('reset')
         s.camera = 'fullBody'
@@ -830,12 +1179,15 @@ function E.cameraAction(data)
     end
     local ok, preset = camera('current')
     if ok and WCEditorTree.PRESET_SET[preset] then s.camera = preset end
+    -- the teeth view opens the mouth; any other view closes it
+    mouth(s, s.camera == 'teeth')
     return { ok = true, camera = s.camera }
 end
 
 if type(RegisterNUICallback) == 'function' then
     RegisterNUICallback('editor:action', function(data, cb) cb(E.action(data)) end)
     RegisterNUICallback('editor:camera', function(data, cb) cb(E.cameraAction(data)) end)
+    RegisterNUICallback('editor:identity', function(data, cb) cb(E.identityCheck(data)) end)
 end
 
 if type(OnLanguageChange) == 'function' then

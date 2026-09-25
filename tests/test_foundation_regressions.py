@@ -22,8 +22,9 @@ class ConfigDefaultsTests(unittest.TestCase):
         self.e = self.rt.eval
 
     def test_experimental_features_default_off(self):
+        # clothingAnimations is on: its clips are the game's own, checked against the full RDR3 list
         for key, value in self.rt.py(self.e('Config.Experimental')).items():
-            self.assertIs(value, False, key)
+            self.assertIs(value, key == 'clothingAnimations', key)
 
     def test_creator_offers_every_clothing_category_like_pre_v3(self):
         self.assertEqual(self.e('Config.Creator.startingClothing.categories'), '*')
@@ -441,8 +442,8 @@ class SpawnServiceTests(unittest.TestCase):
         self.rt.run('Config.Spawn.points[1].enabled = false')     # valentine off -> saintdenis (order 2)
         bad = ('{ x = 1/0, y = 1, z = 1 }', '{ x = 0/0, y = 1, z = 1 }', '{ x = "1e999", y = 1, z = 1 }',
                '{ x = 9000, y = 0, z = 0 }', '{ x = 0, y = 0, z = 5000 }',
-               '{ x = -561.22, y = -3776.26, z = 239.16 }',             # the creator scene
-               '{ x = -500, y = -3700, z = 239 }', '{ x = 0, y = 0, z = 0 }', 'nil', '"garbage"')
+               '{ x = 2542.655, y = -1305.585, z = 48.014 }',            # the creator scene
+               '{ x = 2550, y = -1300, z = 48 }', '{ x = 0, y = 0, z = 0 }', 'nil', '"garbage"')  # 9 m from it
         for i, value in enumerate(bad):
             self.rt.run('last = %s; Clock.now = Clock.now + 6000; Bridge.FinishCharacter(1, false)' % value)
             self.assertIsNone(self.rt.client_events('w_creators:client:selectSpawn')[i].args[1].last, value)
@@ -505,7 +506,7 @@ class InstallSqlTests(unittest.TestCase):
         sql = read(RESOURCE / 'sql' / 'install.sql')
         schema = rt.py(rt.eval('FakeDB.schema'))
         self.assertEqual(set(schema), {'characters_appearence', 'w_creators_clothes', 'w_creators_outfits',
-                                       'w_creators_migrations'})
+                                       'w_creators_colorways', 'w_creators_migrations'})
         for table, cols in schema.items():
             block = re.search(r'CREATE TABLE IF NOT EXISTS `%s` \((.*?)\) ENGINE' % table, sql, re.S)
             self.assertIsNotNone(block, table)

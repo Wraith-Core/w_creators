@@ -36,19 +36,22 @@ class MigrationTests(unittest.TestCase):
         self.rt.run('FakeDB.fireReady()')
         self.assertTrue(self.e('WCMigrations.done and WCMigrations.ok'))
         self.assertEqual(list(self.e('FakeDB.migrations').values()),
-                         ['001_base_tables', '002_appearance_v3', '003_clothes_meta', '004_outfits'])
+                         ['001_base_tables', '002_appearance_v3', '003_clothes_meta', '004_outfits',
+                          '005_clothes_paid', '006_colorways'])
         schema = self.rt.py(self.e('FakeDB.schema'))
         for col in ('charid', 'isMale', 'components', 'appearance', 'appearance_version', 'updated_at'):
             self.assertIn(col, schema['characters_appearence'])
-        for col in ('hash', 'palette', 'tint2', 'source', 'acquired_at'):
+        for col in ('hash', 'palette', 'tint2', 'source', 'acquired_at', 'price_paid', 'currency'):
             self.assertIn(col, schema['w_creators_clothes'])
         self.assertIn('data', schema['w_creators_outfits'])
+        for col in ('charid', 'hash', 'palette', 'tint0', 'tint1', 'tint2', 'price_paid', 'currency'):
+            self.assertIn(col, schema['w_creators_colorways'])
         alters = self.e('FakeDB.count("ALTER TABLE")')
-        self.assertEqual(alters, 5)
+        self.assertEqual(alters, 7)   # + price_paid, currency (005)
         self.rt.run('ok2, applied2 = WCMigrations.run()')
         self.assertTrue(self.e('ok2'))
         self.assertEqual(self.e('#applied2'), 0)
-        self.assertEqual(self.e('FakeDB.count("ALTER TABLE")'), 5)
+        self.assertEqual(self.e('FakeDB.count("ALTER TABLE")'), 7)
         self.assertEqual(self.e('FakeDB.count("CREATE TABLE IF NOT EXISTS `characters_appearence`")'), 1)
 
     def test_existing_columns_are_detected_through_information_schema(self):
@@ -59,9 +62,12 @@ class MigrationTests(unittest.TestCase):
         ''')
         self.assertTrue(self.e('ok'))
         alters = [q.sql for q in self.e('FakeDB.queries').values() if 'ALTER TABLE' in q.sql]
-        self.assertEqual(len(alters), 2)
+        # the two missing v3 columns, then the two price columns of 005
+        self.assertEqual(len(alters), 4)
         self.assertIn('appearance_version', alters[0])
         self.assertIn('acquired_at', alters[1])
+        self.assertIn('price_paid', alters[2])
+        self.assertIn('currency', alters[3])
         self.assertTrue(self.e('WCMigrations.columnExists("characters_appearence", "appearance_version")'))
         self.assertTrue(self.e('WCMigrations.tableExists("w_creators_outfits")'))
         self.assertFalse(self.e('WCMigrations.tableExists("nope")'))
@@ -73,7 +79,7 @@ class MigrationTests(unittest.TestCase):
         self.assertNotIn('004_outfits', list(self.e('FakeDB.migrations').values()))
         self.rt.run('FakeDB.fail = nil; ok2, applied2 = WCMigrations.run()')
         self.assertTrue(self.e('ok2'))
-        self.assertEqual(list(self.e('applied2').values()), ['004_outfits'])
+        self.assertEqual(list(self.e('applied2').values()), ['004_outfits', '005_clothes_paid', '006_colorways'])
 
 
 class EconomyTests(unittest.TestCase):
@@ -455,6 +461,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual([q.query for q in tx.values()], [
             'DELETE FROM characters_appearence WHERE charid = ?',
             'DELETE FROM w_creators_clothes WHERE charid = ?',
+            'DELETE FROM w_creators_colorways WHERE charid = ?',
             'DELETE FROM w_creators_outfits WHERE charid = ?'])
         self.assertIsNone(self.e('WCAppearanceRepo.cache["vorp:1"]'))
 
@@ -510,7 +517,8 @@ class BridgeTests(unittest.TestCase):
         rt.run(self.RSG)
         rt.run('deleted, stage = Bridge.DeleteCharacter(1, "qbr-cid")')
         tx = rt.eval('FakeDB.transactions[1]')
-        self.assertEqual(len(tx), 3)
+        # appearance, clothes, their owned colours (colourways), outfits
+        self.assertEqual(len(tx), 4)
         self.assertEqual(tx[2]['values'][1], 'qbr-cid')
         self.assertTrue(rt.eval('deleted'))
         self.assertEqual(rt.eval('rsgCalls.delete[1]'), 'qbr-cid')

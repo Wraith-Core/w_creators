@@ -51,7 +51,7 @@ when `Config.Creator.enableCutscene = true`.
 | `lastLocation.preselect` | `true` | Last location listed first and preselected; `false` lists it last. |
 | `snapToGround` | `true` | Probe the ground after the move. |
 | `bounds` | `x -8000..5000, y -6000..3000, z -150..1500` | A last location outside is rejected. |
-| `sceneExclusionRadius` | `150.0` | A last location this close to the creator room anchor (`Config.Scene.anchor`) is rejected. |
+| `sceneExclusionRadius` | `12.0` | A last location this close to the creator room anchor (`Config.Scene.anchor`) is rejected. The room is the Saint Denis theatre stage: a wider radius would reject characters saved in central Saint Denis. |
 | `points[]` | 9 towns | `id`, `label`, `region`, `coords`, `heading`, `enabled`, `order`, optional `cam`. |
 
 Shipped point ids, in `order`: `valentine`, `saintdenis`, `rhodes`, `blackwater`, `strawberry`,
@@ -186,9 +186,11 @@ inventory.
 
 ## 10. Admin respawn
 
-Command `wc_respawn <playerId> [pointId]` (server): console, or a player holding the ACE
-`Config.Admin.ace` (`w_creators.admin`). `pointId` is a point id, `'__last'` (the target's validated
-last location) or omitted (the first enabled point).
+Command `wc_respawn <citizenId> [pointId]` (server): console, or a player holding the ACE
+`Config.Admin.ace` (`w_creators.admin`). The target is his citizen id (`'12'`, the old `'OMG95204'`);
+`'#5'` names whoever is on server id 5. He must be in the game (`PLAYER_OFFLINE` otherwise).
+`pointId` is a point id, `'__last'` (the target's validated last location) or omitted (the first
+enabled point).
 
 - Rate limit 5 per 10 s per caller; a caller without the ACE is refused silently and logged as
   `security_violation` (`admin_respawn`).

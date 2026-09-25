@@ -1,6 +1,7 @@
 {
  "creatorMale": {
   "camera": "fullBody",
+  "canHide": true,
   "canRandom": true,
   "canSave": true,
   "canUndo": false,
@@ -29,12 +30,16 @@
     {
      "key": "dob",
      "label": "تاريخ الميلاد",
-     "max": "2008-09-23",
-     "min": "1935-09-24",
+     "max": "2008-09-25",
+     "min": "1935-09-26",
      "type": "date",
      "value": ""
     },
     {
+     "choices": [
+      "ذكر",
+      "أنثى"
+     ],
      "key": "sex",
      "label": "الجنس",
      "type": "info",
@@ -89,6 +94,8 @@
    }
   ],
   "strings": {
+   "INVALID_DOB": "تاريخ ميلاد غير مقبول",
+   "INVALID_NAME": "حروف فقط — بلا أرقام أو رموز (تُقبل المسافة والفاصلة العليا والشرطة)",
    "advanced": "تفاصيل إضافية",
    "appearance": "مظهر الشخصية",
    "apply": "تطبيق",
@@ -99,6 +106,7 @@
    "close": "إغلاق",
    "confirm": "تأكيد",
    "dangerBody": "لا يمكن التراجع عن هذا الإجراء.",
+   "day": "اليوم",
    "details": "اختر القسم الذي تريد تعديله.",
    "discard": "تجاهل التعديلات",
    "dragRotate": "اسحب للتدوير",
@@ -106,13 +114,30 @@
    "equipped": "مرتداة",
    "error": "تعذر إكمال الطلب، حاول مجددًا.",
    "free": "مجاني",
+   "goldAmount": "%s ذهب",
+   "hideClothes": "إخفاء الملابس",
+   "identityInvalid": "قيمة غير صالحة",
    "leave": "سيتم إلغاء التعديلات غير المحفوظة.",
    "leaveTitle": "تعديلات غير محفوظة",
    "locked": "مقفلة",
+   "month": "الشهر",
+   "month.1": "يناير",
+   "month.10": "أكتوبر",
+   "month.11": "نوفمبر",
+   "month.12": "ديسمبر",
+   "month.2": "فبراير",
+   "month.3": "مارس",
+   "month.4": "أبريل",
+   "month.5": "مايو",
+   "month.6": "يونيو",
+   "month.7": "يوليو",
+   "month.8": "أغسطس",
+   "month.9": "سبتمبر",
    "nameHint": "أكمل اسم الشخصية من قسم الهوية.",
    "new": "جديدة",
    "none": "بدون",
    "owned": "مملوكة",
+   "ownedColors": "ألوانك المملوكة",
    "padHelp": "اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع",
    "price": "السعر",
    "random": "مظهر عشوائي",
@@ -122,6 +147,7 @@
    "save": "حفظ",
    "saving": "جارٍ التطبيق…",
    "search": "بحث…",
+   "showClothes": "إظهار الملابس",
    "stay": "متابعة التعديل",
    "total": "الإجمالي",
    "undo": "تراجع",
@@ -133,10 +159,14 @@
    "view.feet": "القدمان",
    "view.fullBody": "الجسم كاملًا",
    "view.hair": "الشعر",
+   "view.handLeft": "اليد اليسرى",
+   "view.handRight": "اليد اليمنى",
    "view.hands": "اليدان",
    "view.head": "الرأس",
    "view.lowerBody": "الجزء السفلي",
-   "view.upperBody": "الجزء العلوي"
+   "view.teeth": "الأسنان",
+   "view.upperBody": "الجزء العلوي",
+   "year": "السنة"
   },
   "tree": {
    "camera": "fullBody",
@@ -173,6 +203,39 @@
           }
          ],
          "value": 1
+        },
+        {
+         "control": "body.shape",
+         "id": "body.shape",
+         "kind": "choice",
+         "label": "بنية الجسم",
+         "options": [
+          {
+           "label": "البنية الافتراضية",
+           "value": 0
+          },
+          {
+           "label": "بنية نحيلة",
+           "value": 1
+          },
+          {
+           "label": "بنية رياضية",
+           "value": 2
+          },
+          {
+           "label": "بنية متوسطة",
+           "value": 3
+          },
+          {
+           "label": "بنية ممتلئة",
+           "value": 4
+          },
+          {
+           "label": "بنية ضخمة",
+           "value": 5
+          }
+         ],
+         "value": 0
         },
         {
          "control": "body.height",
@@ -1051,6 +1114,77 @@
          "value": 14
         },
         {
+         "camera": "eyes",
+         "children": [
+          {
+           "control": "eyes.tint",
+           "id": "eyes.tint",
+           "kind": "choice",
+           "label": "لون العين المخصص",
+           "options": [
+            {
+             "label": "اللون الأصلي",
+             "value": 0
+            },
+            {
+             "label": "مخصص",
+             "value": 1
+            }
+           ],
+           "value": 0
+          },
+          {
+           "control": "eyes.tint.tint0",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "eyes.tint.tint0",
+           "kind": "slider",
+           "label": "الدرجة الأولى",
+           "max": 127,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "eyes.tint.tint1",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "eyes.tint.tint1",
+           "kind": "slider",
+           "label": "الدرجة الثانية",
+           "max": 127,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "eyes.tint.tint2",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "eyes.tint.tint2",
+           "kind": "slider",
+           "label": "الدرجة الثالثة",
+           "max": 127,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          }
+         ],
+         "id": "eyes.custom",
+         "kind": "group",
+         "label": "لون العين المخصص",
+         "summary": "اللون الأصلي"
+        },
+        {
          "display": {
           "decimals": 0,
           "scale": 100
@@ -1154,12 +1288,126 @@
            "id": "overlay.eyebrows.style",
            "kind": "choice",
            "label": "النمط",
-           "range": {
-            "max": 24,
-            "min": 1,
-            "none": true
-           },
+           "options": [
+            {
+             "label": "بدون",
+             "value": 0
+            },
+            {
+             "label": "حاجبان حادّان",
+             "value": 1
+            },
+            {
+             "label": "حاجبان رفيعان",
+             "value": 2
+            },
+            {
+             "label": "حاجبان منفوشان",
+             "value": 3
+            },
+            {
+             "label": "حاجبان مرتّبان",
+             "value": 4
+            },
+            {
+             "label": "حاجبان مستقيما الطرف",
+             "value": 5
+            },
+            {
+             "label": "حاجبان سميكان ٢",
+             "value": 6
+            },
+            {
+             "label": "حاجبان مدبّبان",
+             "value": 7
+            },
+            {
+             "label": "حاجبان مشذّبان",
+             "value": 8
+            },
+            {
+             "label": "حاجبان سميكان",
+             "value": 9
+            },
+            {
+             "label": "حاجبان كاملان ٢",
+             "value": 10
+            },
+            {
+             "label": "حاجبان محدّدان",
+             "value": 11
+            },
+            {
+             "label": "حاجبان مشذّبان ٢",
+             "value": 12
+            },
+            {
+             "label": "حاجبان طبيعيان ٢",
+             "value": 13
+            },
+            {
+             "label": "حاجبان منخفضان",
+             "value": 14
+            },
+            {
+             "label": "حاجبان منفوشان ٢",
+             "value": 15
+            },
+            {
+             "label": "حاجبان ثقيلان",
+             "value": 16
+            },
+            {
+             "label": "حاجبان كثّان",
+             "value": 17
+            },
+            {
+             "label": "حاجبان منتوفان",
+             "value": 18
+            },
+            {
+             "label": "حاجبان منتوفان ٢",
+             "value": 19
+            },
+            {
+             "label": "حاجبان مقوّسان",
+             "value": 20
+            },
+            {
+             "label": "حاجبان طبيعيان",
+             "value": 21
+            },
+            {
+             "label": "حاجبان قصيران",
+             "value": 22
+            },
+            {
+             "label": "حاجبان كاملان",
+             "value": 23
+            },
+            {
+             "label": "حاجبان خفيفان",
+             "value": 24
+            }
+           ],
            "value": 1
+          },
+          {
+           "control": "overlay.eyebrows.match",
+           "id": "overlay.eyebrows.match",
+           "kind": "choice",
+           "label": "لون الحاجبين",
+           "options": [
+            {
+             "label": "مثل لون الشعر",
+             "value": 1
+            },
+            {
+             "label": "لون مختار",
+             "value": 0
+            }
+           ],
+           "value": 0
           },
           {
            "control": "overlay.eyebrows.color",
@@ -1190,7 +1438,7 @@
          "id": "overlay.eyebrows",
          "kind": "group",
          "label": "نمط الحاجبين",
-         "summary": "01"
+         "summary": "حاجبان حادّان"
         },
         {
          "display": {
@@ -1234,7 +1482,7 @@
        "label": "الحاجبان"
       },
       {
-       "camera": "face",
+       "camera": "teeth",
        "children": [
         {
          "control": "face.teeth",
@@ -1243,31 +1491,31 @@
          "label": "الأسنان",
          "options": [
           {
-           "label": "01",
+           "label": "الأسنان المتينة",
            "value": 1
           },
           {
-           "label": "02",
+           "label": "الأسنان المذهّبة",
            "value": 2
           },
           {
-           "label": "03",
+           "label": "الأسنان البالية",
            "value": 3
           },
           {
-           "label": "04",
+           "label": "أسنان الريفي",
            "value": 4
           },
           {
-           "label": "05",
+           "label": "الأسنان المتهالكة",
            "value": 5
           },
           {
-           "label": "06",
+           "label": "فم بلا أسنان",
            "value": 6
           },
           {
-           "label": "07",
+           "label": "أسنان القروي",
            "value": 7
           }
          ],
@@ -1294,26 +1542,32 @@
        "options": [
         {
          "label": "01",
+         "swatch": "#f1d3b8",
          "value": 1
         },
         {
-         "label": "02",
-         "value": 2
-        },
-        {
-         "label": "03",
-         "value": 3
-        },
-        {
          "label": "04",
+         "swatch": "#dcb08b",
          "value": 4
         },
         {
+         "label": "03",
+         "swatch": "#c38c62",
+         "value": 3
+        },
+        {
          "label": "05",
+         "swatch": "#9e6a45",
          "value": 5
         },
         {
+         "label": "02",
+         "swatch": "#76492d",
+         "value": 2
+        },
+        {
          "label": "06",
+         "swatch": "#4a2d1c",
          "value": 6
         }
        ],
@@ -1327,24 +1581,69 @@
          "id": "overlay.complex.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 14,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "بشرة منهكة",
+           "value": 1
+          },
+          {
+           "label": "بشرة محمرّة",
+           "value": 2
+          },
+          {
+           "label": "بشرة متشقّقة",
+           "value": 3
+          },
+          {
+           "label": "بشرة منقّطة",
+           "value": 4
+          },
+          {
+           "label": "بشرة متورّدة",
+           "value": 5
+          },
+          {
+           "label": "بشرة نضرة",
+           "value": 6
+          },
+          {
+           "label": "بشرة مدمن الشراب",
+           "value": 7
+          },
+          {
+           "label": "بشرة لفحتها الريح",
+           "value": 8
+          },
+          {
+           "label": "بشرة مائلة للحمرة",
+           "value": 9
+          },
+          {
+           "label": "بشرة خشنة",
+           "value": 10
+          },
+          {
+           "label": "بشرة محروقة بالشمس",
+           "value": 11
+          },
+          {
+           "label": "بشرة أنهكها الطقس",
+           "value": 12
+          },
+          {
+           "label": "بشرة متعبة",
+           "value": 13
+          },
+          {
+           "label": "بشرة متضرّرة",
+           "value": 14
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.complex.color",
-         "disabled": true,
-         "id": "overlay.complex.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.complex.opacity",
@@ -1375,24 +1674,77 @@
          "id": "overlay.disc.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 16,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "تفاوت خشن",
+           "value": 1
+          },
+          {
+           "label": "تفاوت مبقّع",
+           "value": 2
+          },
+          {
+           "label": "تفاوت مرقّط",
+           "value": 3
+          },
+          {
+           "label": "تفاوت منقّط",
+           "value": 4
+          },
+          {
+           "label": "تفاوت ثابت",
+           "value": 5
+          },
+          {
+           "label": "تفاوت غير متساوٍ",
+           "value": 6
+          },
+          {
+           "label": "تفاوت ببقع",
+           "value": 7
+          },
+          {
+           "label": "تفاوت طفيف",
+           "value": 8
+          },
+          {
+           "label": "تفاوت واضح",
+           "value": 9
+          },
+          {
+           "label": "تفاوت ملطّخ",
+           "value": 10
+          },
+          {
+           "label": "تفاوت بنقاط",
+           "value": 11
+          },
+          {
+           "label": "تفاوت عشوائي",
+           "value": 12
+          },
+          {
+           "label": "تفاوت متنوّع",
+           "value": 13
+          },
+          {
+           "label": "تفاوت منتشر",
+           "value": 14
+          },
+          {
+           "label": "تفاوت خشن جدًا",
+           "value": 15
+          },
+          {
+           "label": "تفاوت متقطّع",
+           "value": 16
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.disc.color",
-         "disabled": true,
-         "id": "overlay.disc.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.disc.opacity",
@@ -1431,18 +1783,6 @@
          "value": 0
         },
         {
-         "control": "overlay.ageing.color",
-         "disabled": true,
-         "id": "overlay.ageing.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
-        },
-        {
          "control": "overlay.ageing.opacity",
          "disabled": true,
          "display": {
@@ -1471,24 +1811,73 @@
          "id": "overlay.freckles.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 15,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "نمش شمسي",
+           "value": 1
+          },
+          {
+           "label": "نمش الخدّين",
+           "value": 2
+          },
+          {
+           "label": "نمش عشوائي",
+           "value": 3
+          },
+          {
+           "label": "نمش قليل",
+           "value": 4
+          },
+          {
+           "label": "نمش متعدّد",
+           "value": 5
+          },
+          {
+           "label": "نمش كثيف",
+           "value": 6
+          },
+          {
+           "label": "نمش باهت",
+           "value": 7
+          },
+          {
+           "label": "نمش متناثر",
+           "value": 8
+          },
+          {
+           "label": "نمش فاتح",
+           "value": 9
+          },
+          {
+           "label": "نمش ظاهر",
+           "value": 10
+          },
+          {
+           "label": "نمش منقّط",
+           "value": 11
+          },
+          {
+           "label": "نمش دقيق",
+           "value": 12
+          },
+          {
+           "label": "نمش الأنف",
+           "value": 13
+          },
+          {
+           "label": "نمش على الوجنتين",
+           "value": 14
+          },
+          {
+           "label": "نمش كثيف على الوجنتين",
+           "value": 15
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.freckles.color",
-         "disabled": true,
-         "id": "overlay.freckles.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.freckles.opacity",
@@ -1519,24 +1908,77 @@
          "id": "overlay.moles.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 16,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "شامات متفرّقة",
+           "value": 1
+          },
+          {
+           "label": "شامات خفيفة",
+           "value": 2
+          },
+          {
+           "label": "شامات متنوّعة",
+           "value": 3
+          },
+          {
+           "label": "شامات متجمّعة",
+           "value": 4
+          },
+          {
+           "label": "شامات نادرة",
+           "value": 5
+          },
+          {
+           "label": "شامات مرقّطة",
+           "value": 6
+          },
+          {
+           "label": "شامات منثورة",
+           "value": 7
+          },
+          {
+           "label": "شامات بارزة",
+           "value": 8
+          },
+          {
+           "label": "شامات منقّطة",
+           "value": 9
+          },
+          {
+           "label": "شامات متناقصة",
+           "value": 10
+          },
+          {
+           "label": "شامات ممتدّة",
+           "value": 11
+          },
+          {
+           "label": "شامات مبعثرة",
+           "value": 12
+          },
+          {
+           "label": "شامات مصفوفة",
+           "value": 13
+          },
+          {
+           "label": "شامات مرقّطة ٢",
+           "value": 14
+          },
+          {
+           "label": "شامات مجتمعة",
+           "value": 15
+          },
+          {
+           "label": "شامات قليلة",
+           "value": 16
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.moles.color",
-         "disabled": true,
-         "id": "overlay.moles.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.moles.opacity",
@@ -1575,18 +2017,6 @@
          "value": 0
         },
         {
-         "control": "overlay.spots.color",
-         "disabled": true,
-         "id": "overlay.spots.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
-        },
-        {
          "control": "overlay.spots.opacity",
          "disabled": true,
          "display": {
@@ -1623,18 +2053,6 @@
          "value": 0
         },
         {
-         "control": "overlay.acne.color",
-         "disabled": true,
-         "id": "overlay.acne.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
-        },
-        {
          "control": "overlay.acne.opacity",
          "disabled": true,
          "display": {
@@ -1663,24 +2081,77 @@
          "id": "overlay.scars.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 16,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.scars.color",
-         "disabled": true,
-         "id": "overlay.scars.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.scars.opacity",
@@ -1690,6 +2161,285 @@
           "scale": 100
          },
          "id": "overlay.scars.opacity",
+         "kind": "slider",
+         "label": "الكثافة",
+         "max": 1,
+         "min": 0,
+         "step": 0.01,
+         "value": 1
+        },
+        {
+         "control": "overlay.scars.extra1.style",
+         "disabled": true,
+         "id": "overlay.scars.extra1.style",
+         "kind": "choice",
+         "label": "ندبة إضافية 1",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
+         "value": 0
+        },
+        {
+         "control": "overlay.scars.extra1.opacity",
+         "disabled": true,
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "overlay.scars.extra1.opacity",
+         "kind": "slider",
+         "label": "الكثافة",
+         "max": 1,
+         "min": 0,
+         "step": 0.01,
+         "value": 1
+        },
+        {
+         "control": "overlay.scars.extra2.style",
+         "disabled": true,
+         "id": "overlay.scars.extra2.style",
+         "kind": "choice",
+         "label": "ندبة إضافية 2",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
+         "value": 0
+        },
+        {
+         "control": "overlay.scars.extra2.opacity",
+         "disabled": true,
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "overlay.scars.extra2.opacity",
+         "kind": "slider",
+         "label": "الكثافة",
+         "max": 1,
+         "min": 0,
+         "step": 0.01,
+         "value": 1
+        },
+        {
+         "control": "overlay.scars.extra3.style",
+         "disabled": true,
+         "id": "overlay.scars.extra3.style",
+         "kind": "choice",
+         "label": "ندبة إضافية 3",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
+         "value": 0
+        },
+        {
+         "control": "overlay.scars.extra3.opacity",
+         "disabled": true,
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "overlay.scars.extra3.opacity",
          "kind": "slider",
          "label": "الكثافة",
          "max": 1,
@@ -1770,35 +2520,35 @@
          "value": 0
         },
         {
-         "label": "الشعر 01",
+         "label": "مفروق يسارًا بعناية",
          "value": 1
         },
         {
-         "label": "الشعر 02",
+         "label": "ممشّط للخلف",
          "value": 2
         },
         {
-         "label": "الشعر 03",
+         "label": "خفيف متراجع",
          "value": 3
         },
         {
-         "label": "الشعر 04",
+         "label": "كثيف مفروق من الوسط",
          "value": 4
         },
         {
-         "label": "الشعر 05",
+         "label": "طويل مفروق يمينًا",
          "value": 5
         },
         {
-         "label": "الشعر 06",
+         "label": "مفروق من الوسط متدرّج",
          "value": 6
         },
         {
-         "label": "الشعر 07",
+         "label": "قصير مرفوع",
          "value": 7
         },
         {
-         "label": "الشعر 08",
+         "label": "مربوط بخشونة",
          "value": 8
         }
        ],
@@ -1812,70 +2562,87 @@
        "options": [
         {
          "label": "أشقر",
+         "swatch": "#b58d4c",
          "value": 1
         },
         {
          "label": "بني",
+         "swatch": "#5b3b23",
          "value": 2
         },
         {
          "label": "أشقر داكن",
+         "swatch": "#8c6834",
          "value": 3
         },
         {
          "label": "بني داكن جدًا",
+         "swatch": "#2a1a10",
          "value": 4
         },
         {
          "label": "أصهب داكن",
+         "swatch": "#793a1e",
          "value": 5
         },
         {
          "label": "رمادي داكن",
+         "swatch": "#5a5855",
          "value": 6
         },
         {
          "label": "أصهب",
+         "swatch": "#a3522a",
          "value": 7
         },
         {
          "label": "رمادي",
+         "swatch": "#8c8985",
          "value": 8
         },
         {
          "label": "أسود فاحم",
+         "swatch": "#151313",
          "value": 9
         },
         {
          "label": "أشقر فاتح",
+         "swatch": "#d8bc7d",
          "value": 10
         },
         {
          "label": "بني فاتح",
+         "swatch": "#7b5332",
          "value": 11
         },
         {
          "label": "أصهب فاتح",
+         "swatch": "#c17040",
          "value": 12
         },
         {
          "label": "رمادي فاتح",
+         "swatch": "#bab7b2",
          "value": 13
         },
         {
          "label": "بني متوسط",
+         "swatch": "#4a2e1b",
          "value": 14
         },
         {
          "label": "ملح وفلفل",
+         "swatch": "#6e6b67",
          "value": 15
         },
         {
          "label": "أشقر فراولي",
+         "swatch": "#c0835a",
          "value": 16
         },
         {
          "label": "رمادي فضي",
+         "swatch": "#a8a8ad",
          "value": 17
         }
        ],
@@ -1951,27 +2718,27 @@
            "value": 0
           },
           {
-           "label": "اللحية 01",
+           "label": "شارب الفظّ",
            "value": 1
           },
           {
-           "label": "اللحية 02",
+           "label": "لحية الساقي",
            "value": 2
           },
           {
-           "label": "اللحية 03",
+           "label": "لحية الأستاذ",
            "value": 3
           },
           {
-           "label": "اللحية 04",
+           "label": "ستارة الذقن",
            "value": 4
           },
           {
-           "label": "اللحية 05",
+           "label": "لحية البحّار",
            "value": 5
           },
           {
-           "label": "اللحية 06",
+           "label": "لحية الجنرال",
            "value": 6
           }
          ],
@@ -2046,11 +2813,16 @@
          "id": "overlay.foundation.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "بودرة الوجه",
+           "value": 1
+          }
+         ],
          "value": 0
         },
         {
@@ -2059,6 +2831,18 @@
          "id": "overlay.foundation.color",
          "kind": "choice",
          "label": "اللون",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.foundation.color2",
+         "disabled": true,
+         "id": "overlay.foundation.color2",
+         "kind": "choice",
+         "label": "اللون الثاني",
          "range": {
           "max": 64,
           "min": 1
@@ -2094,11 +2878,28 @@
          "id": "overlay.blush.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 4,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "خدود متورّدة",
+           "value": 1
+          },
+          {
+           "label": "خدود وردية",
+           "value": 2
+          },
+          {
+           "label": "خدود راقية",
+           "value": 3
+          },
+          {
+           "label": "خدود منحوتة",
+           "value": 4
+          }
+         ],
          "value": 0
         },
         {
@@ -2142,11 +2943,40 @@
          "id": "overlay.lipsticks.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "أحمر مطفي",
+           "value": 1
+          },
+          {
+           "label": "أحمر محدّد",
+           "value": 2
+          },
+          {
+           "label": "أحمر مظلّل",
+           "value": 3
+          },
+          {
+           "label": "أحمر ملطّخ",
+           "value": 4
+          },
+          {
+           "label": "أحمر مربّع",
+           "value": 5
+          },
+          {
+           "label": "أحمر على شكل قلب",
+           "value": 6
+          },
+          {
+           "label": "أحمر بحافّة",
+           "value": 7
+          }
+         ],
          "value": 0
         },
         {
@@ -2155,6 +2985,18 @@
          "id": "overlay.lipsticks.color",
          "kind": "choice",
          "label": "اللون",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.lipsticks.color2",
+         "disabled": true,
+         "id": "overlay.lipsticks.color2",
+         "kind": "choice",
+         "label": "اللون الثاني",
          "range": {
           "max": 64,
           "min": 1
@@ -2190,11 +3032,76 @@
          "id": "overlay.eyeliners.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "كحل بسيط",
+           "value": 1
+          },
+          {
+           "label": "كحل مجنّح",
+           "value": 2
+          },
+          {
+           "label": "كحل طويل",
+           "value": 3
+          },
+          {
+           "label": "كحل سفلي",
+           "value": 4
+          },
+          {
+           "label": "كحل معقوف",
+           "value": 5
+          },
+          {
+           "label": "كحل منحنٍ",
+           "value": 6
+          },
+          {
+           "label": "كحل درامي",
+           "value": 7
+          },
+          {
+           "label": "كحل هندي",
+           "value": 8
+          },
+          {
+           "label": "كحل هندي عريض",
+           "value": 9
+          },
+          {
+           "label": "كحل هندي كامل",
+           "value": 10
+          },
+          {
+           "label": "كحل كلاسيكي",
+           "value": 11
+          },
+          {
+           "label": "كحل كلاسيكي عريض",
+           "value": 12
+          },
+          {
+           "label": "كحل كامل",
+           "value": 13
+          },
+          {
+           "label": "كحل مزدوج",
+           "value": 14
+          },
+          {
+           "label": "كحل مزدوج علوي",
+           "value": 15
+          },
+          {
+           "label": "كحل فرعوني",
+           "value": 16
+          }
+         ],
          "value": 0
         },
         {
@@ -2238,11 +3145,36 @@
          "id": "overlay.shadows.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ظلال دخانية",
+           "value": 1
+          },
+          {
+           "label": "ظلال بقوس مرتّب",
+           "value": 2
+          },
+          {
+           "label": "ظلال بجناح كثيف",
+           "value": 3
+          },
+          {
+           "label": "ظلال ممزوجة",
+           "value": 4
+          },
+          {
+           "label": "ظلال بجناح بلونين",
+           "value": 5
+          },
+          {
+           "label": "ظلال مضيئة",
+           "value": 6
+          }
+         ],
          "value": 0
         },
         {
@@ -2251,6 +3183,30 @@
          "id": "overlay.shadows.color",
          "kind": "choice",
          "label": "اللون",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.shadows.color2",
+         "disabled": true,
+         "id": "overlay.shadows.color2",
+         "kind": "choice",
+         "label": "اللون الثاني",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.shadows.color3",
+         "disabled": true,
+         "id": "overlay.shadows.color3",
+         "kind": "choice",
+         "label": "اللون الثالث",
          "range": {
           "max": 64,
           "min": 1
@@ -2367,6 +3323,7 @@
            "value": 0
           }
          ],
+         "icon": "hat",
          "id": "item.hats",
          "kind": "group",
          "label": "القبعة"
@@ -2401,11 +3358,13 @@
            "value": 0
           }
          ],
+         "icon": "mask",
          "id": "item.masks",
          "kind": "group",
          "label": "القناع"
         }
        ],
+       "icon": "hat",
        "id": "tax.head",
        "kind": "group",
        "label": "الرأس"
@@ -2442,11 +3401,13 @@
            "value": 0
           }
          ],
+         "icon": "neckerchief",
          "id": "item.neckwear",
          "kind": "group",
          "label": "وشاح الرقبة"
         }
        ],
+       "icon": "neckerchief",
        "id": "tax.neck",
        "kind": "group",
        "label": "الرقبة"
@@ -2511,6 +3472,7 @@
            "label": "خلع القطعة"
           }
          ],
+         "icon": "shirt",
          "id": "item.shirts_full",
          "kind": "group",
          "label": "القميص",
@@ -2546,6 +3508,7 @@
            "value": 0
           }
          ],
+         "icon": "vest",
          "id": "item.vests",
          "kind": "group",
          "label": "الصديري"
@@ -2580,6 +3543,7 @@
            "value": 0
           }
          ],
+         "icon": "coat",
          "id": "item.coats",
          "kind": "group",
          "label": "المعطف"
@@ -2614,11 +3578,13 @@
            "value": 0
           }
          ],
+         "icon": "coat",
          "id": "item.coats_closed",
          "kind": "group",
          "label": "المعطف المغلق"
         }
        ],
+       "icon": "shirt",
        "id": "tax.upper",
        "kind": "group",
        "label": "الجزء العلوي"
@@ -2628,7 +3594,7 @@
        "children": [
         {
          "art": "gloves",
-         "camera": "hands",
+         "camera": "handRight",
          "children": [
           {
            "control": "clothing.gloves.style",
@@ -2656,11 +3622,13 @@
            "value": 0
           }
          ],
+         "icon": "glove",
          "id": "item.gloves",
          "kind": "group",
          "label": "القفازات"
         }
        ],
+       "icon": "glove",
        "id": "tax.arms",
        "kind": "group",
        "label": "الذراعان واليدان"
@@ -2716,12 +3684,14 @@
            "label": "خلع القطعة"
           }
          ],
+         "icon": "pants",
          "id": "item.pants",
          "kind": "group",
          "label": "البنطال",
          "summary": "البنطال 01"
         }
        ],
+       "icon": "pants",
        "id": "tax.lower",
        "kind": "group",
        "label": "الجزء السفلي"
@@ -2794,12 +3764,14 @@
            "label": "خلع القطعة"
           }
          ],
+         "icon": "boots",
          "id": "item.boots",
          "kind": "group",
          "label": "الحذاء",
          "summary": "الحذاء 01"
         }
        ],
+       "icon": "boots",
        "id": "tax.feet",
        "kind": "group",
        "label": "القدمان"
@@ -2808,7 +3780,7 @@
        "camera": "accessories",
        "children": [
         {
-         "camera": "accessories",
+         "camera": "upperBody",
          "children": [
           {
            "control": "clothing.belts.style",
@@ -2836,6 +3808,7 @@
            "value": 0
           }
          ],
+         "icon": "belt",
          "id": "item.belts",
          "kind": "group",
          "label": "الحزام"
@@ -2869,6 +3842,7 @@
            "value": 0
           }
          ],
+         "icon": "belt",
          "id": "item.belt_buckles",
          "kind": "group",
          "label": "إبزيم الحزام"
@@ -2903,6 +3877,7 @@
            "value": 0
           }
          ],
+         "icon": "gunbelt",
          "id": "item.gunbelts",
          "kind": "group",
          "label": "حزام المسدس"
@@ -2936,14 +3911,66 @@
            "value": 0
           }
          ],
+         "icon": "gunbelt",
          "id": "item.gunbelt_accs",
          "kind": "group",
          "label": "إكسسوار حزام المسدس"
         }
        ],
+       "icon": "gunbelt",
        "id": "tax.accessories",
        "kind": "group",
        "label": "الإكسسوارات"
+      },
+      {
+       "camera": "fullBody",
+       "children": [
+        {
+         "control": "starter.preset",
+         "id": "starter.preset",
+         "kind": "choice",
+         "label": "الطقم الأولي",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ملابس العامل",
+           "value": 1
+          },
+          {
+           "label": "ملابس المسافر",
+           "value": 2
+          },
+          {
+           "label": "طقم الحدود",
+           "value": 3
+          },
+          {
+           "label": "طقم الخارج عن القانون",
+           "value": 4
+          },
+          {
+           "label": "طقم المزرعة",
+           "value": 5
+          },
+          {
+           "label": "طقم الفارس",
+           "value": 6
+          },
+          {
+           "label": "طقم الفاكيرو",
+           "value": 7
+          }
+         ],
+         "value": 1
+        }
+       ],
+       "icon": "outfit",
+       "id": "tax.outfits",
+       "kind": "group",
+       "label": "الأطقم"
       }
      ],
      "id": "clothing",
@@ -2978,7 +4005,7 @@
       },
       {
        "label": "الشعر",
-       "value": "الشعر 01 · أشقر"
+       "value": "مفروق يسارًا بعناية · أشقر"
       },
       {
        "label": "اللحية والشارب",
@@ -3001,6 +4028,7 @@
  },
  "creatorFemale": {
   "camera": "fullBody",
+  "canHide": true,
   "canRandom": true,
   "canSave": true,
   "canUndo": false,
@@ -3029,12 +4057,16 @@
     {
      "key": "dob",
      "label": "تاريخ الميلاد",
-     "max": "2008-09-23",
-     "min": "1935-09-24",
+     "max": "2008-09-25",
+     "min": "1935-09-26",
      "type": "date",
      "value": ""
     },
     {
+     "choices": [
+      "ذكر",
+      "أنثى"
+     ],
      "key": "sex",
      "label": "الجنس",
      "type": "info",
@@ -3085,6 +4117,8 @@
    }
   ],
   "strings": {
+   "INVALID_DOB": "تاريخ ميلاد غير مقبول",
+   "INVALID_NAME": "حروف فقط — بلا أرقام أو رموز (تُقبل المسافة والفاصلة العليا والشرطة)",
    "advanced": "تفاصيل إضافية",
    "appearance": "مظهر الشخصية",
    "apply": "تطبيق",
@@ -3095,6 +4129,7 @@
    "close": "إغلاق",
    "confirm": "تأكيد",
    "dangerBody": "لا يمكن التراجع عن هذا الإجراء.",
+   "day": "اليوم",
    "details": "اختر القسم الذي تريد تعديله.",
    "discard": "تجاهل التعديلات",
    "dragRotate": "اسحب للتدوير",
@@ -3102,13 +4137,30 @@
    "equipped": "مرتداة",
    "error": "تعذر إكمال الطلب، حاول مجددًا.",
    "free": "مجاني",
+   "goldAmount": "%s ذهب",
+   "hideClothes": "إخفاء الملابس",
+   "identityInvalid": "قيمة غير صالحة",
    "leave": "سيتم إلغاء التعديلات غير المحفوظة.",
    "leaveTitle": "تعديلات غير محفوظة",
    "locked": "مقفلة",
+   "month": "الشهر",
+   "month.1": "يناير",
+   "month.10": "أكتوبر",
+   "month.11": "نوفمبر",
+   "month.12": "ديسمبر",
+   "month.2": "فبراير",
+   "month.3": "مارس",
+   "month.4": "أبريل",
+   "month.5": "مايو",
+   "month.6": "يونيو",
+   "month.7": "يوليو",
+   "month.8": "أغسطس",
+   "month.9": "سبتمبر",
    "nameHint": "أكمل اسم الشخصية من قسم الهوية.",
    "new": "جديدة",
    "none": "بدون",
    "owned": "مملوكة",
+   "ownedColors": "ألوانك المملوكة",
    "padHelp": "اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع",
    "price": "السعر",
    "random": "مظهر عشوائي",
@@ -3118,6 +4170,7 @@
    "save": "حفظ",
    "saving": "جارٍ التطبيق…",
    "search": "بحث…",
+   "showClothes": "إظهار الملابس",
    "stay": "متابعة التعديل",
    "total": "الإجمالي",
    "undo": "تراجع",
@@ -3129,10 +4182,14 @@
    "view.feet": "القدمان",
    "view.fullBody": "الجسم كاملًا",
    "view.hair": "الشعر",
+   "view.handLeft": "اليد اليسرى",
+   "view.handRight": "اليد اليمنى",
    "view.hands": "اليدان",
    "view.head": "الرأس",
    "view.lowerBody": "الجزء السفلي",
-   "view.upperBody": "الجزء العلوي"
+   "view.teeth": "الأسنان",
+   "view.upperBody": "الجزء العلوي",
+   "year": "السنة"
   },
   "tree": {
    "camera": "fullBody",
@@ -3169,6 +4226,39 @@
           }
          ],
          "value": 1
+        },
+        {
+         "control": "body.shape",
+         "id": "body.shape",
+         "kind": "choice",
+         "label": "بنية الجسم",
+         "options": [
+          {
+           "label": "البنية الافتراضية",
+           "value": 0
+          },
+          {
+           "label": "بنية نحيلة",
+           "value": 1
+          },
+          {
+           "label": "بنية رياضية",
+           "value": 2
+          },
+          {
+           "label": "بنية متوسطة",
+           "value": 3
+          },
+          {
+           "label": "بنية ممتلئة",
+           "value": 4
+          },
+          {
+           "label": "بنية ضخمة",
+           "value": 5
+          }
+         ],
+         "value": 0
         },
         {
          "control": "body.height",
@@ -4027,6 +5117,77 @@
          "value": 14
         },
         {
+         "camera": "eyes",
+         "children": [
+          {
+           "control": "eyes.tint",
+           "id": "eyes.tint",
+           "kind": "choice",
+           "label": "لون العين المخصص",
+           "options": [
+            {
+             "label": "اللون الأصلي",
+             "value": 0
+            },
+            {
+             "label": "مخصص",
+             "value": 1
+            }
+           ],
+           "value": 0
+          },
+          {
+           "control": "eyes.tint.tint0",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "eyes.tint.tint0",
+           "kind": "slider",
+           "label": "الدرجة الأولى",
+           "max": 127,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "eyes.tint.tint1",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "eyes.tint.tint1",
+           "kind": "slider",
+           "label": "الدرجة الثانية",
+           "max": 127,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "eyes.tint.tint2",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "eyes.tint.tint2",
+           "kind": "slider",
+           "label": "الدرجة الثالثة",
+           "max": 127,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          }
+         ],
+         "id": "eyes.custom",
+         "kind": "group",
+         "label": "لون العين المخصص",
+         "summary": "اللون الأصلي"
+        },
+        {
          "display": {
           "decimals": 0,
           "scale": 100
@@ -4130,12 +5291,126 @@
            "id": "overlay.eyebrows.style",
            "kind": "choice",
            "label": "النمط",
-           "range": {
-            "max": 24,
-            "min": 1,
-            "none": true
-           },
+           "options": [
+            {
+             "label": "بدون",
+             "value": 0
+            },
+            {
+             "label": "حاجبان حادّان",
+             "value": 1
+            },
+            {
+             "label": "حاجبان رفيعان",
+             "value": 2
+            },
+            {
+             "label": "حاجبان منفوشان",
+             "value": 3
+            },
+            {
+             "label": "حاجبان مرتّبان",
+             "value": 4
+            },
+            {
+             "label": "حاجبان مستقيما الطرف",
+             "value": 5
+            },
+            {
+             "label": "حاجبان سميكان ٢",
+             "value": 6
+            },
+            {
+             "label": "حاجبان مدبّبان",
+             "value": 7
+            },
+            {
+             "label": "حاجبان مشذّبان",
+             "value": 8
+            },
+            {
+             "label": "حاجبان سميكان",
+             "value": 9
+            },
+            {
+             "label": "حاجبان كاملان ٢",
+             "value": 10
+            },
+            {
+             "label": "حاجبان محدّدان",
+             "value": 11
+            },
+            {
+             "label": "حاجبان مشذّبان ٢",
+             "value": 12
+            },
+            {
+             "label": "حاجبان طبيعيان ٢",
+             "value": 13
+            },
+            {
+             "label": "حاجبان منخفضان",
+             "value": 14
+            },
+            {
+             "label": "حاجبان منفوشان ٢",
+             "value": 15
+            },
+            {
+             "label": "حاجبان ثقيلان",
+             "value": 16
+            },
+            {
+             "label": "حاجبان كثّان",
+             "value": 17
+            },
+            {
+             "label": "حاجبان منتوفان",
+             "value": 18
+            },
+            {
+             "label": "حاجبان منتوفان ٢",
+             "value": 19
+            },
+            {
+             "label": "حاجبان مقوّسان",
+             "value": 20
+            },
+            {
+             "label": "حاجبان طبيعيان",
+             "value": 21
+            },
+            {
+             "label": "حاجبان قصيران",
+             "value": 22
+            },
+            {
+             "label": "حاجبان كاملان",
+             "value": 23
+            },
+            {
+             "label": "حاجبان خفيفان",
+             "value": 24
+            }
+           ],
            "value": 1
+          },
+          {
+           "control": "overlay.eyebrows.match",
+           "id": "overlay.eyebrows.match",
+           "kind": "choice",
+           "label": "لون الحاجبين",
+           "options": [
+            {
+             "label": "مثل لون الشعر",
+             "value": 1
+            },
+            {
+             "label": "لون مختار",
+             "value": 0
+            }
+           ],
+           "value": 0
           },
           {
            "control": "overlay.eyebrows.color",
@@ -4166,7 +5441,7 @@
          "id": "overlay.eyebrows",
          "kind": "group",
          "label": "نمط الحاجبين",
-         "summary": "01"
+         "summary": "حاجبان حادّان"
         },
         {
          "display": {
@@ -4210,7 +5485,7 @@
        "label": "الحاجبان"
       },
       {
-       "camera": "face",
+       "camera": "teeth",
        "children": [
         {
          "control": "face.teeth",
@@ -4219,31 +5494,31 @@
          "label": "الأسنان",
          "options": [
           {
-           "label": "01",
+           "label": "الأسنان المتينة",
            "value": 1
           },
           {
-           "label": "02",
+           "label": "الأسنان المذهّبة",
            "value": 2
           },
           {
-           "label": "03",
+           "label": "الأسنان البالية",
            "value": 3
           },
           {
-           "label": "04",
+           "label": "أسنان الريفي",
            "value": 4
           },
           {
-           "label": "05",
+           "label": "الأسنان المتهالكة",
            "value": 5
           },
           {
-           "label": "06",
+           "label": "فم بلا أسنان",
            "value": 6
           },
           {
-           "label": "07",
+           "label": "أسنان القروي",
            "value": 7
           }
          ],
@@ -4270,26 +5545,32 @@
        "options": [
         {
          "label": "01",
+         "swatch": "#f1d3b8",
          "value": 1
         },
         {
-         "label": "02",
-         "value": 2
-        },
-        {
-         "label": "03",
-         "value": 3
-        },
-        {
          "label": "04",
+         "swatch": "#dcb08b",
          "value": 4
         },
         {
+         "label": "03",
+         "swatch": "#c38c62",
+         "value": 3
+        },
+        {
          "label": "05",
+         "swatch": "#9e6a45",
          "value": 5
         },
         {
+         "label": "02",
+         "swatch": "#76492d",
+         "value": 2
+        },
+        {
          "label": "06",
+         "swatch": "#4a2d1c",
          "value": 6
         }
        ],
@@ -4303,24 +5584,69 @@
          "id": "overlay.complex.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 14,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "بشرة منهكة",
+           "value": 1
+          },
+          {
+           "label": "بشرة محمرّة",
+           "value": 2
+          },
+          {
+           "label": "بشرة متشقّقة",
+           "value": 3
+          },
+          {
+           "label": "بشرة منقّطة",
+           "value": 4
+          },
+          {
+           "label": "بشرة متورّدة",
+           "value": 5
+          },
+          {
+           "label": "بشرة نضرة",
+           "value": 6
+          },
+          {
+           "label": "بشرة مدمن الشراب",
+           "value": 7
+          },
+          {
+           "label": "بشرة لفحتها الريح",
+           "value": 8
+          },
+          {
+           "label": "بشرة مائلة للحمرة",
+           "value": 9
+          },
+          {
+           "label": "بشرة خشنة",
+           "value": 10
+          },
+          {
+           "label": "بشرة محروقة بالشمس",
+           "value": 11
+          },
+          {
+           "label": "بشرة أنهكها الطقس",
+           "value": 12
+          },
+          {
+           "label": "بشرة متعبة",
+           "value": 13
+          },
+          {
+           "label": "بشرة متضرّرة",
+           "value": 14
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.complex.color",
-         "disabled": true,
-         "id": "overlay.complex.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.complex.opacity",
@@ -4351,24 +5677,77 @@
          "id": "overlay.disc.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 16,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "تفاوت خشن",
+           "value": 1
+          },
+          {
+           "label": "تفاوت مبقّع",
+           "value": 2
+          },
+          {
+           "label": "تفاوت مرقّط",
+           "value": 3
+          },
+          {
+           "label": "تفاوت منقّط",
+           "value": 4
+          },
+          {
+           "label": "تفاوت ثابت",
+           "value": 5
+          },
+          {
+           "label": "تفاوت غير متساوٍ",
+           "value": 6
+          },
+          {
+           "label": "تفاوت ببقع",
+           "value": 7
+          },
+          {
+           "label": "تفاوت طفيف",
+           "value": 8
+          },
+          {
+           "label": "تفاوت واضح",
+           "value": 9
+          },
+          {
+           "label": "تفاوت ملطّخ",
+           "value": 10
+          },
+          {
+           "label": "تفاوت بنقاط",
+           "value": 11
+          },
+          {
+           "label": "تفاوت عشوائي",
+           "value": 12
+          },
+          {
+           "label": "تفاوت متنوّع",
+           "value": 13
+          },
+          {
+           "label": "تفاوت منتشر",
+           "value": 14
+          },
+          {
+           "label": "تفاوت خشن جدًا",
+           "value": 15
+          },
+          {
+           "label": "تفاوت متقطّع",
+           "value": 16
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.disc.color",
-         "disabled": true,
-         "id": "overlay.disc.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.disc.opacity",
@@ -4407,18 +5786,6 @@
          "value": 0
         },
         {
-         "control": "overlay.ageing.color",
-         "disabled": true,
-         "id": "overlay.ageing.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
-        },
-        {
          "control": "overlay.ageing.opacity",
          "disabled": true,
          "display": {
@@ -4447,24 +5814,73 @@
          "id": "overlay.freckles.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 15,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "نمش شمسي",
+           "value": 1
+          },
+          {
+           "label": "نمش الخدّين",
+           "value": 2
+          },
+          {
+           "label": "نمش عشوائي",
+           "value": 3
+          },
+          {
+           "label": "نمش قليل",
+           "value": 4
+          },
+          {
+           "label": "نمش متعدّد",
+           "value": 5
+          },
+          {
+           "label": "نمش كثيف",
+           "value": 6
+          },
+          {
+           "label": "نمش باهت",
+           "value": 7
+          },
+          {
+           "label": "نمش متناثر",
+           "value": 8
+          },
+          {
+           "label": "نمش فاتح",
+           "value": 9
+          },
+          {
+           "label": "نمش ظاهر",
+           "value": 10
+          },
+          {
+           "label": "نمش منقّط",
+           "value": 11
+          },
+          {
+           "label": "نمش دقيق",
+           "value": 12
+          },
+          {
+           "label": "نمش الأنف",
+           "value": 13
+          },
+          {
+           "label": "نمش على الوجنتين",
+           "value": 14
+          },
+          {
+           "label": "نمش كثيف على الوجنتين",
+           "value": 15
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.freckles.color",
-         "disabled": true,
-         "id": "overlay.freckles.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.freckles.opacity",
@@ -4495,24 +5911,77 @@
          "id": "overlay.moles.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 16,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "شامات متفرّقة",
+           "value": 1
+          },
+          {
+           "label": "شامات خفيفة",
+           "value": 2
+          },
+          {
+           "label": "شامات متنوّعة",
+           "value": 3
+          },
+          {
+           "label": "شامات متجمّعة",
+           "value": 4
+          },
+          {
+           "label": "شامات نادرة",
+           "value": 5
+          },
+          {
+           "label": "شامات مرقّطة",
+           "value": 6
+          },
+          {
+           "label": "شامات منثورة",
+           "value": 7
+          },
+          {
+           "label": "شامات بارزة",
+           "value": 8
+          },
+          {
+           "label": "شامات منقّطة",
+           "value": 9
+          },
+          {
+           "label": "شامات متناقصة",
+           "value": 10
+          },
+          {
+           "label": "شامات ممتدّة",
+           "value": 11
+          },
+          {
+           "label": "شامات مبعثرة",
+           "value": 12
+          },
+          {
+           "label": "شامات مصفوفة",
+           "value": 13
+          },
+          {
+           "label": "شامات مرقّطة ٢",
+           "value": 14
+          },
+          {
+           "label": "شامات مجتمعة",
+           "value": 15
+          },
+          {
+           "label": "شامات قليلة",
+           "value": 16
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.moles.color",
-         "disabled": true,
-         "id": "overlay.moles.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.moles.opacity",
@@ -4551,18 +6020,6 @@
          "value": 0
         },
         {
-         "control": "overlay.spots.color",
-         "disabled": true,
-         "id": "overlay.spots.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
-        },
-        {
          "control": "overlay.spots.opacity",
          "disabled": true,
          "display": {
@@ -4599,18 +6056,6 @@
          "value": 0
         },
         {
-         "control": "overlay.acne.color",
-         "disabled": true,
-         "id": "overlay.acne.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
-        },
-        {
          "control": "overlay.acne.opacity",
          "disabled": true,
          "display": {
@@ -4639,24 +6084,77 @@
          "id": "overlay.scars.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 16,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.scars.color",
-         "disabled": true,
-         "id": "overlay.scars.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.scars.opacity",
@@ -4666,6 +6164,285 @@
           "scale": 100
          },
          "id": "overlay.scars.opacity",
+         "kind": "slider",
+         "label": "الكثافة",
+         "max": 1,
+         "min": 0,
+         "step": 0.01,
+         "value": 1
+        },
+        {
+         "control": "overlay.scars.extra1.style",
+         "disabled": true,
+         "id": "overlay.scars.extra1.style",
+         "kind": "choice",
+         "label": "ندبة إضافية 1",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
+         "value": 0
+        },
+        {
+         "control": "overlay.scars.extra1.opacity",
+         "disabled": true,
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "overlay.scars.extra1.opacity",
+         "kind": "slider",
+         "label": "الكثافة",
+         "max": 1,
+         "min": 0,
+         "step": 0.01,
+         "value": 1
+        },
+        {
+         "control": "overlay.scars.extra2.style",
+         "disabled": true,
+         "id": "overlay.scars.extra2.style",
+         "kind": "choice",
+         "label": "ندبة إضافية 2",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
+         "value": 0
+        },
+        {
+         "control": "overlay.scars.extra2.opacity",
+         "disabled": true,
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "overlay.scars.extra2.opacity",
+         "kind": "slider",
+         "label": "الكثافة",
+         "max": 1,
+         "min": 0,
+         "step": 0.01,
+         "value": 1
+        },
+        {
+         "control": "overlay.scars.extra3.style",
+         "disabled": true,
+         "id": "overlay.scars.extra3.style",
+         "kind": "choice",
+         "label": "ندبة إضافية 3",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
+         "value": 0
+        },
+        {
+         "control": "overlay.scars.extra3.opacity",
+         "disabled": true,
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "overlay.scars.extra3.opacity",
          "kind": "slider",
          "label": "الكثافة",
          "max": 1,
@@ -4746,27 +6523,27 @@
          "value": 0
         },
         {
-         "label": "الشعر 01",
+         "label": "بومبادور",
          "value": 1
         },
         {
-         "label": "الشعر 02",
+         "label": "كعكة بخصلات متدلّية",
          "value": 2
         },
         {
-         "label": "الشعر 03",
+         "label": "كعكة ملفوفة",
          "value": 3
         },
         {
-         "label": "الشعر 04",
+         "label": "ذيل حصان مجعّد كثيف",
          "value": 4
         },
         {
-         "label": "الشعر 05",
+         "label": "ذيل حصان مجعّد ناعم",
          "value": 5
         },
         {
-         "label": "الشعر 06",
+         "label": "تموّجات طويلة مربوطة",
          "value": 6
         }
        ],
@@ -4780,70 +6557,87 @@
        "options": [
         {
          "label": "أشقر",
+         "swatch": "#b58d4c",
          "value": 1
         },
         {
          "label": "بني",
+         "swatch": "#5b3b23",
          "value": 2
         },
         {
          "label": "أشقر داكن",
+         "swatch": "#8c6834",
          "value": 3
         },
         {
          "label": "بني داكن جدًا",
+         "swatch": "#2a1a10",
          "value": 4
         },
         {
          "label": "أصهب داكن",
+         "swatch": "#793a1e",
          "value": 5
         },
         {
          "label": "رمادي داكن",
+         "swatch": "#5a5855",
          "value": 6
         },
         {
          "label": "أصهب",
+         "swatch": "#a3522a",
          "value": 7
         },
         {
          "label": "رمادي",
+         "swatch": "#8c8985",
          "value": 8
         },
         {
          "label": "أسود فاحم",
+         "swatch": "#151313",
          "value": 9
         },
         {
          "label": "أشقر فاتح",
+         "swatch": "#d8bc7d",
          "value": 10
         },
         {
          "label": "بني فاتح",
+         "swatch": "#7b5332",
          "value": 11
         },
         {
          "label": "أصهب فاتح",
+         "swatch": "#c17040",
          "value": 12
         },
         {
          "label": "رمادي فاتح",
+         "swatch": "#bab7b2",
          "value": 13
         },
         {
          "label": "بني متوسط",
+         "swatch": "#4a2e1b",
          "value": 14
         },
         {
          "label": "ملح وفلفل",
+         "swatch": "#6e6b67",
          "value": 15
         },
         {
          "label": "أشقر فراولي",
+         "swatch": "#c0835a",
          "value": 16
         },
         {
          "label": "رمادي فضي",
+         "swatch": "#a8a8ad",
          "value": 17
         }
        ],
@@ -4913,11 +6707,16 @@
          "id": "overlay.foundation.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "بودرة الوجه",
+           "value": 1
+          }
+         ],
          "value": 0
         },
         {
@@ -4926,6 +6725,18 @@
          "id": "overlay.foundation.color",
          "kind": "choice",
          "label": "اللون",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.foundation.color2",
+         "disabled": true,
+         "id": "overlay.foundation.color2",
+         "kind": "choice",
+         "label": "اللون الثاني",
          "range": {
           "max": 64,
           "min": 1
@@ -4961,11 +6772,28 @@
          "id": "overlay.blush.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 4,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "خدود متورّدة",
+           "value": 1
+          },
+          {
+           "label": "خدود وردية",
+           "value": 2
+          },
+          {
+           "label": "خدود راقية",
+           "value": 3
+          },
+          {
+           "label": "خدود منحوتة",
+           "value": 4
+          }
+         ],
          "value": 0
         },
         {
@@ -5009,11 +6837,40 @@
          "id": "overlay.lipsticks.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "أحمر مطفي",
+           "value": 1
+          },
+          {
+           "label": "أحمر محدّد",
+           "value": 2
+          },
+          {
+           "label": "أحمر مظلّل",
+           "value": 3
+          },
+          {
+           "label": "أحمر ملطّخ",
+           "value": 4
+          },
+          {
+           "label": "أحمر مربّع",
+           "value": 5
+          },
+          {
+           "label": "أحمر على شكل قلب",
+           "value": 6
+          },
+          {
+           "label": "أحمر بحافّة",
+           "value": 7
+          }
+         ],
          "value": 0
         },
         {
@@ -5022,6 +6879,18 @@
          "id": "overlay.lipsticks.color",
          "kind": "choice",
          "label": "اللون",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.lipsticks.color2",
+         "disabled": true,
+         "id": "overlay.lipsticks.color2",
+         "kind": "choice",
+         "label": "اللون الثاني",
          "range": {
           "max": 64,
           "min": 1
@@ -5057,11 +6926,76 @@
          "id": "overlay.eyeliners.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "كحل بسيط",
+           "value": 1
+          },
+          {
+           "label": "كحل مجنّح",
+           "value": 2
+          },
+          {
+           "label": "كحل طويل",
+           "value": 3
+          },
+          {
+           "label": "كحل سفلي",
+           "value": 4
+          },
+          {
+           "label": "كحل معقوف",
+           "value": 5
+          },
+          {
+           "label": "كحل منحنٍ",
+           "value": 6
+          },
+          {
+           "label": "كحل درامي",
+           "value": 7
+          },
+          {
+           "label": "كحل هندي",
+           "value": 8
+          },
+          {
+           "label": "كحل هندي عريض",
+           "value": 9
+          },
+          {
+           "label": "كحل هندي كامل",
+           "value": 10
+          },
+          {
+           "label": "كحل كلاسيكي",
+           "value": 11
+          },
+          {
+           "label": "كحل كلاسيكي عريض",
+           "value": 12
+          },
+          {
+           "label": "كحل كامل",
+           "value": 13
+          },
+          {
+           "label": "كحل مزدوج",
+           "value": 14
+          },
+          {
+           "label": "كحل مزدوج علوي",
+           "value": 15
+          },
+          {
+           "label": "كحل فرعوني",
+           "value": 16
+          }
+         ],
          "value": 0
         },
         {
@@ -5105,11 +7039,36 @@
          "id": "overlay.shadows.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ظلال دخانية",
+           "value": 1
+          },
+          {
+           "label": "ظلال بقوس مرتّب",
+           "value": 2
+          },
+          {
+           "label": "ظلال بجناح كثيف",
+           "value": 3
+          },
+          {
+           "label": "ظلال ممزوجة",
+           "value": 4
+          },
+          {
+           "label": "ظلال بجناح بلونين",
+           "value": 5
+          },
+          {
+           "label": "ظلال مضيئة",
+           "value": 6
+          }
+         ],
          "value": 0
         },
         {
@@ -5118,6 +7077,30 @@
          "id": "overlay.shadows.color",
          "kind": "choice",
          "label": "اللون",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.shadows.color2",
+         "disabled": true,
+         "id": "overlay.shadows.color2",
+         "kind": "choice",
+         "label": "اللون الثاني",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.shadows.color3",
+         "disabled": true,
+         "id": "overlay.shadows.color3",
+         "kind": "choice",
+         "label": "اللون الثالث",
          "range": {
           "max": 64,
           "min": 1
@@ -5234,6 +7217,7 @@
            "value": 0
           }
          ],
+         "icon": "hat",
          "id": "item.hats",
          "kind": "group",
          "label": "القبعة"
@@ -5268,11 +7252,13 @@
            "value": 0
           }
          ],
+         "icon": "mask",
          "id": "item.masks",
          "kind": "group",
          "label": "القناع"
         }
        ],
+       "icon": "hat",
        "id": "tax.head",
        "kind": "group",
        "label": "الرأس"
@@ -5309,11 +7295,13 @@
            "value": 0
           }
          ],
+         "icon": "neckerchief",
          "id": "item.neckwear",
          "kind": "group",
          "label": "وشاح الرقبة"
         }
        ],
+       "icon": "neckerchief",
        "id": "tax.neck",
        "kind": "group",
        "label": "الرقبة"
@@ -5386,6 +7374,7 @@
            "label": "خلع القطعة"
           }
          ],
+         "icon": "shirt",
          "id": "item.shirts_full",
          "kind": "group",
          "label": "القميص",
@@ -5421,6 +7410,7 @@
            "value": 0
           }
          ],
+         "icon": "vest",
          "id": "item.vests",
          "kind": "group",
          "label": "الصديري"
@@ -5455,6 +7445,7 @@
            "value": 0
           }
          ],
+         "icon": "coat",
          "id": "item.coats",
          "kind": "group",
          "label": "المعطف"
@@ -5489,11 +7480,13 @@
            "value": 0
           }
          ],
+         "icon": "coat",
          "id": "item.coats_closed",
          "kind": "group",
          "label": "المعطف المغلق"
         }
        ],
+       "icon": "shirt",
        "id": "tax.upper",
        "kind": "group",
        "label": "الجزء العلوي"
@@ -5503,7 +7496,7 @@
        "children": [
         {
          "art": "gloves",
-         "camera": "hands",
+         "camera": "handRight",
          "children": [
           {
            "control": "clothing.gloves.style",
@@ -5531,11 +7524,13 @@
            "value": 0
           }
          ],
+         "icon": "glove",
          "id": "item.gloves",
          "kind": "group",
          "label": "القفازات"
         }
        ],
+       "icon": "glove",
        "id": "tax.arms",
        "kind": "group",
        "label": "الذراعان واليدان"
@@ -5591,6 +7586,7 @@
            "label": "خلع القطعة"
           }
          ],
+         "icon": "pants",
          "id": "item.pants",
          "kind": "group",
          "label": "البنطال",
@@ -5625,11 +7621,13 @@
            "value": 0
           }
          ],
+         "icon": "skirt",
          "id": "item.skirts",
          "kind": "group",
          "label": "التنّورة"
         }
        ],
+       "icon": "pants",
        "id": "tax.lower",
        "kind": "group",
        "label": "الجزء السفلي"
@@ -5702,12 +7700,14 @@
            "label": "خلع القطعة"
           }
          ],
+         "icon": "boots",
          "id": "item.boots",
          "kind": "group",
          "label": "الحذاء",
          "summary": "الحذاء 01"
         }
        ],
+       "icon": "boots",
        "id": "tax.feet",
        "kind": "group",
        "label": "القدمان"
@@ -5716,7 +7716,7 @@
        "camera": "accessories",
        "children": [
         {
-         "camera": "accessories",
+         "camera": "upperBody",
          "children": [
           {
            "control": "clothing.belts.style",
@@ -5744,6 +7744,7 @@
            "value": 0
           }
          ],
+         "icon": "belt",
          "id": "item.belts",
          "kind": "group",
          "label": "الحزام"
@@ -5777,6 +7778,7 @@
            "value": 0
           }
          ],
+         "icon": "belt",
          "id": "item.belt_buckles",
          "kind": "group",
          "label": "إبزيم الحزام"
@@ -5811,6 +7813,7 @@
            "value": 0
           }
          ],
+         "icon": "gunbelt",
          "id": "item.gunbelts",
          "kind": "group",
          "label": "حزام المسدس"
@@ -5844,14 +7847,66 @@
            "value": 0
           }
          ],
+         "icon": "gunbelt",
          "id": "item.gunbelt_accs",
          "kind": "group",
          "label": "إكسسوار حزام المسدس"
         }
        ],
+       "icon": "gunbelt",
        "id": "tax.accessories",
        "kind": "group",
        "label": "الإكسسوارات"
+      },
+      {
+       "camera": "fullBody",
+       "children": [
+        {
+         "control": "starter.preset",
+         "id": "starter.preset",
+         "kind": "choice",
+         "label": "الطقم الأولي",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ملابس العاملة",
+           "value": 1
+          },
+          {
+           "label": "ملابس المسافرة",
+           "value": 2
+          },
+          {
+           "label": "طقم الحدود",
+           "value": 3
+          },
+          {
+           "label": "طقم الخارج عن القانون",
+           "value": 4
+          },
+          {
+           "label": "طقم المزرعة",
+           "value": 5
+          },
+          {
+           "label": "طقم الفارس",
+           "value": 6
+          },
+          {
+           "label": "طقم الفاكيرو",
+           "value": 7
+          }
+         ],
+         "value": 0
+        }
+       ],
+       "icon": "outfit",
+       "id": "tax.outfits",
+       "kind": "group",
+       "label": "الأطقم"
       }
      ],
      "id": "clothing",
@@ -5886,7 +7941,7 @@
       },
       {
        "label": "الشعر",
-       "value": "الشعر 01 · أشقر"
+       "value": "بومبادور · أشقر"
       },
       {
        "label": "قطع الملابس",
@@ -5950,6 +8005,8 @@
    }
   ],
   "strings": {
+   "INVALID_DOB": "تاريخ ميلاد غير مقبول",
+   "INVALID_NAME": "حروف فقط — بلا أرقام أو رموز (تُقبل المسافة والفاصلة العليا والشرطة)",
    "advanced": "تفاصيل إضافية",
    "appearance": "مظهر الشخصية",
    "apply": "تطبيق",
@@ -5960,6 +8017,7 @@
    "close": "إغلاق",
    "confirm": "تأكيد",
    "dangerBody": "لا يمكن التراجع عن هذا الإجراء.",
+   "day": "اليوم",
    "details": "اختر القسم الذي تريد تعديله.",
    "discard": "تجاهل التعديلات",
    "dragRotate": "اسحب للتدوير",
@@ -5967,13 +8025,30 @@
    "equipped": "مرتداة",
    "error": "تعذر إكمال الطلب، حاول مجددًا.",
    "free": "مجاني",
+   "goldAmount": "%s ذهب",
+   "hideClothes": "إخفاء الملابس",
+   "identityInvalid": "قيمة غير صالحة",
    "leave": "سيتم إلغاء التعديلات غير المحفوظة.",
    "leaveTitle": "تعديلات غير محفوظة",
    "locked": "مقفلة",
+   "month": "الشهر",
+   "month.1": "يناير",
+   "month.10": "أكتوبر",
+   "month.11": "نوفمبر",
+   "month.12": "ديسمبر",
+   "month.2": "فبراير",
+   "month.3": "مارس",
+   "month.4": "أبريل",
+   "month.5": "مايو",
+   "month.6": "يونيو",
+   "month.7": "يوليو",
+   "month.8": "أغسطس",
+   "month.9": "سبتمبر",
    "nameHint": "أكمل اسم الشخصية من قسم الهوية.",
    "new": "جديدة",
    "none": "بدون",
    "owned": "مملوكة",
+   "ownedColors": "ألوانك المملوكة",
    "padHelp": "اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع",
    "price": "السعر",
    "random": "مظهر عشوائي",
@@ -5983,6 +8058,7 @@
    "save": "حفظ",
    "saving": "جارٍ التطبيق…",
    "search": "بحث…",
+   "showClothes": "إظهار الملابس",
    "stay": "متابعة التعديل",
    "total": "الإجمالي",
    "undo": "تراجع",
@@ -5994,10 +8070,14 @@
    "view.feet": "القدمان",
    "view.fullBody": "الجسم كاملًا",
    "view.hair": "الشعر",
+   "view.handLeft": "اليد اليسرى",
+   "view.handRight": "اليد اليمنى",
    "view.hands": "اليدان",
    "view.head": "الرأس",
    "view.lowerBody": "الجزء السفلي",
-   "view.upperBody": "الجزء العلوي"
+   "view.teeth": "الأسنان",
+   "view.upperBody": "الجزء العلوي",
+   "year": "السنة"
   },
   "tree": {
    "camera": "face",
@@ -6028,6 +8108,39 @@
           }
          ],
          "value": 1
+        },
+        {
+         "control": "body.shape",
+         "id": "body.shape",
+         "kind": "choice",
+         "label": "بنية الجسم",
+         "options": [
+          {
+           "label": "البنية الافتراضية",
+           "value": 0
+          },
+          {
+           "label": "بنية نحيلة",
+           "value": 1
+          },
+          {
+           "label": "بنية رياضية",
+           "value": 2
+          },
+          {
+           "label": "بنية متوسطة",
+           "value": 3
+          },
+          {
+           "label": "بنية ممتلئة",
+           "value": 4
+          },
+          {
+           "label": "بنية ضخمة",
+           "value": 5
+          }
+         ],
+         "value": 0
         },
         {
          "control": "body.height",
@@ -6886,6 +8999,77 @@
          "value": 14
         },
         {
+         "camera": "eyes",
+         "children": [
+          {
+           "control": "eyes.tint",
+           "id": "eyes.tint",
+           "kind": "choice",
+           "label": "لون العين المخصص",
+           "options": [
+            {
+             "label": "اللون الأصلي",
+             "value": 0
+            },
+            {
+             "label": "مخصص",
+             "value": 1
+            }
+           ],
+           "value": 0
+          },
+          {
+           "control": "eyes.tint.tint0",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "eyes.tint.tint0",
+           "kind": "slider",
+           "label": "الدرجة الأولى",
+           "max": 127,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "eyes.tint.tint1",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "eyes.tint.tint1",
+           "kind": "slider",
+           "label": "الدرجة الثانية",
+           "max": 127,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "eyes.tint.tint2",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "eyes.tint.tint2",
+           "kind": "slider",
+           "label": "الدرجة الثالثة",
+           "max": 127,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          }
+         ],
+         "id": "eyes.custom",
+         "kind": "group",
+         "label": "لون العين المخصص",
+         "summary": "اللون الأصلي"
+        },
+        {
          "display": {
           "decimals": 0,
           "scale": 100
@@ -7023,7 +9207,7 @@
        "label": "الحاجبان"
       },
       {
-       "camera": "face",
+       "camera": "teeth",
        "children": [
         {
          "control": "face.teeth",
@@ -7032,31 +9216,31 @@
          "label": "الأسنان",
          "options": [
           {
-           "label": "01",
+           "label": "الأسنان المتينة",
            "value": 1
           },
           {
-           "label": "02",
+           "label": "الأسنان المذهّبة",
            "value": 2
           },
           {
-           "label": "03",
+           "label": "الأسنان البالية",
            "value": 3
           },
           {
-           "label": "04",
+           "label": "أسنان الريفي",
            "value": 4
           },
           {
-           "label": "05",
+           "label": "الأسنان المتهالكة",
            "value": 5
           },
           {
-           "label": "06",
+           "label": "فم بلا أسنان",
            "value": 6
           },
           {
-           "label": "07",
+           "label": "أسنان القروي",
            "value": 7
           }
          ],
@@ -7083,26 +9267,32 @@
        "options": [
         {
          "label": "01",
+         "swatch": "#f1d3b8",
          "value": 1
         },
         {
-         "label": "02",
-         "value": 2
-        },
-        {
-         "label": "03",
-         "value": 3
-        },
-        {
          "label": "04",
+         "swatch": "#dcb08b",
          "value": 4
         },
         {
+         "label": "03",
+         "swatch": "#c38c62",
+         "value": 3
+        },
+        {
          "label": "05",
+         "swatch": "#9e6a45",
          "value": 5
         },
         {
+         "label": "02",
+         "swatch": "#76492d",
+         "value": 2
+        },
+        {
          "label": "06",
+         "swatch": "#4a2d1c",
          "value": 6
         }
        ],
@@ -7116,24 +9306,69 @@
          "id": "overlay.complex.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 14,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "بشرة منهكة",
+           "value": 1
+          },
+          {
+           "label": "بشرة محمرّة",
+           "value": 2
+          },
+          {
+           "label": "بشرة متشقّقة",
+           "value": 3
+          },
+          {
+           "label": "بشرة منقّطة",
+           "value": 4
+          },
+          {
+           "label": "بشرة متورّدة",
+           "value": 5
+          },
+          {
+           "label": "بشرة نضرة",
+           "value": 6
+          },
+          {
+           "label": "بشرة مدمن الشراب",
+           "value": 7
+          },
+          {
+           "label": "بشرة لفحتها الريح",
+           "value": 8
+          },
+          {
+           "label": "بشرة مائلة للحمرة",
+           "value": 9
+          },
+          {
+           "label": "بشرة خشنة",
+           "value": 10
+          },
+          {
+           "label": "بشرة محروقة بالشمس",
+           "value": 11
+          },
+          {
+           "label": "بشرة أنهكها الطقس",
+           "value": 12
+          },
+          {
+           "label": "بشرة متعبة",
+           "value": 13
+          },
+          {
+           "label": "بشرة متضرّرة",
+           "value": 14
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.complex.color",
-         "disabled": true,
-         "id": "overlay.complex.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.complex.opacity",
@@ -7164,24 +9399,77 @@
          "id": "overlay.disc.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 16,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "تفاوت خشن",
+           "value": 1
+          },
+          {
+           "label": "تفاوت مبقّع",
+           "value": 2
+          },
+          {
+           "label": "تفاوت مرقّط",
+           "value": 3
+          },
+          {
+           "label": "تفاوت منقّط",
+           "value": 4
+          },
+          {
+           "label": "تفاوت ثابت",
+           "value": 5
+          },
+          {
+           "label": "تفاوت غير متساوٍ",
+           "value": 6
+          },
+          {
+           "label": "تفاوت ببقع",
+           "value": 7
+          },
+          {
+           "label": "تفاوت طفيف",
+           "value": 8
+          },
+          {
+           "label": "تفاوت واضح",
+           "value": 9
+          },
+          {
+           "label": "تفاوت ملطّخ",
+           "value": 10
+          },
+          {
+           "label": "تفاوت بنقاط",
+           "value": 11
+          },
+          {
+           "label": "تفاوت عشوائي",
+           "value": 12
+          },
+          {
+           "label": "تفاوت متنوّع",
+           "value": 13
+          },
+          {
+           "label": "تفاوت منتشر",
+           "value": 14
+          },
+          {
+           "label": "تفاوت خشن جدًا",
+           "value": 15
+          },
+          {
+           "label": "تفاوت متقطّع",
+           "value": 16
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.disc.color",
-         "disabled": true,
-         "id": "overlay.disc.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.disc.opacity",
@@ -7220,18 +9508,6 @@
          "value": 0
         },
         {
-         "control": "overlay.ageing.color",
-         "disabled": true,
-         "id": "overlay.ageing.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
-        },
-        {
          "control": "overlay.ageing.opacity",
          "disabled": true,
          "display": {
@@ -7260,24 +9536,73 @@
          "id": "overlay.freckles.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 15,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "نمش شمسي",
+           "value": 1
+          },
+          {
+           "label": "نمش الخدّين",
+           "value": 2
+          },
+          {
+           "label": "نمش عشوائي",
+           "value": 3
+          },
+          {
+           "label": "نمش قليل",
+           "value": 4
+          },
+          {
+           "label": "نمش متعدّد",
+           "value": 5
+          },
+          {
+           "label": "نمش كثيف",
+           "value": 6
+          },
+          {
+           "label": "نمش باهت",
+           "value": 7
+          },
+          {
+           "label": "نمش متناثر",
+           "value": 8
+          },
+          {
+           "label": "نمش فاتح",
+           "value": 9
+          },
+          {
+           "label": "نمش ظاهر",
+           "value": 10
+          },
+          {
+           "label": "نمش منقّط",
+           "value": 11
+          },
+          {
+           "label": "نمش دقيق",
+           "value": 12
+          },
+          {
+           "label": "نمش الأنف",
+           "value": 13
+          },
+          {
+           "label": "نمش على الوجنتين",
+           "value": 14
+          },
+          {
+           "label": "نمش كثيف على الوجنتين",
+           "value": 15
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.freckles.color",
-         "disabled": true,
-         "id": "overlay.freckles.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.freckles.opacity",
@@ -7308,24 +9633,77 @@
          "id": "overlay.moles.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 16,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "شامات متفرّقة",
+           "value": 1
+          },
+          {
+           "label": "شامات خفيفة",
+           "value": 2
+          },
+          {
+           "label": "شامات متنوّعة",
+           "value": 3
+          },
+          {
+           "label": "شامات متجمّعة",
+           "value": 4
+          },
+          {
+           "label": "شامات نادرة",
+           "value": 5
+          },
+          {
+           "label": "شامات مرقّطة",
+           "value": 6
+          },
+          {
+           "label": "شامات منثورة",
+           "value": 7
+          },
+          {
+           "label": "شامات بارزة",
+           "value": 8
+          },
+          {
+           "label": "شامات منقّطة",
+           "value": 9
+          },
+          {
+           "label": "شامات متناقصة",
+           "value": 10
+          },
+          {
+           "label": "شامات ممتدّة",
+           "value": 11
+          },
+          {
+           "label": "شامات مبعثرة",
+           "value": 12
+          },
+          {
+           "label": "شامات مصفوفة",
+           "value": 13
+          },
+          {
+           "label": "شامات مرقّطة ٢",
+           "value": 14
+          },
+          {
+           "label": "شامات مجتمعة",
+           "value": 15
+          },
+          {
+           "label": "شامات قليلة",
+           "value": 16
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.moles.color",
-         "disabled": true,
-         "id": "overlay.moles.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.moles.opacity",
@@ -7364,18 +9742,6 @@
          "value": 0
         },
         {
-         "control": "overlay.spots.color",
-         "disabled": true,
-         "id": "overlay.spots.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
-        },
-        {
          "control": "overlay.spots.opacity",
          "disabled": true,
          "display": {
@@ -7412,18 +9778,6 @@
          "value": 0
         },
         {
-         "control": "overlay.acne.color",
-         "disabled": true,
-         "id": "overlay.acne.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
-        },
-        {
          "control": "overlay.acne.opacity",
          "disabled": true,
          "display": {
@@ -7452,24 +9806,77 @@
          "id": "overlay.scars.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 16,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
          "value": 0
-        },
-        {
-         "control": "overlay.scars.color",
-         "disabled": true,
-         "id": "overlay.scars.color",
-         "kind": "choice",
-         "label": "اللون",
-         "range": {
-          "max": 64,
-          "min": 1
-         },
-         "value": 1
         },
         {
          "control": "overlay.scars.opacity",
@@ -7479,6 +9886,285 @@
           "scale": 100
          },
          "id": "overlay.scars.opacity",
+         "kind": "slider",
+         "label": "الكثافة",
+         "max": 1,
+         "min": 0,
+         "step": 0.01,
+         "value": 1
+        },
+        {
+         "control": "overlay.scars.extra1.style",
+         "disabled": true,
+         "id": "overlay.scars.extra1.style",
+         "kind": "choice",
+         "label": "ندبة إضافية 1",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
+         "value": 0
+        },
+        {
+         "control": "overlay.scars.extra1.opacity",
+         "disabled": true,
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "overlay.scars.extra1.opacity",
+         "kind": "slider",
+         "label": "الكثافة",
+         "max": 1,
+         "min": 0,
+         "step": 0.01,
+         "value": 1
+        },
+        {
+         "control": "overlay.scars.extra2.style",
+         "disabled": true,
+         "id": "overlay.scars.extra2.style",
+         "kind": "choice",
+         "label": "ندبة إضافية 2",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
+         "value": 0
+        },
+        {
+         "control": "overlay.scars.extra2.opacity",
+         "disabled": true,
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "overlay.scars.extra2.opacity",
+         "kind": "slider",
+         "label": "الكثافة",
+         "max": 1,
+         "min": 0,
+         "step": 0.01,
+         "value": 1
+        },
+        {
+         "control": "overlay.scars.extra3.style",
+         "disabled": true,
+         "id": "overlay.scars.extra3.style",
+         "kind": "choice",
+         "label": "ندبة إضافية 3",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ندبة جرح",
+           "value": 1
+          },
+          {
+           "label": "ندبة مخلب",
+           "value": 2
+          },
+          {
+           "label": "ندبة مشقوقة",
+           "value": 3
+          },
+          {
+           "label": "ندبة ممزّقة",
+           "value": 4
+          },
+          {
+           "label": "ندبة ضربة",
+           "value": 5
+          },
+          {
+           "label": "ندبة قطع",
+           "value": 6
+          },
+          {
+           "label": "ندبة ساطور",
+           "value": 7
+          },
+          {
+           "label": "ندبة متصدّعة",
+           "value": 8
+          },
+          {
+           "label": "ندبة مهشّمة",
+           "value": 9
+          },
+          {
+           "label": "ندبة مرقّعة",
+           "value": 10
+          },
+          {
+           "label": "ندبة كشط",
+           "value": 11
+          },
+          {
+           "label": "ندبة كسر",
+           "value": 12
+          },
+          {
+           "label": "ندبة مشوِّهة",
+           "value": 13
+          },
+          {
+           "label": "ندبة بارزة",
+           "value": 14
+          },
+          {
+           "label": "ندبة شائبة",
+           "value": 15
+          },
+          {
+           "label": "ندبة فروة الرأس",
+           "value": 16
+          }
+         ],
+         "value": 0
+        },
+        {
+         "control": "overlay.scars.extra3.opacity",
+         "disabled": true,
+         "display": {
+          "decimals": 0,
+          "scale": 100
+         },
+         "id": "overlay.scars.extra3.opacity",
          "kind": "slider",
          "label": "الكثافة",
          "max": 1,
@@ -7607,6 +10293,8 @@
    }
   ],
   "strings": {
+   "INVALID_DOB": "تاريخ ميلاد غير مقبول",
+   "INVALID_NAME": "حروف فقط — بلا أرقام أو رموز (تُقبل المسافة والفاصلة العليا والشرطة)",
    "advanced": "تفاصيل إضافية",
    "appearance": "مظهر الشخصية",
    "apply": "تطبيق",
@@ -7617,6 +10305,7 @@
    "close": "إغلاق",
    "confirm": "تأكيد",
    "dangerBody": "لا يمكن التراجع عن هذا الإجراء.",
+   "day": "اليوم",
    "details": "اختر القسم الذي تريد تعديله.",
    "discard": "تجاهل التعديلات",
    "dragRotate": "اسحب للتدوير",
@@ -7624,13 +10313,30 @@
    "equipped": "مرتداة",
    "error": "تعذر إكمال الطلب، حاول مجددًا.",
    "free": "مجاني",
+   "goldAmount": "%s ذهب",
+   "hideClothes": "إخفاء الملابس",
+   "identityInvalid": "قيمة غير صالحة",
    "leave": "سيتم إلغاء التعديلات غير المحفوظة.",
    "leaveTitle": "تعديلات غير محفوظة",
    "locked": "مقفلة",
+   "month": "الشهر",
+   "month.1": "يناير",
+   "month.10": "أكتوبر",
+   "month.11": "نوفمبر",
+   "month.12": "ديسمبر",
+   "month.2": "فبراير",
+   "month.3": "مارس",
+   "month.4": "أبريل",
+   "month.5": "مايو",
+   "month.6": "يونيو",
+   "month.7": "يوليو",
+   "month.8": "أغسطس",
+   "month.9": "سبتمبر",
    "nameHint": "أكمل اسم الشخصية من قسم الهوية.",
    "new": "جديدة",
    "none": "بدون",
    "owned": "مملوكة",
+   "ownedColors": "ألوانك المملوكة",
    "padHelp": "اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع",
    "price": "السعر",
    "random": "مظهر عشوائي",
@@ -7640,6 +10346,7 @@
    "save": "حفظ",
    "saving": "جارٍ التطبيق…",
    "search": "بحث…",
+   "showClothes": "إظهار الملابس",
    "stay": "متابعة التعديل",
    "total": "الإجمالي",
    "undo": "تراجع",
@@ -7651,10 +10358,14 @@
    "view.feet": "القدمان",
    "view.fullBody": "الجسم كاملًا",
    "view.hair": "الشعر",
+   "view.handLeft": "اليد اليسرى",
+   "view.handRight": "اليد اليمنى",
    "view.hands": "اليدان",
    "view.head": "الرأس",
    "view.lowerBody": "الجزء السفلي",
-   "view.upperBody": "الجزء العلوي"
+   "view.teeth": "الأسنان",
+   "view.upperBody": "الجزء العلوي",
+   "year": "السنة"
   },
   "tree": {
    "camera": "face",
@@ -7673,35 +10384,35 @@
          "value": 0
         },
         {
-         "label": "الشعر 01",
+         "label": "مفروق يسارًا بعناية",
          "value": 1
         },
         {
-         "label": "الشعر 02",
+         "label": "ممشّط للخلف",
          "value": 2
         },
         {
-         "label": "الشعر 03",
+         "label": "خفيف متراجع",
          "value": 3
         },
         {
-         "label": "الشعر 04",
+         "label": "كثيف مفروق من الوسط",
          "value": 4
         },
         {
-         "label": "الشعر 05",
+         "label": "طويل مفروق يمينًا",
          "value": 5
         },
         {
-         "label": "الشعر 06",
+         "label": "مفروق من الوسط متدرّج",
          "value": 6
         },
         {
-         "label": "الشعر 07",
+         "label": "قصير مرفوع",
          "value": 7
         },
         {
-         "label": "الشعر 08",
+         "label": "مربوط بخشونة",
          "value": 8
         }
        ],
@@ -7715,70 +10426,87 @@
        "options": [
         {
          "label": "أشقر",
+         "swatch": "#b58d4c",
          "value": 1
         },
         {
          "label": "بني",
+         "swatch": "#5b3b23",
          "value": 2
         },
         {
          "label": "أشقر داكن",
+         "swatch": "#8c6834",
          "value": 3
         },
         {
          "label": "بني داكن جدًا",
+         "swatch": "#2a1a10",
          "value": 4
         },
         {
          "label": "أصهب داكن",
+         "swatch": "#793a1e",
          "value": 5
         },
         {
          "label": "رمادي داكن",
+         "swatch": "#5a5855",
          "value": 6
         },
         {
          "label": "أصهب",
+         "swatch": "#a3522a",
          "value": 7
         },
         {
          "label": "رمادي",
+         "swatch": "#8c8985",
          "value": 8
         },
         {
          "label": "أسود فاحم",
+         "swatch": "#151313",
          "value": 9
         },
         {
          "label": "أشقر فاتح",
+         "swatch": "#d8bc7d",
          "value": 10
         },
         {
          "label": "بني فاتح",
+         "swatch": "#7b5332",
          "value": 11
         },
         {
          "label": "أصهب فاتح",
+         "swatch": "#c17040",
          "value": 12
         },
         {
          "label": "رمادي فاتح",
+         "swatch": "#bab7b2",
          "value": 13
         },
         {
          "label": "بني متوسط",
+         "swatch": "#4a2e1b",
          "value": 14
         },
         {
          "label": "ملح وفلفل",
+         "swatch": "#6e6b67",
          "value": 15
         },
         {
          "label": "أشقر فراولي",
+         "swatch": "#c0835a",
          "value": 16
         },
         {
          "label": "رمادي فضي",
+         "swatch": "#a8a8ad",
          "value": 17
         }
        ],
@@ -7854,27 +10582,27 @@
            "value": 0
           },
           {
-           "label": "اللحية 01",
+           "label": "شارب الفظّ",
            "value": 1
           },
           {
-           "label": "اللحية 02",
+           "label": "لحية الساقي",
            "value": 2
           },
           {
-           "label": "اللحية 03",
+           "label": "لحية الأستاذ",
            "value": 3
           },
           {
-           "label": "اللحية 04",
+           "label": "ستارة الذقن",
            "value": 4
           },
           {
-           "label": "اللحية 05",
+           "label": "لحية البحّار",
            "value": 5
           },
           {
-           "label": "اللحية 06",
+           "label": "لحية الجنرال",
            "value": 6
           }
          ],
@@ -7986,6 +10714,8 @@
    "title": "الحلاق"
   },
   "strings": {
+   "INVALID_DOB": "تاريخ ميلاد غير مقبول",
+   "INVALID_NAME": "حروف فقط — بلا أرقام أو رموز (تُقبل المسافة والفاصلة العليا والشرطة)",
    "advanced": "تفاصيل إضافية",
    "appearance": "مظهر الشخصية",
    "apply": "تطبيق",
@@ -7996,6 +10726,7 @@
    "close": "إغلاق",
    "confirm": "تأكيد",
    "dangerBody": "لا يمكن التراجع عن هذا الإجراء.",
+   "day": "اليوم",
    "details": "اختر القسم الذي تريد تعديله.",
    "discard": "تجاهل التعديلات",
    "dragRotate": "اسحب للتدوير",
@@ -8003,13 +10734,30 @@
    "equipped": "مرتداة",
    "error": "تعذر إكمال الطلب، حاول مجددًا.",
    "free": "مجاني",
+   "goldAmount": "%s ذهب",
+   "hideClothes": "إخفاء الملابس",
+   "identityInvalid": "قيمة غير صالحة",
    "leave": "سيتم إلغاء التعديلات غير المحفوظة.",
    "leaveTitle": "تعديلات غير محفوظة",
    "locked": "مقفلة",
+   "month": "الشهر",
+   "month.1": "يناير",
+   "month.10": "أكتوبر",
+   "month.11": "نوفمبر",
+   "month.12": "ديسمبر",
+   "month.2": "فبراير",
+   "month.3": "مارس",
+   "month.4": "أبريل",
+   "month.5": "مايو",
+   "month.6": "يونيو",
+   "month.7": "يوليو",
+   "month.8": "أغسطس",
+   "month.9": "سبتمبر",
    "nameHint": "أكمل اسم الشخصية من قسم الهوية.",
    "new": "جديدة",
    "none": "بدون",
    "owned": "مملوكة",
+   "ownedColors": "ألوانك المملوكة",
    "padHelp": "اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع",
    "price": "السعر",
    "random": "مظهر عشوائي",
@@ -8019,6 +10767,7 @@
    "save": "حفظ",
    "saving": "جارٍ التطبيق…",
    "search": "بحث…",
+   "showClothes": "إظهار الملابس",
    "stay": "متابعة التعديل",
    "total": "الإجمالي",
    "undo": "تراجع",
@@ -8030,10 +10779,14 @@
    "view.feet": "القدمان",
    "view.fullBody": "الجسم كاملًا",
    "view.hair": "الشعر",
+   "view.handLeft": "اليد اليسرى",
+   "view.handRight": "اليد اليمنى",
    "view.hands": "اليدان",
    "view.head": "الرأس",
    "view.lowerBody": "الجزء السفلي",
-   "view.upperBody": "الجزء العلوي"
+   "view.teeth": "الأسنان",
+   "view.upperBody": "الجزء العلوي",
+   "year": "السنة"
   },
   "tree": {
    "camera": "hair",
@@ -8052,35 +10805,35 @@
          "value": 0
         },
         {
-         "label": "الشعر 01",
+         "label": "مفروق يسارًا بعناية",
          "value": 1
         },
         {
-         "label": "الشعر 02",
+         "label": "ممشّط للخلف",
          "value": 2
         },
         {
-         "label": "الشعر 03",
+         "label": "خفيف متراجع",
          "value": 3
         },
         {
-         "label": "الشعر 04",
+         "label": "كثيف مفروق من الوسط",
          "value": 4
         },
         {
-         "label": "الشعر 05",
+         "label": "طويل مفروق يمينًا",
          "value": 5
         },
         {
-         "label": "الشعر 06",
+         "label": "مفروق من الوسط متدرّج",
          "value": 6
         },
         {
-         "label": "الشعر 07",
+         "label": "قصير مرفوع",
          "value": 7
         },
         {
-         "label": "الشعر 08",
+         "label": "مربوط بخشونة",
          "value": 8
         }
        ],
@@ -8094,70 +10847,87 @@
        "options": [
         {
          "label": "أشقر",
+         "swatch": "#b58d4c",
          "value": 1
         },
         {
          "label": "بني",
+         "swatch": "#5b3b23",
          "value": 2
         },
         {
          "label": "أشقر داكن",
+         "swatch": "#8c6834",
          "value": 3
         },
         {
          "label": "بني داكن جدًا",
+         "swatch": "#2a1a10",
          "value": 4
         },
         {
          "label": "أصهب داكن",
+         "swatch": "#793a1e",
          "value": 5
         },
         {
          "label": "رمادي داكن",
+         "swatch": "#5a5855",
          "value": 6
         },
         {
          "label": "أصهب",
+         "swatch": "#a3522a",
          "value": 7
         },
         {
          "label": "رمادي",
+         "swatch": "#8c8985",
          "value": 8
         },
         {
          "label": "أسود فاحم",
+         "swatch": "#151313",
          "value": 9
         },
         {
          "label": "أشقر فاتح",
+         "swatch": "#d8bc7d",
          "value": 10
         },
         {
          "label": "بني فاتح",
+         "swatch": "#7b5332",
          "value": 11
         },
         {
          "label": "أصهب فاتح",
+         "swatch": "#c17040",
          "value": 12
         },
         {
          "label": "رمادي فاتح",
+         "swatch": "#bab7b2",
          "value": 13
         },
         {
          "label": "بني متوسط",
+         "swatch": "#4a2e1b",
          "value": 14
         },
         {
          "label": "ملح وفلفل",
+         "swatch": "#6e6b67",
          "value": 15
         },
         {
          "label": "أشقر فراولي",
+         "swatch": "#c0835a",
          "value": 16
         },
         {
          "label": "رمادي فضي",
+         "swatch": "#a8a8ad",
          "value": 17
         }
        ],
@@ -8233,27 +11003,27 @@
            "value": 0
           },
           {
-           "label": "اللحية 01",
+           "label": "شارب الفظّ",
            "value": 1
           },
           {
-           "label": "اللحية 02",
+           "label": "لحية الساقي",
            "value": 2
           },
           {
-           "label": "اللحية 03",
+           "label": "لحية الأستاذ",
            "value": 3
           },
           {
-           "label": "اللحية 04",
+           "label": "ستارة الذقن",
            "value": 4
           },
           {
-           "label": "اللحية 05",
+           "label": "لحية البحّار",
            "value": 5
           },
           {
-           "label": "اللحية 06",
+           "label": "لحية الجنرال",
            "value": 6
           }
          ],
@@ -8328,12 +11098,126 @@
          "id": "overlay.eyebrows.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 24,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "حاجبان حادّان",
+           "value": 1
+          },
+          {
+           "label": "حاجبان رفيعان",
+           "value": 2
+          },
+          {
+           "label": "حاجبان منفوشان",
+           "value": 3
+          },
+          {
+           "label": "حاجبان مرتّبان",
+           "value": 4
+          },
+          {
+           "label": "حاجبان مستقيما الطرف",
+           "value": 5
+          },
+          {
+           "label": "حاجبان سميكان ٢",
+           "value": 6
+          },
+          {
+           "label": "حاجبان مدبّبان",
+           "value": 7
+          },
+          {
+           "label": "حاجبان مشذّبان",
+           "value": 8
+          },
+          {
+           "label": "حاجبان سميكان",
+           "value": 9
+          },
+          {
+           "label": "حاجبان كاملان ٢",
+           "value": 10
+          },
+          {
+           "label": "حاجبان محدّدان",
+           "value": 11
+          },
+          {
+           "label": "حاجبان مشذّبان ٢",
+           "value": 12
+          },
+          {
+           "label": "حاجبان طبيعيان ٢",
+           "value": 13
+          },
+          {
+           "label": "حاجبان منخفضان",
+           "value": 14
+          },
+          {
+           "label": "حاجبان منفوشان ٢",
+           "value": 15
+          },
+          {
+           "label": "حاجبان ثقيلان",
+           "value": 16
+          },
+          {
+           "label": "حاجبان كثّان",
+           "value": 17
+          },
+          {
+           "label": "حاجبان منتوفان",
+           "value": 18
+          },
+          {
+           "label": "حاجبان منتوفان ٢",
+           "value": 19
+          },
+          {
+           "label": "حاجبان مقوّسان",
+           "value": 20
+          },
+          {
+           "label": "حاجبان طبيعيان",
+           "value": 21
+          },
+          {
+           "label": "حاجبان قصيران",
+           "value": 22
+          },
+          {
+           "label": "حاجبان كاملان",
+           "value": 23
+          },
+          {
+           "label": "حاجبان خفيفان",
+           "value": 24
+          }
+         ],
          "value": 1
+        },
+        {
+         "control": "overlay.eyebrows.match",
+         "id": "overlay.eyebrows.match",
+         "kind": "choice",
+         "label": "لون الحاجبين",
+         "options": [
+          {
+           "label": "مثل لون الشعر",
+           "value": 1
+          },
+          {
+           "label": "لون مختار",
+           "value": 0
+          }
+         ],
+         "value": 0
         },
         {
          "control": "overlay.eyebrows.color",
@@ -8364,7 +11248,7 @@
        "id": "overlay.eyebrows",
        "kind": "group",
        "label": "نمط الحاجبين",
-       "summary": "01"
+       "summary": "حاجبان حادّان"
       },
       {
        "camera": "face",
@@ -8374,11 +11258,16 @@
          "id": "overlay.foundation.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "بودرة الوجه",
+           "value": 1
+          }
+         ],
          "value": 0
         },
         {
@@ -8387,6 +11276,18 @@
          "id": "overlay.foundation.color",
          "kind": "choice",
          "label": "اللون",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.foundation.color2",
+         "disabled": true,
+         "id": "overlay.foundation.color2",
+         "kind": "choice",
+         "label": "اللون الثاني",
          "range": {
           "max": 64,
           "min": 1
@@ -8422,11 +11323,28 @@
          "id": "overlay.blush.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 4,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "خدود متورّدة",
+           "value": 1
+          },
+          {
+           "label": "خدود وردية",
+           "value": 2
+          },
+          {
+           "label": "خدود راقية",
+           "value": 3
+          },
+          {
+           "label": "خدود منحوتة",
+           "value": 4
+          }
+         ],
          "value": 0
         },
         {
@@ -8470,11 +11388,40 @@
          "id": "overlay.lipsticks.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "أحمر مطفي",
+           "value": 1
+          },
+          {
+           "label": "أحمر محدّد",
+           "value": 2
+          },
+          {
+           "label": "أحمر مظلّل",
+           "value": 3
+          },
+          {
+           "label": "أحمر ملطّخ",
+           "value": 4
+          },
+          {
+           "label": "أحمر مربّع",
+           "value": 5
+          },
+          {
+           "label": "أحمر على شكل قلب",
+           "value": 6
+          },
+          {
+           "label": "أحمر بحافّة",
+           "value": 7
+          }
+         ],
          "value": 0
         },
         {
@@ -8483,6 +11430,18 @@
          "id": "overlay.lipsticks.color",
          "kind": "choice",
          "label": "اللون",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.lipsticks.color2",
+         "disabled": true,
+         "id": "overlay.lipsticks.color2",
+         "kind": "choice",
+         "label": "اللون الثاني",
          "range": {
           "max": 64,
           "min": 1
@@ -8518,11 +11477,76 @@
          "id": "overlay.eyeliners.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "كحل بسيط",
+           "value": 1
+          },
+          {
+           "label": "كحل مجنّح",
+           "value": 2
+          },
+          {
+           "label": "كحل طويل",
+           "value": 3
+          },
+          {
+           "label": "كحل سفلي",
+           "value": 4
+          },
+          {
+           "label": "كحل معقوف",
+           "value": 5
+          },
+          {
+           "label": "كحل منحنٍ",
+           "value": 6
+          },
+          {
+           "label": "كحل درامي",
+           "value": 7
+          },
+          {
+           "label": "كحل هندي",
+           "value": 8
+          },
+          {
+           "label": "كحل هندي عريض",
+           "value": 9
+          },
+          {
+           "label": "كحل هندي كامل",
+           "value": 10
+          },
+          {
+           "label": "كحل كلاسيكي",
+           "value": 11
+          },
+          {
+           "label": "كحل كلاسيكي عريض",
+           "value": 12
+          },
+          {
+           "label": "كحل كامل",
+           "value": 13
+          },
+          {
+           "label": "كحل مزدوج",
+           "value": 14
+          },
+          {
+           "label": "كحل مزدوج علوي",
+           "value": 15
+          },
+          {
+           "label": "كحل فرعوني",
+           "value": 16
+          }
+         ],
          "value": 0
         },
         {
@@ -8566,11 +11590,36 @@
          "id": "overlay.shadows.style",
          "kind": "choice",
          "label": "النمط",
-         "range": {
-          "max": 1,
-          "min": 1,
-          "none": true
-         },
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "ظلال دخانية",
+           "value": 1
+          },
+          {
+           "label": "ظلال بقوس مرتّب",
+           "value": 2
+          },
+          {
+           "label": "ظلال بجناح كثيف",
+           "value": 3
+          },
+          {
+           "label": "ظلال ممزوجة",
+           "value": 4
+          },
+          {
+           "label": "ظلال بجناح بلونين",
+           "value": 5
+          },
+          {
+           "label": "ظلال مضيئة",
+           "value": 6
+          }
+         ],
          "value": 0
         },
         {
@@ -8579,6 +11628,30 @@
          "id": "overlay.shadows.color",
          "kind": "choice",
          "label": "اللون",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.shadows.color2",
+         "disabled": true,
+         "id": "overlay.shadows.color2",
+         "kind": "choice",
+         "label": "اللون الثاني",
+         "range": {
+          "max": 64,
+          "min": 1
+         },
+         "value": 1
+        },
+        {
+         "control": "overlay.shadows.color3",
+         "disabled": true,
+         "id": "overlay.shadows.color3",
+         "kind": "choice",
+         "label": "اللون الثالث",
          "range": {
           "max": 64,
           "min": 1
@@ -8693,6 +11766,7 @@
   },
   "dirty": true,
   "price": {
+   "currency": "cash",
    "lines": [
     {
      "amount": 3.5,
@@ -8710,6 +11784,8 @@
    "title": "متجر الملابس"
   },
   "strings": {
+   "INVALID_DOB": "تاريخ ميلاد غير مقبول",
+   "INVALID_NAME": "حروف فقط — بلا أرقام أو رموز (تُقبل المسافة والفاصلة العليا والشرطة)",
    "advanced": "تفاصيل إضافية",
    "appearance": "مظهر الشخصية",
    "apply": "تطبيق",
@@ -8720,6 +11796,7 @@
    "close": "إغلاق",
    "confirm": "تأكيد",
    "dangerBody": "لا يمكن التراجع عن هذا الإجراء.",
+   "day": "اليوم",
    "details": "اختر القسم الذي تريد تعديله.",
    "discard": "تجاهل التعديلات",
    "dragRotate": "اسحب للتدوير",
@@ -8727,13 +11804,30 @@
    "equipped": "مرتداة",
    "error": "تعذر إكمال الطلب، حاول مجددًا.",
    "free": "مجاني",
+   "goldAmount": "%s ذهب",
+   "hideClothes": "إخفاء الملابس",
+   "identityInvalid": "قيمة غير صالحة",
    "leave": "سيتم إلغاء التعديلات غير المحفوظة.",
    "leaveTitle": "تعديلات غير محفوظة",
    "locked": "مقفلة",
+   "month": "الشهر",
+   "month.1": "يناير",
+   "month.10": "أكتوبر",
+   "month.11": "نوفمبر",
+   "month.12": "ديسمبر",
+   "month.2": "فبراير",
+   "month.3": "مارس",
+   "month.4": "أبريل",
+   "month.5": "مايو",
+   "month.6": "يونيو",
+   "month.7": "يوليو",
+   "month.8": "أغسطس",
+   "month.9": "سبتمبر",
    "nameHint": "أكمل اسم الشخصية من قسم الهوية.",
    "new": "جديدة",
    "none": "بدون",
    "owned": "مملوكة",
+   "ownedColors": "ألوانك المملوكة",
    "padHelp": "اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع",
    "price": "السعر",
    "random": "مظهر عشوائي",
@@ -8743,6 +11837,7 @@
    "save": "حفظ",
    "saving": "جارٍ التطبيق…",
    "search": "بحث…",
+   "showClothes": "إظهار الملابس",
    "stay": "متابعة التعديل",
    "total": "الإجمالي",
    "undo": "تراجع",
@@ -8754,10 +11849,14 @@
    "view.feet": "القدمان",
    "view.fullBody": "الجسم كاملًا",
    "view.hair": "الشعر",
+   "view.handLeft": "اليد اليسرى",
+   "view.handRight": "اليد اليمنى",
    "view.hands": "اليدان",
    "view.head": "الرأس",
    "view.lowerBody": "الجزء السفلي",
-   "view.upperBody": "الجزء العلوي"
+   "view.teeth": "الأسنان",
+   "view.upperBody": "الجزء العلوي",
+   "year": "السنة"
   },
   "tree": {
    "camera": "fullBody",
@@ -8893,16 +11992,19 @@
         {
          "id": "clothing.hats.card",
          "item": {
+          "currency": "cash",
           "equipped": false,
           "name": "القبعة 01 · 01",
           "owned": false,
           "price": 3.5,
+          "priceLabel": "$3.50",
           "variants": 1
          },
          "kind": "itemcard",
          "label": "تفاصيل القطعة"
         }
        ],
+       "icon": "hat",
        "id": "item.hats",
        "kind": "group",
        "label": "القبعة",
@@ -8938,12 +12040,14 @@
          "value": 0
         }
        ],
+       "icon": "mask",
        "id": "item.masks",
        "kind": "group",
        "label": "القناع",
        "summary": "$10.00"
       }
      ],
+     "icon": "hat",
      "id": "tax.head",
      "kind": "group",
      "label": "الرأس"
@@ -8980,12 +12084,14 @@
          "value": 0
         }
        ],
+       "icon": "neckerchief",
        "id": "item.neckwear",
        "kind": "group",
        "label": "وشاح الرقبة",
        "summary": "$2.15"
       }
      ],
+     "icon": "neckerchief",
      "id": "tax.neck",
      "kind": "group",
      "label": "الرقبة"
@@ -9080,6 +12186,10 @@
             {
              "label": "مكياج",
              "value": 5
+            },
+            {
+             "label": "الخيل",
+             "value": 6
             }
            ],
            "value": 0
@@ -9143,16 +12253,19 @@
         {
          "id": "clothing.shirts_full.card",
          "item": {
+          "currency": "cash",
           "equipped": true,
           "name": "القميص 01 · 01",
           "owned": false,
           "price": 5,
+          "priceLabel": "$5.00",
           "variants": 3
          },
          "kind": "itemcard",
          "label": "تفاصيل القطعة"
         }
        ],
+       "icon": "shirt",
        "id": "item.shirts_full",
        "kind": "group",
        "label": "القميص",
@@ -9188,6 +12301,7 @@
          "value": 0
         }
        ],
+       "icon": "vest",
        "id": "item.vests",
        "kind": "group",
        "label": "الصديري",
@@ -9223,6 +12337,7 @@
          "value": 0
         }
        ],
+       "icon": "coat",
        "id": "item.coats",
        "kind": "group",
        "label": "المعطف",
@@ -9258,12 +12373,14 @@
          "value": 0
         }
        ],
+       "icon": "coat",
        "id": "item.coats_closed",
        "kind": "group",
        "label": "المعطف المغلق",
        "summary": "$5.00"
       }
      ],
+     "icon": "shirt",
      "id": "tax.upper",
      "kind": "group",
      "label": "الجزء العلوي"
@@ -9273,7 +12390,7 @@
      "children": [
       {
        "art": "gloves",
-       "camera": "hands",
+       "camera": "handRight",
        "children": [
         {
          "control": "clothing.gloves.style",
@@ -9301,12 +12418,14 @@
          "value": 0
         }
        ],
+       "icon": "glove",
        "id": "item.gloves",
        "kind": "group",
        "label": "القفازات",
        "summary": "$4.25"
       }
      ],
+     "icon": "glove",
      "id": "tax.arms",
      "kind": "group",
      "label": "الذراعان واليدان"
@@ -9392,6 +12511,10 @@
             {
              "label": "مكياج",
              "value": 5
+            },
+            {
+             "label": "الخيل",
+             "value": 6
             }
            ],
            "value": 0
@@ -9455,22 +12578,26 @@
         {
          "id": "clothing.pants.card",
          "item": {
+          "currency": "cash",
           "equipped": true,
           "name": "البنطال 01 · 01",
           "owned": false,
           "price": 5,
+          "priceLabel": "$5.00",
           "variants": 1
          },
          "kind": "itemcard",
          "label": "تفاصيل القطعة"
         }
        ],
+       "icon": "pants",
        "id": "item.pants",
        "kind": "group",
        "label": "البنطال",
        "summary": "$5.00"
       }
      ],
+     "icon": "pants",
      "id": "tax.lower",
      "kind": "group",
      "label": "الجزء السفلي"
@@ -9628,22 +12755,26 @@
         {
          "id": "clothing.boots.card",
          "item": {
+          "currency": "cash",
           "equipped": true,
           "name": "الحذاء 01 · 01",
           "owned": false,
           "price": 5,
+          "priceLabel": "$5.00",
           "variants": 5
          },
          "kind": "itemcard",
          "label": "تفاصيل القطعة"
         }
        ],
+       "icon": "boots",
        "id": "item.boots",
        "kind": "group",
        "label": "الحذاء",
        "summary": "$5.00"
       }
      ],
+     "icon": "boots",
      "id": "tax.feet",
      "kind": "group",
      "label": "القدمان"
@@ -9652,7 +12783,7 @@
      "camera": "accessories",
      "children": [
       {
-       "camera": "accessories",
+       "camera": "upperBody",
        "children": [
         {
          "control": "clothing.belts.style",
@@ -9680,6 +12811,7 @@
          "value": 0
         }
        ],
+       "icon": "belt",
        "id": "item.belts",
        "kind": "group",
        "label": "الحزام",
@@ -9714,6 +12846,7 @@
          "value": 0
         }
        ],
+       "icon": "belt",
        "id": "item.belt_buckles",
        "kind": "group",
        "label": "إبزيم الحزام",
@@ -9749,6 +12882,7 @@
          "value": 0
         }
        ],
+       "icon": "gunbelt",
        "id": "item.gunbelts",
        "kind": "group",
        "label": "حزام المسدس",
@@ -9783,15 +12917,1371 @@
          "value": 0
         }
        ],
+       "icon": "gunbelt",
        "id": "item.gunbelt_accs",
        "kind": "group",
        "label": "إكسسوار حزام المسدس",
        "summary": "$1.00"
       }
      ],
+     "icon": "gunbelt",
      "id": "tax.accessories",
      "kind": "group",
      "label": "الإكسسوارات"
+    },
+    {
+     "camera": "fullBody",
+     "children": [
+      {
+       "camera": "fullBody",
+       "children": [
+        {
+         "control": "suggestion.1",
+         "id": "suggestion.1",
+         "kind": "action",
+         "label": "ملابس العامل"
+        },
+        {
+         "control": "suggestion.2",
+         "id": "suggestion.2",
+         "kind": "action",
+         "label": "ملابس المسافر"
+        },
+        {
+         "control": "suggestion.3",
+         "id": "suggestion.3",
+         "kind": "action",
+         "label": "طقم الحدود"
+        },
+        {
+         "control": "suggestion.4",
+         "id": "suggestion.4",
+         "kind": "action",
+         "label": "طقم الخارج عن القانون"
+        },
+        {
+         "control": "suggestion.5",
+         "id": "suggestion.5",
+         "kind": "action",
+         "label": "طقم المزرعة"
+        },
+        {
+         "control": "suggestion.7",
+         "id": "suggestion.7",
+         "kind": "action",
+         "label": "طقم الفاكيرو"
+        }
+       ],
+       "id": "suggestions",
+       "kind": "group",
+       "label": "اقتراحات الخيّاط"
+      }
+     ],
+     "icon": "outfit",
+     "id": "tax.outfits",
+     "kind": "group",
+     "label": "الأطقم"
+    },
+    {
+     "control": "clothing.undress",
+     "id": "clothing.undress",
+     "kind": "action",
+     "label": "خلع كل الملابس"
+    }
+   ],
+   "id": "root",
+   "kind": "group",
+   "label": "الملابس",
+   "searchable": true
+  },
+  "type": "editor"
+ },
+ "storeExtras": {
+  "camera": "fullBody",
+  "canRandom": false,
+  "canSave": false,
+  "canUndo": true,
+  "confirm": {
+   "body": "سيتم شراء القطع الجديدة وارتداؤها.",
+   "confirmLabel": "تأكيد",
+   "title": "اعتماد المظهر؟"
+  },
+  "dirty": true,
+  "price": {
+   "currency": "gold",
+   "lines": [],
+   "missing": [
+    "الحذاء"
+   ],
+   "total": 0
+  },
+  "saveBlocked": "بعض القطع لا تُباع بهذه العملة: الحذاء",
+  "saveLabel": "شراء وارتداء",
+  "saveOutfit": {
+   "label": "احفظ هذا المظهر كطقم (اختياري)",
+   "maxLength": 24,
+   "placeholder": "اسم الطقم"
+  },
+  "session": {
+   "dir": "rtl",
+   "id": 1,
+   "locale": "ar",
+   "mode": "store",
+   "title": "متجر الملابس"
+  },
+  "strings": {
+   "INVALID_DOB": "تاريخ ميلاد غير مقبول",
+   "INVALID_NAME": "حروف فقط — بلا أرقام أو رموز (تُقبل المسافة والفاصلة العليا والشرطة)",
+   "advanced": "تفاصيل إضافية",
+   "appearance": "مظهر الشخصية",
+   "apply": "تطبيق",
+   "back": "رجوع",
+   "camera": "الكاميرا",
+   "center": "توسيط",
+   "clickZoom": "اضغط على جزء لتقريبه",
+   "close": "إغلاق",
+   "confirm": "تأكيد",
+   "dangerBody": "لا يمكن التراجع عن هذا الإجراء.",
+   "day": "اليوم",
+   "details": "اختر القسم الذي تريد تعديله.",
+   "discard": "تجاهل التعديلات",
+   "dragRotate": "اسحب للتدوير",
+   "empty": "لا توجد نتائج مطابقة.",
+   "equipped": "مرتداة",
+   "error": "تعذر إكمال الطلب، حاول مجددًا.",
+   "free": "مجاني",
+   "goldAmount": "%s ذهب",
+   "hideClothes": "إخفاء الملابس",
+   "identityInvalid": "قيمة غير صالحة",
+   "leave": "سيتم إلغاء التعديلات غير المحفوظة.",
+   "leaveTitle": "تعديلات غير محفوظة",
+   "locked": "مقفلة",
+   "month": "الشهر",
+   "month.1": "يناير",
+   "month.10": "أكتوبر",
+   "month.11": "نوفمبر",
+   "month.12": "ديسمبر",
+   "month.2": "فبراير",
+   "month.3": "مارس",
+   "month.4": "أبريل",
+   "month.5": "مايو",
+   "month.6": "يونيو",
+   "month.7": "يوليو",
+   "month.8": "أغسطس",
+   "month.9": "سبتمبر",
+   "nameHint": "أكمل اسم الشخصية من قسم الهوية.",
+   "new": "جديدة",
+   "none": "بدون",
+   "owned": "مملوكة",
+   "ownedColors": "ألوانك المملوكة",
+   "padHelp": "اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع",
+   "price": "السعر",
+   "random": "مظهر عشوائي",
+   "reset": "استعادة الأصل",
+   "resetBody": "ستعود كل التعديلات إلى المظهر الأصلي.",
+   "rightReset": "زر يمين: الجسم كاملًا",
+   "save": "حفظ",
+   "saving": "جارٍ التطبيق…",
+   "search": "بحث…",
+   "showClothes": "إظهار الملابس",
+   "stay": "متابعة التعديل",
+   "total": "الإجمالي",
+   "undo": "تراجع",
+   "variants": "التنويعات",
+   "view.accessories": "الإكسسوارات",
+   "view.eyes": "العينان",
+   "view.face": "الوجه",
+   "view.facialHair": "اللحية",
+   "view.feet": "القدمان",
+   "view.fullBody": "الجسم كاملًا",
+   "view.hair": "الشعر",
+   "view.handLeft": "اليد اليسرى",
+   "view.handRight": "اليد اليمنى",
+   "view.hands": "اليدان",
+   "view.head": "الرأس",
+   "view.lowerBody": "الجزء السفلي",
+   "view.teeth": "الأسنان",
+   "view.upperBody": "الجزء العلوي",
+   "year": "السنة"
+  },
+  "tree": {
+   "camera": "fullBody",
+   "children": [
+    {
+     "control": "store.currency",
+     "id": "store.currency",
+     "kind": "choice",
+     "label": "الدفع",
+     "options": [
+      {
+       "label": "نقدًا",
+       "value": 1
+      },
+      {
+       "label": "ذهب",
+       "value": 2
+      }
+     ],
+     "value": 2
+    },
+    {
+     "camera": "head",
+     "children": [
+      {
+       "art": "hat",
+       "badge": "owned",
+       "badgeLabel": "مملوكة",
+       "camera": "head",
+       "children": [
+        {
+         "control": "clothing.hats.style",
+         "id": "clothing.hats.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "القبعة 01",
+           "value": 1
+          },
+          {
+           "badge": "owned",
+           "badgeLabel": "مملوكة",
+           "label": "القبعة 02",
+           "value": 2
+          },
+          {
+           "label": "القبعة 03",
+           "value": 3
+          }
+         ],
+         "value": 2
+        },
+        {
+         "control": "clothing.hats.variant",
+         "id": "clothing.hats.variant",
+         "kind": "choice",
+         "label": "التنويعة",
+         "options": [
+          {
+           "badge": "owned",
+           "badgeLabel": "مملوكة",
+           "label": "01",
+           "value": 1
+          }
+         ],
+         "value": 1
+        },
+        {
+         "children": [
+          {
+           "control": "clothing.hats.owned",
+           "id": "clothing.hats.owned",
+           "kind": "choice",
+           "label": "ألوانك المملوكة",
+           "options": [
+            {
+             "label": "اللون الأصلي",
+             "value": 0
+            },
+            {
+             "label": "القبعة · 1/2/3",
+             "value": 1
+            },
+            {
+             "label": "القبعة · 9/9/9",
+             "value": 2
+            }
+           ],
+           "value": 1
+          },
+          {
+           "control": "clothing.hats.palette",
+           "id": "clothing.hats.palette",
+           "kind": "choice",
+           "label": "لوحة الألوان",
+           "options": [
+            {
+             "label": "اللون الأصلي",
+             "value": 0
+            },
+            {
+             "label": "القبعة",
+             "value": 1
+            },
+            {
+             "label": "قبعة نظيفة",
+             "value": 2
+            },
+            {
+             "label": "عام",
+             "value": 3
+            }
+           ],
+           "value": 1
+          },
+          {
+           "control": "clothing.hats.tint0",
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.hats.tint0",
+           "kind": "slider",
+           "label": "الدرجة الأولى",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "track": "tex/palettes/metaped_tint_hat.png",
+           "value": 1
+          },
+          {
+           "control": "clothing.hats.tint1",
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.hats.tint1",
+           "kind": "slider",
+           "label": "الدرجة الثانية",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "track": "tex/palettes/metaped_tint_hat.png",
+           "value": 2
+          },
+          {
+           "control": "clothing.hats.tint2",
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.hats.tint2",
+           "kind": "slider",
+           "label": "الدرجة الثالثة",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "track": "tex/palettes/metaped_tint_hat.png",
+           "value": 3
+          }
+         ],
+         "id": "clothing.hats.color",
+         "kind": "group",
+         "label": "اللون"
+        },
+        {
+         "control": "clothing.hats.remove",
+         "id": "clothing.hats.remove",
+         "kind": "action",
+         "label": "خلع القطعة"
+        },
+        {
+         "confirmBody": "ستُباع هذه القطعة للمتجر مقابل $1.98، وتخرج من ملابسك.",
+         "control": "clothing.hats.resell",
+         "danger": true,
+         "id": "clothing.hats.resell",
+         "kind": "action",
+         "label": "بيع القطعة",
+         "summary": "$1.98"
+        },
+        {
+         "id": "clothing.hats.card",
+         "item": {
+          "colors": 2,
+          "currency": "gold",
+          "equipped": false,
+          "name": "القبعة 02 · 01",
+          "owned": true,
+          "variants": 1
+         },
+         "kind": "itemcard",
+         "label": "تفاصيل القطعة"
+        }
+       ],
+       "icon": "hat",
+       "id": "item.hats",
+       "kind": "group",
+       "label": "القبعة"
+      },
+      {
+       "art": "mask",
+       "camera": "face",
+       "children": [
+        {
+         "control": "clothing.masks.style",
+         "id": "clothing.masks.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "القناع 01",
+           "value": 1
+          },
+          {
+           "label": "القناع 02",
+           "value": 2
+          },
+          {
+           "label": "القناع 03",
+           "value": 3
+          }
+         ],
+         "value": 0
+        }
+       ],
+       "icon": "mask",
+       "id": "item.masks",
+       "kind": "group",
+       "label": "القناع"
+      }
+     ],
+     "icon": "hat",
+     "id": "tax.head",
+     "kind": "group",
+     "label": "الرأس"
+    },
+    {
+     "camera": "upperBody",
+     "children": [
+      {
+       "camera": "upperBody",
+       "children": [
+        {
+         "control": "clothing.neckwear.style",
+         "id": "clothing.neckwear.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "وشاح الرقبة 01",
+           "value": 1
+          },
+          {
+           "label": "وشاح الرقبة 02",
+           "value": 2
+          },
+          {
+           "label": "وشاح الرقبة 03",
+           "value": 3
+          }
+         ],
+         "value": 0
+        }
+       ],
+       "icon": "neckerchief",
+       "id": "item.neckwear",
+       "kind": "group",
+       "label": "وشاح الرقبة"
+      }
+     ],
+     "icon": "neckerchief",
+     "id": "tax.neck",
+     "kind": "group",
+     "label": "الرقبة"
+    },
+    {
+     "camera": "upperBody",
+     "children": [
+      {
+       "art": "shirt",
+       "badge": "equipped",
+       "badgeLabel": "مرتداة",
+       "camera": "upperBody",
+       "children": [
+        {
+         "control": "clothing.shirts_full.style",
+         "id": "clothing.shirts_full.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "badge": "equipped",
+           "badgeLabel": "مرتداة",
+           "label": "القميص 01",
+           "value": 1
+          },
+          {
+           "label": "القميص 02",
+           "value": 2
+          },
+          {
+           "label": "القميص 03",
+           "value": 3
+          }
+         ],
+         "value": 1
+        },
+        {
+         "control": "clothing.shirts_full.variant",
+         "id": "clothing.shirts_full.variant",
+         "kind": "choice",
+         "label": "التنويعة",
+         "options": [
+          {
+           "badge": "equipped",
+           "badgeLabel": "مرتداة",
+           "label": "01",
+           "value": 1
+          },
+          {
+           "label": "02",
+           "value": 2
+          },
+          {
+           "label": "03",
+           "value": 3
+          }
+         ],
+         "value": 1
+        },
+        {
+         "children": [
+          {
+           "control": "clothing.shirts_full.palette",
+           "id": "clothing.shirts_full.palette",
+           "kind": "choice",
+           "label": "لوحة الألوان",
+           "options": [
+            {
+             "label": "اللون الأصلي",
+             "value": 0
+            },
+            {
+             "label": "عام",
+             "value": 1
+            },
+            {
+             "label": "جلد",
+             "value": 2
+            },
+            {
+             "label": "شعر",
+             "value": 3
+            },
+            {
+             "label": "جلد الخيل",
+             "value": 4
+            },
+            {
+             "label": "مكياج",
+             "value": 5
+            },
+            {
+             "label": "الخيل",
+             "value": 6
+            }
+           ],
+           "value": 0
+          },
+          {
+           "control": "clothing.shirts_full.tint0",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.shirts_full.tint0",
+           "kind": "slider",
+           "label": "الدرجة الأولى",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "clothing.shirts_full.tint1",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.shirts_full.tint1",
+           "kind": "slider",
+           "label": "الدرجة الثانية",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "clothing.shirts_full.tint2",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.shirts_full.tint2",
+           "kind": "slider",
+           "label": "الدرجة الثالثة",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          }
+         ],
+         "id": "clothing.shirts_full.color",
+         "kind": "group",
+         "label": "اللون"
+        },
+        {
+         "control": "clothing.shirts_full.remove",
+         "id": "clothing.shirts_full.remove",
+         "kind": "action",
+         "label": "خلع القطعة"
+        },
+        {
+         "id": "clothing.shirts_full.card",
+         "item": {
+          "currency": "gold",
+          "equipped": true,
+          "name": "القميص 01 · 01",
+          "owned": false,
+          "variants": 3
+         },
+         "kind": "itemcard",
+         "label": "تفاصيل القطعة"
+        }
+       ],
+       "icon": "shirt",
+       "id": "item.shirts_full",
+       "kind": "group",
+       "label": "القميص"
+      },
+      {
+       "art": "vest",
+       "camera": "upperBody",
+       "children": [
+        {
+         "control": "clothing.vests.style",
+         "id": "clothing.vests.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "الصديري 01",
+           "value": 1
+          },
+          {
+           "label": "الصديري 02",
+           "value": 2
+          },
+          {
+           "label": "الصديري 03",
+           "value": 3
+          }
+         ],
+         "value": 0
+        }
+       ],
+       "icon": "vest",
+       "id": "item.vests",
+       "kind": "group",
+       "label": "الصديري"
+      },
+      {
+       "art": "coat",
+       "camera": "upperBody",
+       "children": [
+        {
+         "control": "clothing.coats.style",
+         "id": "clothing.coats.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "المعطف 01",
+           "value": 1
+          },
+          {
+           "label": "المعطف 02",
+           "value": 2
+          },
+          {
+           "label": "المعطف 03",
+           "value": 3
+          }
+         ],
+         "value": 0
+        }
+       ],
+       "icon": "coat",
+       "id": "item.coats",
+       "kind": "group",
+       "label": "المعطف"
+      },
+      {
+       "art": "ccoat",
+       "camera": "upperBody",
+       "children": [
+        {
+         "control": "clothing.coats_closed.style",
+         "id": "clothing.coats_closed.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "المعطف المغلق 01",
+           "value": 1
+          },
+          {
+           "label": "المعطف المغلق 02",
+           "value": 2
+          },
+          {
+           "label": "المعطف المغلق 03",
+           "value": 3
+          }
+         ],
+         "value": 0
+        }
+       ],
+       "icon": "coat",
+       "id": "item.coats_closed",
+       "kind": "group",
+       "label": "المعطف المغلق"
+      }
+     ],
+     "icon": "shirt",
+     "id": "tax.upper",
+     "kind": "group",
+     "label": "الجزء العلوي"
+    },
+    {
+     "camera": "hands",
+     "children": [
+      {
+       "art": "gloves",
+       "camera": "handRight",
+       "children": [
+        {
+         "control": "clothing.gloves.style",
+         "id": "clothing.gloves.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "القفازات 01",
+           "value": 1
+          },
+          {
+           "label": "القفازات 02",
+           "value": 2
+          },
+          {
+           "label": "القفازات 03",
+           "value": 3
+          }
+         ],
+         "value": 0
+        }
+       ],
+       "icon": "glove",
+       "id": "item.gloves",
+       "kind": "group",
+       "label": "القفازات"
+      }
+     ],
+     "icon": "glove",
+     "id": "tax.arms",
+     "kind": "group",
+     "label": "الذراعان واليدان"
+    },
+    {
+     "camera": "lowerBody",
+     "children": [
+      {
+       "badge": "equipped",
+       "badgeLabel": "مرتداة",
+       "camera": "lowerBody",
+       "children": [
+        {
+         "control": "clothing.pants.style",
+         "id": "clothing.pants.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "badge": "equipped",
+           "badgeLabel": "مرتداة",
+           "label": "البنطال 01",
+           "value": 1
+          },
+          {
+           "label": "البنطال 02",
+           "value": 2
+          },
+          {
+           "label": "البنطال 03",
+           "value": 3
+          }
+         ],
+         "value": 1
+        },
+        {
+         "control": "clothing.pants.variant",
+         "id": "clothing.pants.variant",
+         "kind": "choice",
+         "label": "التنويعة",
+         "options": [
+          {
+           "badge": "equipped",
+           "badgeLabel": "مرتداة",
+           "label": "01",
+           "value": 1
+          }
+         ],
+         "value": 1
+        },
+        {
+         "children": [
+          {
+           "control": "clothing.pants.palette",
+           "id": "clothing.pants.palette",
+           "kind": "choice",
+           "label": "لوحة الألوان",
+           "options": [
+            {
+             "label": "اللون الأصلي",
+             "value": 0
+            },
+            {
+             "label": "عام",
+             "value": 1
+            },
+            {
+             "label": "جلد",
+             "value": 2
+            },
+            {
+             "label": "شعر",
+             "value": 3
+            },
+            {
+             "label": "جلد الخيل",
+             "value": 4
+            },
+            {
+             "label": "مكياج",
+             "value": 5
+            },
+            {
+             "label": "الخيل",
+             "value": 6
+            }
+           ],
+           "value": 0
+          },
+          {
+           "control": "clothing.pants.tint0",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.pants.tint0",
+           "kind": "slider",
+           "label": "الدرجة الأولى",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "clothing.pants.tint1",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.pants.tint1",
+           "kind": "slider",
+           "label": "الدرجة الثانية",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "clothing.pants.tint2",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.pants.tint2",
+           "kind": "slider",
+           "label": "الدرجة الثالثة",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          }
+         ],
+         "id": "clothing.pants.color",
+         "kind": "group",
+         "label": "اللون"
+        },
+        {
+         "control": "clothing.pants.remove",
+         "id": "clothing.pants.remove",
+         "kind": "action",
+         "label": "خلع القطعة"
+        },
+        {
+         "id": "clothing.pants.card",
+         "item": {
+          "currency": "gold",
+          "equipped": true,
+          "name": "البنطال 01 · 01",
+          "owned": false,
+          "variants": 1
+         },
+         "kind": "itemcard",
+         "label": "تفاصيل القطعة"
+        }
+       ],
+       "icon": "pants",
+       "id": "item.pants",
+       "kind": "group",
+       "label": "البنطال"
+      }
+     ],
+     "icon": "pants",
+     "id": "tax.lower",
+     "kind": "group",
+     "label": "الجزء السفلي"
+    },
+    {
+     "camera": "feet",
+     "children": [
+      {
+       "art": "boots",
+       "camera": "feet",
+       "children": [
+        {
+         "control": "clothing.boots.style",
+         "id": "clothing.boots.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "badge": "equipped",
+           "badgeLabel": "مرتداة",
+           "label": "الحذاء 01",
+           "value": 1
+          },
+          {
+           "label": "الحذاء 02",
+           "value": 2
+          },
+          {
+           "label": "الحذاء 03",
+           "value": 3
+          }
+         ],
+         "value": 2
+        },
+        {
+         "control": "clothing.boots.variant",
+         "id": "clothing.boots.variant",
+         "kind": "choice",
+         "label": "التنويعة",
+         "options": [
+          {
+           "label": "01",
+           "value": 1
+          },
+          {
+           "label": "02",
+           "value": 2
+          },
+          {
+           "label": "03",
+           "value": 3
+          },
+          {
+           "label": "04",
+           "value": 4
+          },
+          {
+           "label": "05",
+           "value": 5
+          }
+         ],
+         "value": 1
+        },
+        {
+         "children": [
+          {
+           "control": "clothing.boots.palette",
+           "id": "clothing.boots.palette",
+           "kind": "choice",
+           "label": "لوحة الألوان",
+           "options": [
+            {
+             "label": "اللون الأصلي",
+             "value": 0
+            },
+            {
+             "label": "جلد",
+             "value": 1
+            },
+            {
+             "label": "جلد الخيل",
+             "value": 2
+            },
+            {
+             "label": "عام",
+             "value": 3
+            }
+           ],
+           "value": 0
+          },
+          {
+           "control": "clothing.boots.tint0",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.boots.tint0",
+           "kind": "slider",
+           "label": "الدرجة الأولى",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "clothing.boots.tint1",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.boots.tint1",
+           "kind": "slider",
+           "label": "الدرجة الثانية",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          },
+          {
+           "control": "clothing.boots.tint2",
+           "disabled": true,
+           "display": {
+            "decimals": 0,
+            "scale": 1
+           },
+           "id": "clothing.boots.tint2",
+           "kind": "slider",
+           "label": "الدرجة الثالثة",
+           "max": 254,
+           "min": 0,
+           "step": 1,
+           "value": 0
+          }
+         ],
+         "id": "clothing.boots.color",
+         "kind": "group",
+         "label": "اللون"
+        },
+        {
+         "control": "clothing.boots.remove",
+         "id": "clothing.boots.remove",
+         "kind": "action",
+         "label": "خلع القطعة"
+        },
+        {
+         "id": "clothing.boots.card",
+         "item": {
+          "currency": "gold",
+          "equipped": false,
+          "name": "الحذاء 02 · 01",
+          "owned": false,
+          "variants": 5
+         },
+         "kind": "itemcard",
+         "label": "تفاصيل القطعة"
+        }
+       ],
+       "icon": "boots",
+       "id": "item.boots",
+       "kind": "group",
+       "label": "الحذاء"
+      }
+     ],
+     "icon": "boots",
+     "id": "tax.feet",
+     "kind": "group",
+     "label": "القدمان"
+    },
+    {
+     "camera": "accessories",
+     "children": [
+      {
+       "camera": "upperBody",
+       "children": [
+        {
+         "control": "clothing.belts.style",
+         "id": "clothing.belts.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "الحزام 01",
+           "value": 1
+          },
+          {
+           "label": "الحزام 02",
+           "value": 2
+          },
+          {
+           "label": "الحزام 03",
+           "value": 3
+          }
+         ],
+         "value": 0
+        }
+       ],
+       "icon": "belt",
+       "id": "item.belts",
+       "kind": "group",
+       "label": "الحزام"
+      },
+      {
+       "camera": "accessories",
+       "children": [
+        {
+         "control": "clothing.belt_buckles.style",
+         "id": "clothing.belt_buckles.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "إبزيم الحزام 01",
+           "value": 1
+          },
+          {
+           "label": "إبزيم الحزام 02",
+           "value": 2
+          },
+          {
+           "label": "إبزيم الحزام 03",
+           "value": 3
+          }
+         ],
+         "value": 0
+        }
+       ],
+       "icon": "belt",
+       "id": "item.belt_buckles",
+       "kind": "group",
+       "label": "إبزيم الحزام"
+      },
+      {
+       "art": "gunbelt",
+       "camera": "accessories",
+       "children": [
+        {
+         "control": "clothing.gunbelts.style",
+         "id": "clothing.gunbelts.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "حزام المسدس 01",
+           "value": 1
+          },
+          {
+           "label": "حزام المسدس 02",
+           "value": 2
+          },
+          {
+           "label": "حزام المسدس 03",
+           "value": 3
+          }
+         ],
+         "value": 0
+        }
+       ],
+       "icon": "gunbelt",
+       "id": "item.gunbelts",
+       "kind": "group",
+       "label": "حزام المسدس"
+      },
+      {
+       "camera": "accessories",
+       "children": [
+        {
+         "control": "clothing.gunbelt_accs.style",
+         "id": "clothing.gunbelt_accs.style",
+         "kind": "choice",
+         "label": "النمط",
+         "options": [
+          {
+           "label": "بدون",
+           "value": 0
+          },
+          {
+           "label": "إكسسوار حزام المسدس 01",
+           "value": 1
+          },
+          {
+           "label": "إكسسوار حزام المسدس 02",
+           "value": 2
+          },
+          {
+           "label": "إكسسوار حزام المسدس 03",
+           "value": 3
+          }
+         ],
+         "value": 0
+        }
+       ],
+       "icon": "gunbelt",
+       "id": "item.gunbelt_accs",
+       "kind": "group",
+       "label": "إكسسوار حزام المسدس"
+      }
+     ],
+     "icon": "gunbelt",
+     "id": "tax.accessories",
+     "kind": "group",
+     "label": "الإكسسوارات"
+    },
+    {
+     "camera": "fullBody",
+     "children": [
+      {
+       "camera": "fullBody",
+       "children": [
+        {
+         "children": [
+          {
+           "control": "outfit.3.equip",
+           "id": "outfit.3.equip",
+           "kind": "action",
+           "label": "ارتداء الطقم"
+          }
+         ],
+         "id": "outfit.3",
+         "kind": "group",
+         "label": "Work"
+        }
+       ],
+       "id": "outfits",
+       "kind": "group",
+       "label": "أطقمك المحفوظة"
+      },
+      {
+       "camera": "fullBody",
+       "children": [
+        {
+         "control": "suggestion.1",
+         "id": "suggestion.1",
+         "kind": "action",
+         "label": "ملابس العامل"
+        },
+        {
+         "control": "suggestion.2",
+         "id": "suggestion.2",
+         "kind": "action",
+         "label": "ملابس المسافر"
+        },
+        {
+         "control": "suggestion.3",
+         "id": "suggestion.3",
+         "kind": "action",
+         "label": "طقم الحدود"
+        },
+        {
+         "control": "suggestion.4",
+         "id": "suggestion.4",
+         "kind": "action",
+         "label": "طقم الخارج عن القانون"
+        },
+        {
+         "control": "suggestion.5",
+         "id": "suggestion.5",
+         "kind": "action",
+         "label": "طقم المزرعة"
+        },
+        {
+         "control": "suggestion.7",
+         "id": "suggestion.7",
+         "kind": "action",
+         "label": "طقم الفاكيرو"
+        }
+       ],
+       "id": "suggestions",
+       "kind": "group",
+       "label": "اقتراحات الخيّاط"
+      }
+     ],
+     "icon": "outfit",
+     "id": "tax.outfits",
+     "kind": "group",
+     "label": "الأطقم"
+    },
+    {
+     "control": "clothing.undress",
+     "id": "clothing.undress",
+     "kind": "action",
+     "label": "خلع كل الملابس"
     }
    ],
    "id": "root",
@@ -9821,6 +14311,8 @@
    "title": "خزانة الملابس"
   },
   "strings": {
+   "INVALID_DOB": "تاريخ ميلاد غير مقبول",
+   "INVALID_NAME": "حروف فقط — بلا أرقام أو رموز (تُقبل المسافة والفاصلة العليا والشرطة)",
    "advanced": "تفاصيل إضافية",
    "appearance": "مظهر الشخصية",
    "apply": "تطبيق",
@@ -9831,6 +14323,7 @@
    "close": "إغلاق",
    "confirm": "تأكيد",
    "dangerBody": "لا يمكن التراجع عن هذا الإجراء.",
+   "day": "اليوم",
    "details": "اختر القسم الذي تريد تعديله.",
    "discard": "تجاهل التعديلات",
    "dragRotate": "اسحب للتدوير",
@@ -9838,13 +14331,30 @@
    "equipped": "مرتداة",
    "error": "تعذر إكمال الطلب، حاول مجددًا.",
    "free": "مجاني",
+   "goldAmount": "%s ذهب",
+   "hideClothes": "إخفاء الملابس",
+   "identityInvalid": "قيمة غير صالحة",
    "leave": "سيتم إلغاء التعديلات غير المحفوظة.",
    "leaveTitle": "تعديلات غير محفوظة",
    "locked": "مقفلة",
+   "month": "الشهر",
+   "month.1": "يناير",
+   "month.10": "أكتوبر",
+   "month.11": "نوفمبر",
+   "month.12": "ديسمبر",
+   "month.2": "فبراير",
+   "month.3": "مارس",
+   "month.4": "أبريل",
+   "month.5": "مايو",
+   "month.6": "يونيو",
+   "month.7": "يوليو",
+   "month.8": "أغسطس",
+   "month.9": "سبتمبر",
    "nameHint": "أكمل اسم الشخصية من قسم الهوية.",
    "new": "جديدة",
    "none": "بدون",
    "owned": "مملوكة",
+   "ownedColors": "ألوانك المملوكة",
    "padHelp": "اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع",
    "price": "السعر",
    "random": "مظهر عشوائي",
@@ -9854,6 +14364,7 @@
    "save": "حفظ",
    "saving": "جارٍ التطبيق…",
    "search": "بحث…",
+   "showClothes": "إظهار الملابس",
    "stay": "متابعة التعديل",
    "total": "الإجمالي",
    "undo": "تراجع",
@@ -9865,77 +14376,18 @@
    "view.feet": "القدمان",
    "view.fullBody": "الجسم كاملًا",
    "view.hair": "الشعر",
+   "view.handLeft": "اليد اليسرى",
+   "view.handRight": "اليد اليمنى",
    "view.hands": "اليدان",
    "view.head": "الرأس",
    "view.lowerBody": "الجزء السفلي",
-   "view.upperBody": "الجزء العلوي"
+   "view.teeth": "الأسنان",
+   "view.upperBody": "الجزء العلوي",
+   "year": "السنة"
   },
   "tree": {
    "camera": "fullBody",
    "children": [
-    {
-     "camera": "fullBody",
-     "children": [
-      {
-       "children": [
-        {
-         "control": "outfit.7.equip",
-         "id": "outfit.7.equip",
-         "kind": "action",
-         "label": "ارتداء الطقم"
-        },
-        {
-         "control": "outfit.7.update",
-         "id": "outfit.7.update",
-         "kind": "action",
-         "label": "تحديث بالملابس الحالية"
-        },
-        {
-         "actionLabel": "تطبيق",
-         "control": "outfit.7.rename",
-         "id": "outfit.7.rename",
-         "kind": "text",
-         "label": "إعادة التسمية",
-         "maxLength": 24,
-         "value": "Work"
-        },
-        {
-         "confirmBody": "سيُحذف هذا الطقم نهائيًا ولا يمكن التراجع عن ذلك.",
-         "control": "outfit.7.delete",
-         "danger": true,
-         "id": "outfit.7.delete",
-         "kind": "action",
-         "label": "حذف الطقم"
-        }
-       ],
-       "id": "outfit.7",
-       "kind": "group",
-       "label": "Work"
-      },
-      {
-       "children": [
-        {
-         "actionLabel": "حفظ",
-         "clear": true,
-         "control": "outfit.new.name",
-         "id": "outfit.new.name",
-         "kind": "text",
-         "label": "اسم الطقم",
-         "maxLength": 24,
-         "placeholder": "اسم الطقم",
-         "required": true,
-         "value": ""
-        }
-       ],
-       "id": "outfit.new",
-       "kind": "group",
-       "label": "حفظ الطقم الحالي"
-      }
-     ],
-     "id": "outfits",
-     "kind": "group",
-     "label": "الأطقم"
-    },
     {
      "camera": "fullBody",
      "children": [
@@ -9989,11 +14441,13 @@
            "label": "خلع القطعة"
           }
          ],
+         "icon": "shirt",
          "id": "item.shirts_full",
          "kind": "group",
          "label": "القميص"
         }
        ],
+       "icon": "shirt",
        "id": "tax.upper",
        "kind": "group",
        "label": "الجزء العلوي"
@@ -10047,11 +14501,13 @@
            "label": "خلع القطعة"
           }
          ],
+         "icon": "pants",
          "id": "item.pants",
          "kind": "group",
          "label": "البنطال"
         }
        ],
+       "icon": "pants",
        "id": "tax.lower",
        "kind": "group",
        "label": "الجزء السفلي"
@@ -10106,19 +14562,90 @@
            "label": "خلع القطعة"
           }
          ],
+         "icon": "boots",
          "id": "item.boots",
          "kind": "group",
          "label": "الحذاء"
         }
        ],
+       "icon": "boots",
        "id": "tax.feet",
        "kind": "group",
        "label": "القدمان"
+      },
+      {
+       "camera": "fullBody",
+       "children": [
+        {
+         "children": [
+          {
+           "control": "outfit.7.equip",
+           "id": "outfit.7.equip",
+           "kind": "action",
+           "label": "ارتداء الطقم"
+          },
+          {
+           "control": "outfit.7.update",
+           "id": "outfit.7.update",
+           "kind": "action",
+           "label": "تحديث بالملابس الحالية"
+          },
+          {
+           "actionLabel": "تطبيق",
+           "control": "outfit.7.rename",
+           "id": "outfit.7.rename",
+           "kind": "text",
+           "label": "إعادة التسمية",
+           "maxLength": 24,
+           "value": "Work"
+          },
+          {
+           "confirmBody": "سيُحذف هذا الطقم نهائيًا ولا يمكن التراجع عن ذلك.",
+           "control": "outfit.7.delete",
+           "danger": true,
+           "id": "outfit.7.delete",
+           "kind": "action",
+           "label": "حذف الطقم"
+          }
+         ],
+         "id": "outfit.7",
+         "kind": "group",
+         "label": "Work"
+        },
+        {
+         "children": [
+          {
+           "actionLabel": "حفظ",
+           "clear": true,
+           "control": "outfit.new.name",
+           "id": "outfit.new.name",
+           "kind": "text",
+           "label": "اسم الطقم",
+           "maxLength": 24,
+           "placeholder": "اسم الطقم",
+           "required": true,
+           "value": ""
+          }
+         ],
+         "id": "outfit.new",
+         "kind": "group",
+         "label": "حفظ الطقم الحالي"
+        }
+       ],
+       "id": "outfits",
+       "kind": "group",
+       "label": "الأطقم"
+      },
+      {
+       "control": "clothing.undress",
+       "id": "clothing.undress",
+       "kind": "action",
+       "label": "خلع كل الملابس"
       }
      ],
      "id": "items",
      "kind": "group",
-     "label": "القطع الفردية",
+     "label": "الملابس",
      "searchable": true
     },
     {
@@ -10139,6 +14666,12 @@
            "id": "state.collar.open",
            "kind": "action",
            "label": "فتح"
+          },
+          {
+           "control": "state.shirt.off",
+           "id": "state.shirt.off",
+           "kind": "action",
+           "label": "خلع"
           }
          ],
          "id": "states.upper.shirts_full",
@@ -10149,6 +14682,26 @@
        "id": "states.upper",
        "kind": "group",
        "label": "الجزء العلوي"
+      },
+      {
+       "children": [
+        {
+         "children": [
+          {
+           "control": "state.pants.off",
+           "id": "state.pants.off",
+           "kind": "action",
+           "label": "خلع"
+          }
+         ],
+         "id": "states.lower.pants",
+         "kind": "group",
+         "label": "البنطال"
+        }
+       ],
+       "id": "states.lower",
+       "kind": "group",
+       "label": "الجزء السفلي"
       },
       {
        "children": [
@@ -10190,6 +14743,8 @@
    "title": "إجراءات الملابس"
   },
   "strings": {
+   "INVALID_DOB": "تاريخ ميلاد غير مقبول",
+   "INVALID_NAME": "حروف فقط — بلا أرقام أو رموز (تُقبل المسافة والفاصلة العليا والشرطة)",
    "advanced": "تفاصيل إضافية",
    "appearance": "مظهر الشخصية",
    "apply": "تطبيق",
@@ -10200,6 +14755,7 @@
    "close": "إغلاق",
    "confirm": "تأكيد",
    "dangerBody": "لا يمكن التراجع عن هذا الإجراء.",
+   "day": "اليوم",
    "details": "اختر القسم الذي تريد تعديله.",
    "discard": "تجاهل التعديلات",
    "dragRotate": "اسحب للتدوير",
@@ -10207,13 +14763,30 @@
    "equipped": "مرتداة",
    "error": "تعذر إكمال الطلب، حاول مجددًا.",
    "free": "مجاني",
+   "goldAmount": "%s ذهب",
+   "hideClothes": "إخفاء الملابس",
+   "identityInvalid": "قيمة غير صالحة",
    "leave": "سيتم إلغاء التعديلات غير المحفوظة.",
    "leaveTitle": "تعديلات غير محفوظة",
    "locked": "مقفلة",
+   "month": "الشهر",
+   "month.1": "يناير",
+   "month.10": "أكتوبر",
+   "month.11": "نوفمبر",
+   "month.12": "ديسمبر",
+   "month.2": "فبراير",
+   "month.3": "مارس",
+   "month.4": "أبريل",
+   "month.5": "مايو",
+   "month.6": "يونيو",
+   "month.7": "يوليو",
+   "month.8": "أغسطس",
+   "month.9": "سبتمبر",
    "nameHint": "أكمل اسم الشخصية من قسم الهوية.",
    "new": "جديدة",
    "none": "بدون",
    "owned": "مملوكة",
+   "ownedColors": "ألوانك المملوكة",
    "padHelp": "اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع",
    "price": "السعر",
    "random": "مظهر عشوائي",
@@ -10223,6 +14796,7 @@
    "save": "حفظ",
    "saving": "جارٍ التطبيق…",
    "search": "بحث…",
+   "showClothes": "إظهار الملابس",
    "stay": "متابعة التعديل",
    "total": "الإجمالي",
    "undo": "تراجع",
@@ -10234,10 +14808,14 @@
    "view.feet": "القدمان",
    "view.fullBody": "الجسم كاملًا",
    "view.hair": "الشعر",
+   "view.handLeft": "اليد اليسرى",
+   "view.handRight": "اليد اليمنى",
    "view.hands": "اليدان",
    "view.head": "الرأس",
    "view.lowerBody": "الجزء السفلي",
-   "view.upperBody": "الجزء العلوي"
+   "view.teeth": "الأسنان",
+   "view.upperBody": "الجزء العلوي",
+   "year": "السنة"
   },
   "tree": {
    "children": [
@@ -10256,6 +14834,12 @@
          "id": "state.collar.open",
          "kind": "action",
          "label": "فتح"
+        },
+        {
+         "control": "state.shirt.off",
+         "id": "state.shirt.off",
+         "kind": "action",
+         "label": "خلع"
         }
        ],
        "id": "states.upper.shirts_full",
@@ -10266,6 +14850,26 @@
      "id": "states.upper",
      "kind": "group",
      "label": "الجزء العلوي"
+    },
+    {
+     "children": [
+      {
+       "children": [
+        {
+         "control": "state.pants.off",
+         "id": "state.pants.off",
+         "kind": "action",
+         "label": "خلع"
+        }
+       ],
+       "id": "states.lower.pants",
+       "kind": "group",
+       "label": "البنطال"
+      }
+     ],
+     "id": "states.lower",
+     "kind": "group",
+     "label": "الجزء السفلي"
     },
     {
      "children": [

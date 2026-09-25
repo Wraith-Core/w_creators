@@ -44,7 +44,8 @@ test('Back from a search result returns to the result list', () => {
 
 test('the editor wires the search level into Back / Escape', () => {
   const editor = src('Editor.jsx');
-  assert.match(editor, /backAction\(\{confirm, pathLength: validPath\.length, dirty, search\}\)/);
+  // direct: the creator's root Back ("change the sex") keeps the look, so it never asks
+  assert.match(editor, /backAction\(\{confirm, pathLength: validPath\.length, dirty, search(, direct: !!payload\.backDirect)?\}\)/);
   assert.match(editor, /next === 'clearSearch'\) setSearch\(''\)/);
   assert.match(editor, /popTarget\(validPath, origin\)/);
   assert.match(editor, /setOrigin\(searchOrigin\(validPath, next, search\)\)/);

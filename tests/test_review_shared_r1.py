@@ -213,7 +213,8 @@ class NativesDocTests(unittest.TestCase):
 
     def test_used_by_cells_match_the_callers(self):
         callers = [rel for rel, src in self.lua_sources() if 'placeOnGround' in src]
-        self.assertEqual(callers, ['client/scene/scene.lua'])
+        # the creator scene, and the store's fitting stand / the way back to the counter
+        self.assertEqual(callers, ['client/scene/scene.lua', 'client/services/locations.lua'])
         self.assertNotIn('spawn', self.row('WCNative.ped.placeOnGround').split('|')[5])
         for fn in ('applyShopItem', 'removeTag'):
             self.assertEqual([rel for rel, src in self.lua_sources() if 'WCNative.clothing.' + fn in src], [])

@@ -29,7 +29,7 @@
 --
 --  Access: command /clothing, keybind 'wc_clothing_actions' (default key Config.Keys.clothingActions,
 --  none when unset), exports OpenClothingActions, SetClothingState, ToggleHat, ToggleBandana,
---  ToggleSleeves, RemoveClothingCategory, RestoreClothingCategory (§13).
+--  ToggleSleeves, RemoveClothingCategory, RestoreClothingCategory, GetClothingActions (§13).
 --  Controls: 'state.<groupId>.<value>' (§8.4).
 -- =====================================================================
 
@@ -63,10 +63,22 @@ local ACTION_LABELS = {
     poncho  = { on = 'ارتداء البونشو', off = 'خلع البونشو' },
     gloves  = { on = 'ارتداء القفازات', off = 'خلع القفازات' },
     boots   = { under = 'إدخال الحذاء تحت البنطال', over = 'إخراج الحذاء فوق البنطال' },
+    shirt   = { on = 'ارتداء القميص', off = 'خلع القميص' },
+    pants   = { on = 'ارتداء البنطال', off = 'خلع البنطال' },
+    loadout = { left = 'نقل العتاد إلى الكتف الأيسر', right = 'نقل العتاد إلى الكتف الأيمن' },
+    vestTuck = { under = 'إدخال الصديري تحت البنطال', over = 'إخراج الصديري فوق البنطال' },
+    bodyUpper = { auto = 'الجزء العلوي: تلقائي' },
+    bodyLower = { auto = 'الجزء السفلي: تلقائي' },
 }
 local CATEGORY_LABELS = {
     cloaks = { on = 'ارتداء العباءة', off = 'خلع العباءة' },
 }
+-- A woman's vest is a corset: the same state, her garment's name
+local FEMALE_LABELS = {
+    vestTuck = { under = 'إدخال المشدّ تحت البنطال', over = 'إخراج المشدّ فوق البنطال' },
+}
+-- A body state the game names (the body-part fix): the label carries the game's own name
+local BODY_STATE_LABELS = { bodyUpper = 'الجزء العلوي: %s', bodyLower = 'الجزء السفلي: %s' }
 
 -- Which clip of Config.ClothingStates.animations[group] ('up' | 'down') a target value plays when
 -- the animation has no clip named after the value itself.
@@ -110,7 +122,8 @@ local function call(name, ...)
 end
 
 local function pedExists(ped)
-    return type(ped) == 'number' and ped ~= 0 and DoesEntityExist(ped) == true
+    -- BOOL natives answer 1 (not true) on this runtime: never compare them with == true
+    return type(ped) == 'number' and ped ~= 0 and not not DoesEntityExist(ped)
 end
 
 local function enabled()
@@ -222,10 +235,86 @@ local function actionLabel(app, groupId, value)
     local category = WCClothingStates.category(app, groupId)
     local byCategory = category and CATEGORY_LABELS[category]
     if byCategory and byCategory[value] then return byCategory[value] end
+    local bySex = app.sex == 'female' and FEMALE_LABELS[groupId]
+    if bySex and bySex[value] then return bySex[value] end
     local byGroup = ACTION_LABELS[groupId]
     if byGroup and byGroup[value] then return byGroup[value] end
+    if BODY_STATE_LABELS[groupId] then
+        -- already translated (the game's state name is not a dictionary key); locale() passes it on
+        return L(BODY_STATE_LABELS[groupId], value)
+    end
     local values = Config.ClothingStates and Config.ClothingStates.valueLabels or {}
     return values[value] or value
+end
+
+-- ---------------------------------------------------------------------
+--  What the worn item supports: the game's own wearable states of the item
+-- ---------------------------------------------------------------------
+
+local itemStateCache = {} -- ['<u32>:<sex>'] = { [u32 state] = true } | false (the game told nothing)
+local stateHashes = {}    -- [state name] = u32 | false
+
+local function stateHash(name)
+    local h = stateHashes[name]
+    if h == nil then
+        h = WCUtil.u32(GetHashKey(name)) or false
+        stateHashes[name] = h
+    end
+    return h or nil
+end
+
+--- The wearable states the game lists for an item worn by a sex, as a set of u32 hashes, or nil
+--  when the game answers nothing (the native is missing or the item unknown). Cached per item.
+function C.itemStates(hash, sex)
+    local u = WCUtil.u32(hash)
+    if not u or u == 0 then return nil end
+    local key = ('%d:%s'):format(u, tostring(sex))
+    local cached = itemStateCache[key]
+    if cached == nil then
+        -- the natives take the wearer's metaped type: the player's own ped wears this appearance
+        -- (the /clothing panel, the store and the wardrobe dress the player ped)
+        local ok, list = pcall(WCNative.clothing.wearableStates, u, PlayerPedId())
+        -- no answer at all (no ped yet, a failing native) is not remembered: asked again next time
+        if not ok or type(list) ~= 'table' then return nil end
+        cached = false
+        if #list > 0 then
+            cached = {}
+            for _, s in ipairs(list) do cached[s] = true end
+        end
+        itemStateCache[key] = cached
+    end
+    return cached or nil
+end
+
+--- The item a state group acts on in an appearance (the equipped garment, or the body item).
+local function wornItem(app, groupId)
+    local def = WCClothingStates.byId[groupId]
+    local category = def and WCClothingStates.category(app, groupId)
+    if not category then return nil end
+    if def.mechanism == 'bodyWearable' then
+        local body = type(app.body) == 'table' and app.body or {}
+        return def.body == 'lower' and body.lower or body.upper
+    end
+    return app.clothing.equipped[category]
+end
+
+--- Does the worn item have the game state a value needs? A garment the game gives no list for is
+--  let through (the server and the pipeline decide); a garment whose list lacks the state is not
+--  (a neckerchief that cannot be raised over the face). A body state is offered only when the game
+--  lists it: the body-part fix never guesses among dozens of names.
+function C.supports(app, groupId, value)
+    local def = WCClothingStates.byId[groupId]
+    if not def or type(app) ~= 'table' then return true end
+    if def.mechanism == 'bodyWearable' then
+        if value == 'auto' then return true end
+        local states = C.itemStates(wornItem(app, groupId), app.sex)
+        return states ~= nil and states[stateHash(value)] == true
+    end
+    local name = def.mechanism == 'wearable' and type(def.wearable) == 'table' and def.wearable[value] or nil
+    if type(name) ~= 'string' or name == 'base' then return true end
+    local states = C.itemStates(wornItem(app, groupId), app.sex)
+    if not states then return true end
+    return states[stateHash(name)] == true
 end
 
 --- The applicable actions of an appearance (default: the saved one), as a hierarchy:
@@ -236,11 +325,12 @@ end
 function C.available(app)
     app = app or WCState.appearance
     if type(app) ~= 'table' then return {} end
-    local ok, actions = pcall(WCClothingStates.actions, app)
+    -- the body-part groups too: C.supports narrows them to the worn body item's own states
+    local ok, actions = pcall(WCClothingStates.actions, app, true)
     if not ok or type(actions) ~= 'table' then return {} end
     local groups, subs = taxonomyIndex()
     local out, groupAt, itemAt = {}, {}, {}
-    for _, a in ipairs(actions) do
+    local function place(a)
         local parent = type(a.parent) == 'table' and a.parent or {}
         local groupId = type(parent[1]) == 'string' and parent[1] or 'other'
         local itemId = type(parent[2]) == 'string' and parent[2] or a.group
@@ -277,6 +367,17 @@ function C.available(app)
             }
         end
     end
+    for _, found in ipairs(actions) do
+        -- only the values the worn item really has (the game's own states of the item)
+        local targets = {}
+        for _, value in ipairs(found.targets or {}) do
+            if C.supports(app, found.group, value) then targets[#targets + 1] = value end
+        end
+        if #targets > 0 then
+            place({ group = found.group, parent = found.parent, label = found.label, current = found.current,
+                    targets = targets })
+        end
+    end
     -- by `order`, then by the config position (table.sort is not stable): the same deterministic
     -- order as the editor's taxonomy (WCEditorTree.ordered)
     local function byOrder(list)
@@ -288,6 +389,47 @@ function C.available(app)
     byOrder(out)
     for _, g in ipairs(out) do byOrder(g.items) end
     return out
+end
+
+--- The same list as C.available, flattened to one row per state group and made safe to send
+--  across an export boundary (plain strings and numbers, no nested functions or metatables).
+--
+--  ★ The flattening lives HERE, not in the caller: which action represents a garment, and what that
+--    garment is called, is clothing knowledge. A radial menu that knows nothing about coats should
+--    not have to decide it. Rows come out in C.available's deterministic order.
+--
+--  status: 'disabled'     the service or Config.ClothingStates is off      -> hide the menu entirely
+--          'no_character' no appearance loaded yet                          -> hide the menu entirely
+--          'ok' / 'empty' a real answer; 'empty' means nothing is actionable right now
+---@return table { status, rows = { { group, value, label, item, itemId, icon, control } } }
+function C.actionList()
+    if not enabled() then return { status = 'disabled', rows = {} } end
+    if type(WCState.appearance) ~= 'table' then return { status = 'no_character', rows = {} } end
+    local ok, tree = pcall(C.available)
+    if not ok or type(tree) ~= 'table' then
+        WCDebug.warn('clothing', 'the action list could not be built: %s', tostring(tree))
+        return { status = 'error', rows = {} }
+    end
+    local rows = {}
+    for _, group in ipairs(tree) do
+        for _, item in ipairs(group.items or {}) do
+            for _, action in ipairs(item.actions or {}) do
+                rows[#rows + 1] = {
+                    group   = tostring(action.group or ''),
+                    value   = tostring(action.value or ''),
+                    -- C.available answers locale keys: translated here to the player's language, since
+                    -- the caller (the wheel) shows them as they are
+                    label   = tostring(L(action.label or '')),
+                    item    = tostring(L(item.label or '')),  -- the garment it acts on
+                    itemId  = tostring(item.id or ''),
+                    icon    = tostring(action.group or ''),   -- art id; the caller resolves it
+                    control = tostring(action.control or ''),
+                    current = tostring(action.current or ''),   -- the state the garment is in now
+                }
+            end
+        end
+    end
+    return { status = (#rows > 0) and 'ok' or 'empty', rows = rows }
 end
 
 --- The visibility group acting on a clothing category (nil for other categories).
@@ -314,16 +456,26 @@ local function animationFor(groupId, target)
     if not animationsOn() then return nil end
     local anims = Config.ClothingStates and Config.ClothingStates.animations or {}
     local anim = anims[groupId]
-    if type(anim) ~= 'table' or type(anim.dict) ~= 'string' then return nil end
-    local clip = type(anim.clips) == 'table' and anim.clips[target] or nil
-    if type(clip) ~= 'string' then
+    if type(anim) ~= 'table' then return nil end
+    local entry = type(anim.clips) == 'table' and anim.clips[target] or nil
+    local dict, clip, at = anim.dict, nil, nil
+    if type(entry) == 'table' then
+        -- { dict?, clip, at? }: a clip may live in another dictionary than the group's
+        dict, clip, at = type(entry.dict) == 'string' and entry.dict or anim.dict, entry.clip, tonumber(entry.at)
+    elseif type(entry) == 'string' then
+        clip = entry
+    else
         local direction = (GROUP_CLIP[groupId] and GROUP_CLIP[groupId][target]) or VALUE_CLIP[target]
         clip = direction and anim[direction]
     end
-    if type(clip) ~= 'string' then return nil end
+    if type(dict) ~= 'string' or type(clip) ~= 'string' then return nil end
     local duration = WCUtil.int(anim.duration, 100, 10000, 1000)
     local midpoint = WCUtil.int(anim.midpoint, 0, duration, duration // 2)
-    return { dict = anim.dict, clip = clip, duration = duration, midpoint = midpoint }
+    -- no fixed duration: the clip's own length is read once it is loaded (startAnimation)
+    local auto = anim.duration == nil
+    return { dict = dict, clip = clip, duration = duration, midpoint = midpoint, auto = auto,
+             at = math.max(.05, math.min(.95, at or .5)), maxMs = WCUtil.int(anim.maxMs, 300, 10000, 3000),
+             onMount = anim.onMount == true }
 end
 
 local function stopAnimation(ped, anim)
@@ -341,6 +493,17 @@ local function startAnimation(ped, anim)
     if not loaded then
         WCDebug.log('clothing', 'animation %s not loaded: %s', anim.dict, tostring(err))
         return false
+    end
+    if anim.auto then
+        -- the game's own length of the clip, cut at maxMs; 0 = the dictionary has no such clip
+        local okD, seconds = pcall(GetAnimDuration, anim.dict, anim.clip)
+        seconds = okD and tonumber(seconds) or 0
+        if seconds <= 0 then
+            WCDebug.log('clothing', 'animation %s/%s: the game has no such clip', anim.dict, anim.clip)
+            return false
+        end
+        anim.duration = math.floor(math.min(seconds * 1000, anim.maxMs))
+        anim.midpoint = math.floor(anim.duration * anim.at)
     end
     local played, perr = pcall(w.playAnim, ped, anim.dict, anim.clip, 4.0, -4.0, anim.duration, ANIM_FLAGS)
     if not played then
@@ -360,7 +523,7 @@ local function runToMidpoint(ped, anim)
         Wait(ANIM_STEP)
         if st.stopped then return false, 'stopped' end
         if PlayerPedId() ~= ped then return false, 'ped' end
-        local why = blocked(ped, false) or flowActive()
+        local why = blocked(ped, anim.onMount and anim.riding) or flowActive()
         if why then return false, why end
     end
     return true
@@ -373,7 +536,28 @@ end
 local function applyLocal(ped, app, groupId, value)
     local ok, err = Appearance.ApplyClothingState(ped, app, groupId, value)
     if not ok then return false, err end
-    Appearance.Refresh(ped)
+    Appearance.Refresh(ped)            -- the garment is committed: w_lib's helpers read it back
+    -- `app` does not hold the new value yet (the server confirms it later): a copy does
+    local copy = WCUtil.copy(app)
+    copy.clothing = type(copy.clothing) == 'table' and copy.clothing or {}
+    copy.clothing.states = type(copy.clothing.states) == 'table' and copy.clothing.states or {}
+    copy.clothing.states[groupId] = value
+    -- ★ a garment going back on (the shirt, the trousers): the states that act on it (sleeves, collar,
+    --   boots) are drawn again from their saved value. A full render while it was off reset them to
+    --   base (resetWearable), which also overwrote w_lib's remembered state, so nothing else redraws
+    --   them.
+    if value ~= 'off' then
+        local any = false
+        for _, def in ipairs(WCClothingStates.groups) do
+            if def.hiddenBy == groupId and WCClothingStates.applicable(copy, def.id) then
+                any = Appearance.ApplyClothingState(ped, copy, def.id, WCClothingStates.current(copy, def.id)) or any
+            end
+        end
+        if any then Appearance.Refresh(ped) end
+    end
+    -- ★ the hair's own state, on the committed change: taking the hat off, or raising / lowering the
+    --   bandana, can leave a long hair tucked with no crown (Appearance.SettleHair)
+    if Appearance.SettleHair(ped, copy) then Appearance.Refresh(ped) end
     return true
 end
 
@@ -488,14 +672,22 @@ local function perform(groupId, target)
         return WCResult.ok({ group = groupId, value = target, changed = false,
                              states = WCUtil.copy(statesOf(app) or {}) })
     end
+    -- the worn item must have the state (a neckerchief that cannot be raised, a body item without
+    -- the chosen state): the game says so, nothing is played or sent
+    if not C.supports(app, groupId, target) then return fail('STATE_NOT_APPLICABLE', { reason = 'item' }) end
     local flow = flowActive()
     if flow then
         WCDebug.log('clothing', 'refused %s=%s: %s', groupId, target, flow)
         return refusal(flow)
     end
     local anim = animationFor(groupId, target)
-    -- riding (a mount or a vehicle) is allowed only when no animation has to play
-    local why = blocked(PlayerPedId(), anim == nil)
+    -- ★ riding (a mount or a vehicle) never refuses the change: a clip made for riding too (onMount:
+    --   the bandana, the mask, the hat) plays, any other change happens without its clip
+    local riding = mounted(PlayerPedId())
+    if anim and not anim.onMount and riding then anim = nil end
+    -- a rider's clip may go on while he rides; getting on a horse or into a wagon mid-clip still stops it
+    if anim then anim.riding = riding end
+    local why = blocked(PlayerPedId(), anim == nil or anim.onMount)
     if why then
         WCDebug.log('clothing', 'refused %s=%s: %s', groupId, target, why)
         return refusal(why)
@@ -548,6 +740,8 @@ function C.applyStates(ped, app)
         end
     end
     if any then Appearance.Refresh(ped) end
+    -- a state drawn here (a raised bandana) can tuck a long hair: without a hat, its crown goes
+    if Appearance.SettleHair(ped, app) then Appearance.Refresh(ped) end
     return #failed == 0, failed
 end
 
@@ -720,11 +914,81 @@ end
 
 export('OpenClothingActions', function() return C.openPanel() end)
 export('SetClothingState', function(groupId, value) return C.perform(groupId, value) end)
+export('GetClothingActions', function() return C.actionList() end)
 export('ToggleHat', function() return C.toggle('hat') end)
 export('ToggleBandana', function() return C.toggle('bandana') end)
 export('ToggleSleeves', function() return C.toggle('sleeves') end)
 export('RemoveClothingCategory', function(category) return C.removeCategory(category) end)
 export('RestoreClothingCategory', function(category) return C.restoreCategory(category) end)
+
+--- Is the local character's bandana raised over the face? (Other resources: a masked player.)
+function C.bandanaUp()
+    local app = WCState.appearance
+    if type(app) ~= 'table' or not WCClothingStates.byId.bandana then return false end
+    return WCClothingStates.applicable(app, 'bandana') and WCClothingStates.current(app, 'bandana') == 'up'
+end
+export('IsBandanaUp', function() return C.bandanaUp() end)
+
+-- ---------------------------------------------------------------------
+--  One command per state group (Config.ClothingStates.commands): /hat, /gloves, ... flip their
+--  group through C.toggle, so the guards, the animation and the server check all apply.
+-- ---------------------------------------------------------------------
+local COMMAND_HELP = 'تبديل: %s'
+C.commands = {} -- [command] = groupId, the ones registered
+
+--- Is a command of this name already registered by another resource?
+local function registeredElsewhere(name)
+    if type(GetRegisteredCommands) ~= 'function' then return false end
+    local ok, list = pcall(GetRegisteredCommands)
+    if not ok or type(list) ~= 'table' then return false end
+    local me = GetCurrentResourceName()
+    for _, entry in ipairs(list) do
+        if type(entry) == 'table' and type(entry.name) == 'string' and entry.name:lower() == name:lower()
+            and entry.resource ~= me then
+            return true
+        end
+    end
+    return false
+end
+
+local function suggest()
+    for name, groupId in pairs(C.commands) do
+        local def = WCClothingStates.byId[groupId]
+        pcall(TriggerEvent, 'chat:addSuggestion', '/' .. name, L(COMMAND_HELP, L(def and def.label or groupId)))
+    end
+end
+
+--- Register the configured commands once. A name given twice, one another resource registered, an
+--  unknown group or a malformed name is skipped with a warning. Returns the number registered.
+function C.registerCommands()
+    local cfg = Config.ClothingStates and Config.ClothingStates.commands
+    if type(cfg) ~= 'table' then return 0 end
+    local taken = { [COMMAND] = true }
+    for name in pairs(C.commands) do taken[name:lower()] = true end
+    local groupIds = {}
+    for groupId in pairs(cfg) do groupIds[#groupIds + 1] = tostring(groupId) end
+    table.sort(groupIds) -- the same winner every start when two groups name one command
+    local count = 0
+    for _, groupId in ipairs(groupIds) do
+        local name = cfg[groupId]
+        if not WCClothingStates.byId[groupId] then
+            WCDebug.warn('clothing', 'command for unknown state group %s skipped', groupId)
+        elseif type(name) ~= 'string' or not name:match('^[%w_]+$') or #name > 32 then
+            WCDebug.warn('clothing', 'command name of %s is not valid: skipped', groupId)
+        elseif taken[name:lower()] then
+            WCDebug.warn('clothing', 'command /%s is given twice (%s): skipped', name, groupId)
+        elseif registeredElsewhere(name) then
+            WCDebug.warn('clothing', 'command /%s belongs to another resource: skipped', name)
+        else
+            taken[name:lower()] = true
+            C.commands[name] = groupId
+            RegisterCommand(name, function() C.toggle(groupId) end, false)
+            count = count + 1
+        end
+    end
+    suggest()
+    return count
+end
 
 local function openFromInput()
     if C.isPanelOpen() then return end
@@ -749,6 +1013,8 @@ end
 
 if WCServices.enabled('clothingActions') then
     RegisterCommand(COMMAND, function() openFromInput() end, false)
+    C.registerCommands()
+    OnLanguageChange(function() suggest() end)
     if type(w.addKeybind) == 'function' then
         local key = Config.Keys and Config.Keys.clothingActions
         local ok, err = pcall(w.addKeybind, {
@@ -761,6 +1027,53 @@ if WCServices.enabled('clothingActions') then
         if not ok then WCDebug.warn('clothing', 'keybind failed: %s', tostring(err)) end
     end
 end
+
+-- ---------------------------------------------------------------------
+--  A hat that leaves the head outside this controller
+-- ---------------------------------------------------------------------
+-- ★ The game can take the hat off the player's head by itself: a punch, a fall from the horse or a
+--   shot knocks it off, and no path of this resource or of w_lib runs then. A long hair the game
+--   tucked while the hat was on keeps that state, drawn without its crown, until the next clothing
+--   change runs the hair rule. So the hat on the head is watched (a category check, once a second)
+--   and the hair rule runs once when the hat goes. It is w_lib's own check on the ped
+--   (w.component.restoreHairState), not Appearance.SettleHair: the saved appearance still says the
+--   hat is on. A flow or an action of this resource owns the ped then and settles the hair itself,
+--   so the check waits for it to end.
+local HAT_WATCH_STEP = 1000
+
+local function hatOnHead(ped)
+    -- the export may hand the function back as a callable funcref (type 'table'): presence only
+    if not w.component.isCategoryEquiped then return false end
+    local ok, on = pcall(w.component.isCategoryEquiped, ped, 'hats')
+    return ok and on == true
+end
+
+CreateThread(function()
+    local watched, hadHat = nil, false
+    while not st.stopped do
+        Wait(HAT_WATCH_STEP)
+        local ped = PlayerPedId()
+        if type(WCState.appearance) ~= 'table' or not pedExists(ped) then
+            watched, hadHat = nil, false
+        elseif ped ~= watched then
+            watched, hadHat = ped, hatOnHead(ped)
+        elseif not (C.busy() or isDown(ped) or flowActive()) then
+            local hat = hatOnHead(ped)
+            if hadHat and not hat and w.component.restoreHairState then
+                local ok, changed = pcall(w.component.restoreHairState, ped)
+                -- committed the way w_lib commits a wearable state (its refresh marks the metaped
+                -- components updated first, as the game's scripts do): no other w_lib pass follows
+                -- here to commit it, unlike the clothing actions
+                if ok and changed == true then
+                    if not (w.component.refreshPed and pcall(w.component.refreshPed, ped)) then
+                        Appearance.Refresh(ped)
+                    end
+                end
+            end
+            hadHat = hat
+        end
+    end
+end)
 
 -- ---------------------------------------------------------------------
 --  Cleanup

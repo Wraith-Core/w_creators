@@ -9,6 +9,7 @@ export default defineConfig({
   build: {
     outDir: 'build',
     emptyOutDir: true,
-    target: 'chrome110',
+    // RedM's CEF is Chromium 87-class: the bundle's JS and CSS are lowered to it
+    target: 'chrome87',
   },
 });

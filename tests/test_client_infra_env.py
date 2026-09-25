@@ -269,6 +269,9 @@ class SceneTests(unittest.TestCase):
         self.assertLessEqual(attempts, expected + 2)
 
     def test_room_maps_are_unloaded_on_the_final_exit_and_on_stop(self):
+        # a room built from maps (the theatre needs none; the old floating studio had three): the
+        # maps load() requested are removed again, and only those
+        self.run('Config.Scene.imaps = { 183712523, -1699673416, 1679934574 }')
         maps = self.rt.py(self.e('Config.Scene.imaps'))
         self.run('IplInactive[Config.Scene.imaps[1]] = true; clearLog(); CreatorScene.load()')
         self.assertEqual(self.e('count("RequestIplByHash")'), 1)

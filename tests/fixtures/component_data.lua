@@ -1,5 +1,5 @@
 -- tests/fixtures/component_data.lua
--- Copied from w_lib/modules/component/g_shared.lua (w.component.data.palettes / .expressions).
+-- Copied from w_lib/modules/component/g_shared.lua (w.component.data.palettes / .expressions / .wearableStates).
 return {
   palettes = {
   "generic_wagon_palette",
@@ -115,5 +115,96 @@ return {
 
   calves = 42067,
   thighs = 64834,
+},
+  wearableStates = {
+  shirts_full = {
+    -- first digit for collar : 0 = closed/1 = opened
+    -- second digit for sleeve : 0 = full/1 = rolled
+    [00] = "base",
+    [01] = "closed_collar_rolled_sleeve",
+    [10] = "open_collar_full_sleeve",
+    [11] = "open_collar_rolled_sleeve",
+  },
+  neckwear = {
+    [0] = "base",   --down
+    [1] = "mask_up" --up
+  },
+  boots = {
+    [0] = "base",       --upper
+    [1] = "under_pants" --under
+  },
+  loadouts = {
+    [0] = "base",       --right
+    [1] = "base_right", --left
+  },
+  vests = {
+    [0] = "base",       --upper
+    [1] = "under_pants" --under
+  },
+  hair = {
+    [0] = "base",
+    [1] = "pomade"
+  },
+  others = {
+    "base_coat_open",
+    "base_coat_open_glove",
+    "base_glove",
+    "base_vest",
+    "base_vest_coat_open",
+    "base_overalls",
+    "base_overalls_coat_open",
+    "open_collar_full_sleeve",
+    "open_collar_full_sleeve_coat_open",
+    "open_collar_full_sleeve_vest",
+    "open_collar_full_sleeve_vest_coat_open",
+    "open_collar_full_sleeve_overalls",
+    "open_collar_full_sleeve_overalls_coat_open",
+    "closed_collar_rolled_sleeve",
+    "closed_collar_rolled_sleeve_vest",
+    "closed_collar_rolled_sleeve_overalls",
+    "open_collar_rolled_sleeve",
+    "open_collar_rolled_sleeve_vest",
+    "open_collar_rolled_sleeve_overalls",
+    "gown",
+    "base_tucked",
+    "pomade_tucked",
+    "tuck",
+    "dummy",
+    "stocking",
+    "short_pants",
+    "shirt_full_sleeve",
+    "short_boots_under_pants",
+    "under_boots",
+    "under_spats",
+    "under_chaps",
+    "under_ripped_pants",
+    "shirt_rolled_sleeve",
+    "shirt_rolled_sleeve_archer_glove",
+    "shirt_rolled_sleeve_gunslinger_glove",
+    "shirt_rolled_sleeve_fingerless_glove",
+    "shirt_rolled_sleeve_glove",
+    "shirt_full_sleeve_archer_glove",
+    "shirt_full_sleeve_gunslinger_glove",
+    "shirt_full_sleeve_fingerless_glove",
+    "shirt_full_sleeve_glove",
+    "base_vest_coat_open_archer_glove",
+    "base_vest_coat_open_gunslinger_glove",
+    "base_vest_coat_open_fingerless_glove",
+    "base_vest_coat_open_glove",
+    "base_vest_gunslinger_glove",
+    "base_vest_archer_glove",
+    "base_vest_fingerless_glove",
+    "base_vest_glove",
+    "base_archer_glove",
+    "base_gunslinger_glove",
+    "base_fingerless_glove",
+    "base_coat_open_archer_glove",
+    "base_coat_open_gunslinger_glove",
+    "base_coat_open_fingerless_glove",
+    "shirt_009",
+    "closed_collar_rolled_sleeve_vest_coat_open",
+    "closed_collar_rolled_sleeve_coat_open",
+    "hidden"
+  }
 },
 }

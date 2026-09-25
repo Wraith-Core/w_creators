@@ -6,6 +6,37 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from test_server_characters_flow import server_runtime  # noqa: E402
+from harness import W_LIB, read  # noqa: E402
+
+# wc_respawn names its target by citizen id (w.citizen, w_lib modules/citizen). The REAL module is
+# loaded over w_lib's framework bridge (no w_core here): player 1's character in play is citizen
+# CitizenOf[1] once w_creators has an active character for him; CitizenRows are the saved rows.
+CITIZEN = r'''
+CitizenOf = { [1] = '7' }
+CitizenRows = {
+    ['7'] = { citizenid = '7', license = 'license:p1', charinfo = '{"firstname":"John","lastname":"Walker"}' },
+    ['OMG95204'] = { citizenid = 'OMG95204', license = 'license:p1', charinfo = '{"firstname":"Old","lastname":"Form"}' },
+    ['55'] = { citizenid = '55', license = 'license:p9', charinfo = '{"firstname":"Off","lastname":"Line"}' },
+}
+local base = exports
+exports = setmetatable({ w_lib = {
+    FwGetCharacterIdentifier = function(_, src) if WCCharacters.active(src) then return CitizenOf[src] end end,
+    FwGetCharacterName = function(_, src) return 'John Walker' end,
+    FwGetIdentifier = function(_, src) return 'license:p' .. tostring(src) end,
+    FwCharacterRows = function(_, field, value)
+        local row = field == 'citizenid' and CitizenRows[tostring(value)] or nil
+        return row and { row } or {}
+    end,
+} }, getmetatable(base))
+w.createModule = function(name) w[name] = w[name] or {} return w[name] end
+'''
+
+
+def load_citizen(rt):
+    """w.citizen (the real w_lib module) over the fake bridge above."""
+    rt.run(CITIZEN)
+    for part in ('shared', 'server'):
+        rt.lua.execute(read(W_LIB / 'modules' / 'citizen' / (part + '.lua')), name='@w_lib/modules/citizen/%s.lua' % part)
 
 ENTITIES = r'''
 entities = {}
@@ -18,7 +49,9 @@ function GetEntityType(e) return 1 end
 function GetEntityModel(e) return GetHashKey(entities[e - 5000].model) end
 function SetEntityRoutingBucket(e, b) entities[e - 5000].bucket = b end
 function GetEntityRoutingBucket(e) return entities[e - 5000].bucket or 0 end
-anchor = vector3(-561.22, -3776.26, 239.16)
+-- the creator scene's anchor, read from the config (the room moved from the floating studio to the
+-- Saint Denis theatre; the scene checks follow Config.Scene wherever it is)
+anchor = vector3(Config.Scene.anchor[1], Config.Scene.anchor[2], Config.Scene.anchor[3])
 '''
 
 
@@ -72,7 +105,7 @@ class SceneTests(Base):
         self.rt.run('Config.Characters.allowSwitch = false')
         r = self.call('scene:prepare', 1)
         self.assertEqual(r.code, 'SERVICE_DISABLED')
-        self.rt.run('Config.Characters.allowSwitch = true; health[1] = 0')
+        self.rt.run('Config.Characters.allowSwitch = true; dead[1] = true')
         self.assertEqual(self.call('scene:prepare', 1).code, 'BUSY')
         self.assertEqual(self.bucket(), 0)
         self.assertEqual(self.e('WCCharacters.active(1).charid'), 'vorp:1')
@@ -237,9 +270,12 @@ class SpawnTests(Base):
 
     def test_validate_last(self):
         v = self.e('WCSpawnServer.validateLast')
-        for bad in ('{ x = 1/0, y = 1, z = 1 }', '{ x = 0, y = 0, z = 0 }', '{ x = -561.0, y = -3776.0, z = 239.0 }',
+        # '{ x = 2543.0, ... }' stands on the creator stage (within sceneExclusionRadius of the anchor)
+        for bad in ('{ x = 1/0, y = 1, z = 1 }', '{ x = 0, y = 0, z = 0 }', '{ x = 2543.0, y = -1306.0, z = 48.0 }',
                     '{ x = 1, y = 1, z = 9000 }', '"str"', '{ x = "a", y = 1, z = 1 }'):
             self.assertIsNone(v(self.e(bad)), bad)
+        # a character saved in central Saint Denis, 80 m from the theatre, keeps its last location
+        self.assertIsNotNone(v(self.e('{ x = 2600.0, y = -1250.0, z = 52.0 }')))
         self.assertEqual(v(self.e('{ x = "5", y = 6, z = 7, w = 90 }')).heading, 90)
 
     def test_spawn_event_and_direct_paths(self):
@@ -270,22 +306,32 @@ class SpawnTests(Base):
 
 
 class RespawnTests(Base):
+    def setUp(self):
+        super().setUp()
+        load_citizen(self.rt)
+
     def events(self):
         return self.rt.client_events('w_creators:client:respawn')
 
     def command(self, src, *args):
         self.rt.run('Events.commands.wc_respawn.fn(%d, { %s })' % (src, ', '.join('"%s"' % a for a in args)))
 
+    def ready(self):
+        """Player 1 in the world (citizen 7): active and past the login spawn."""
+        self.activate()
+        self.assertTrue(self.call('spawn:choose', 1, 'valentine').ok)
+
     def test_console_and_ace_admins_respawn_an_active_player(self):
-        self.command(0, '1')
+        self.command(0, '7')
         self.assertEqual(len(self.events()), 0)                               # no active character
+        self.assertEqual(self.e('WCRespawnServer.admin(0, "7").code'), 'PLAYER_OFFLINE')
         self.activate()
         # still choosing the login spawn (the client ignores world respawns in the scene): refused
-        self.command(0, '1')
+        self.command(0, '7')
         self.assertEqual(len(self.events()), 0)
         self.assertEqual(self.e('WCSpawnServer.pending(1)'), 'login')
         self.assertTrue(self.call('spawn:choose', 1, 'valentine').ok)
-        self.command(0, '1')
+        self.command(0, '7')
         ev = self.events()[-1]
         self.assertEqual(ev.player, 1)
         self.assertAlmostEqual(ev.args[1].x, -274.09)
@@ -294,24 +340,51 @@ class RespawnTests(Base):
         self.assertEqual(logs[-1].payload.adminSource, 0)
         self.assertEqual(logs[-1].payload.kind, 'admin')
         self.rt.run('function IsPlayerAceAllowed(src, ace) return src == 2 and ace == Config.Admin.ace end')
-        self.command(2, '1', 'rhodes')
+        self.command(2, '7', 'rhodes')
         self.assertAlmostEqual(self.events()[-1].args[1].x, 1233.28)
-        self.command(2, '1', 'nowhere')
+        self.command(2, '7', 'nowhere')
         self.assertEqual(len(self.events()), 2)
         self.assertEqual(self.e('Notifications[#Notifications].data.description'), 'مكان ظهور غير صالح')
 
+    def test_citizen_id_forms(self):
+        self.ready()
+        self.later()
+        self.command(0, '#1', 'rhodes')                                     # an explicit server id
+        self.assertEqual(self.events()[-1].player, 1)
+        self.assertAlmostEqual(self.events()[-1].args[1].x, 1233.28)
+        self.later()
+        self.command(0, ' 007 ')                                            # spaces, leading zeros
+        self.assertEqual(len(self.events()), 2)
+        self.rt.run('CitizenOf[1] = "OMG95204"')                            # the old random form
+        self.later()
+        self.command(0, 'omg95204')
+        self.assertEqual(len(self.events()), 3)
+        self.assertEqual(self.events()[-1].player, 1)
+        # a bare number is a citizen id, never the server id it happens to equal
+        self.assertEqual(self.e('WCRespawnServer.admin(0, "1").code'), 'PLAYER_NOT_FOUND')
+        self.assertEqual(self.e('WCRespawnServer.admin(0, "9999").code'), 'PLAYER_NOT_FOUND')
+        self.assertEqual(self.e('WCRespawnServer.admin(0, "#3").code'), 'PLAYER_NOT_FOUND')
+        r = self.e('WCRespawnServer.admin(0, "55")')                          # saved, not in the game
+        self.assertEqual((r.code, r.data.citizenid, r.data.label), ('PLAYER_OFFLINE', '55', 'Off Line (55)'))
+        self.assertEqual(len(self.events()), 3)
+        # the console hears the reason in words
+        self.command(0, '55')
+        self.assertIn('اللاعب غير متصل الآن', self.e('Printed[#Printed].text'))
+
     def test_non_admin_is_refused_and_logged(self):
         self.activate()
-        self.command(2, '1')
+        self.command(2, '7')
         self.assertEqual(len(self.events()), 0)
         self.assertEqual(self.e('countLogs("security_violation")'), 1)
         self.assertEqual(self.e('#Notifications'), 0)
         for _ in range(20):                                                   # spam: rate-limited first
-            self.command(2, '1')
+            self.command(2, '7')
         self.assertEqual(self.e('countLogs("security_violation")'), 5)
         self.assertEqual(self.e('#Notifications'), 0)
-        self.assertEqual(self.e('WCRespawnServer.admin(0, "0").code'), 'INVALID_PAYLOAD')
-        self.assertEqual(self.e('WCRespawnServer.admin(0, "1.5").code'), 'INVALID_PAYLOAD')
+        for bad in ('0', '1.5', 'abc', '#0', '#70000', ''):
+            self.assertEqual(self.e('WCRespawnServer.admin(0, "%s").code' % bad), 'INVALID_CITIZEN_ID', bad)
+        self.assertEqual(self.e('WCRespawnServer.admin(0, nil).code'), 'INVALID_PAYLOAD')
+        self.assertEqual(self.e('WCRespawnServer.admin(0, {}).code'), 'INVALID_PAYLOAD')
 
 
 class SyncTests(Base):

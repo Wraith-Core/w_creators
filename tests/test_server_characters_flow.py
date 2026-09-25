@@ -48,8 +48,12 @@ Bridge.RegisterCharacter = function(src, data)
 end
 Bridge.GetLastPosition = function(src) return lastPos end
 Bridge.SetSurvival = function() end
-health = {}
-function GetEntityHealth(ped) return health[ped - 1000] or 200 end
+-- this RedM build: the server reads 0 for a LIVING player's ped; death is the framework's flag
+function GetEntityHealth(ped) return 0 end
+dead = {}
+rawset(exports, 'w_lib', setmetatable({
+    FwGetCharacter = function(_, src) return { metadata = { isdead = dead[src] == true } } end,
+}, { __index = function() return function() end end }))
 Players[2] = { name = 'player two', coords = vector3(0, 0, 0), bucket = 0 }
 rows = { ['vorp:1'] = { id = 11, charid = 'vorp:1', name = 'John Smith', age = 30, isMale = 1,
                         appearance = json.encode(S.default('male')), appearance_version = 3 },
@@ -461,12 +465,12 @@ class SwitchTests(Base):
 
     def test_switch_refused_while_dead_in_a_session_or_disabled(self):
         self.select_and_load(1, 'vorp:1')
-        self.rt.run('health[1] = 0')
+        self.rt.run('dead[1] = true')
         self.assertEqual(self.call('characters:list', 1).code, 'BUSY')
         self.assertEqual(self.call('characters:select', 1, 'vorp:2').code, 'BUSY')
         self.assertEqual(self.call('characters:beginCreate', 1).code, 'BUSY')
         self.assertEqual(self.e('WCCharacters.active(1).charid'), 'vorp:1')
-        self.rt.run('health[1] = 150; Players[1].coords = vector3(-326.17, 773.757, 117.5)')
+        self.rt.run('dead[1] = nil; Players[1].coords = vector3(-326.17, 773.757, 117.5)')
         self.later(11000)
         self.assertTrue(self.e('WCSessions.open(1, "store", { locationId = "valentine_clothing" }).ok'))
         self.assertEqual(self.call('characters:list', 1).code, 'BUSY')
@@ -518,7 +522,7 @@ class ReviewRegressionTests(Base):
         token = self.call('characters:beginCreate', 1).data.token
         self.rt.run('WCCharacters.setActive(1, "vorp:1", "male")')
         self.assertFalse(self.e('WCCharacters.inFlow(1)'))
-        self.rt.run('Config.Characters.allowSwitch = false; health[1] = 0')
+        self.rt.run('Config.Characters.allowSwitch = false; dead[1] = true')
         r = self.call('characters:create', 1, token, identity(self.rt), self.e('S.default("male")'))
         self.assertEqual(r.code, 'CREATION_NOT_GRANTED')
         self.assertEqual(self.e('#registered'), 0)

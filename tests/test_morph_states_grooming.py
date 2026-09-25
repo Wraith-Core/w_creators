@@ -35,7 +35,8 @@ class MorphOverlayTests(unittest.TestCase):
         mouth = [c for c in groups[1].children.values() if c.id == 'face.mouth'][0]
         self.assertEqual([c.id for c in mouth.children.values()], ['face.mouth.left', 'face.mouth.right'])
         build = groups[2].children[1]
-        self.assertEqual(list(build.extras.values()), ['body.type', 'body.height', 'body.weight'])
+        # body.shape: the body build outfit (skinny ... brawny), next to the body model
+        self.assertEqual(list(build.extras.values()), ['body.type', 'body.shape', 'body.height', 'body.weight'])
 
     def test_overlays(self):
         layers = self.rt.py(self.e('WCOverlays.layers'))
@@ -69,8 +70,11 @@ class ClothingStateTests(unittest.TestCase):
 
     def test_groups(self):
         groups = [g.id for g in self.e('WCClothingStates.groups').values()]
+        # + the loadout side, the vest tuck and the two body-part states (the clothing store's
+        #   wearable additions), after the original thirteen
         self.assertEqual(groups, ['hat', 'eyewear', 'mask', 'bandana', 'sleeves', 'collar', 'coat', 'vest',
-                                  'poncho', 'gloves', 'boots'])
+                                  'poncho', 'gloves', 'boots', 'shirt', 'pants', 'loadout', 'vestTuck',
+                                  'bodyUpper', 'bodyLower'])
         for g in self.e('WCClothingStates.groups').values():
             self.assertIn(g.verified, ('likely', 'experimental'))
             self.assertIn(g.persist, (True, False))
@@ -81,7 +85,7 @@ class ClothingStateTests(unittest.TestCase):
     def test_actions_only_for_equipped_and_different_targets(self):
         actions = self.rt.py(self.e('WCClothingStates.actions(app)'))
         by = {a['group']: a for a in actions.values()}
-        self.assertEqual(list(by), ['hat', 'bandana', 'sleeves', 'collar', 'boots'])
+        self.assertEqual(list(by), ['hat', 'bandana', 'sleeves', 'collar', 'boots', 'shirt', 'pants'])
         self.assertEqual(by['hat']['current'], 'on')
         self.assertEqual(list(by['hat']['targets'].values()), ['off'])
         self.assertEqual(list(by['boots']['targets'].values()), ['under'])

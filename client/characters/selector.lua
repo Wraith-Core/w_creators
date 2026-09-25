@@ -96,7 +96,8 @@ local function await(name, ...)
 end
 
 local function pedExists(ped)
-    return type(ped) == 'number' and ped ~= 0 and DoesEntityExist(ped) == true
+    -- BOOL natives answer 1 (not true) on this runtime: never compare them with == true
+    return type(ped) == 'number' and ped ~= 0 and not not DoesEntityExist(ped)
 end
 
 -- characters:loaded answers after which the server may have loaded the character anyway (it
@@ -712,6 +713,7 @@ CreateThread(function()
             DisableAllControlActions(0)
             SuppressGameHud()
             CreatorScene.drawLights()
+            CreatorScene.suppressAmbient()
             if not st.busy and GetGameTimer() >= st.inputReadyAt then
                 handleInput()
             else

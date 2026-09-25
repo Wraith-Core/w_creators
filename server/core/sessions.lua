@@ -107,6 +107,29 @@ end
 --- Is the player at the location (its anchor or its fitting stand, interactionRadius + 3)?
 SS.withinRange = withinRange
 
+--- May the player use a location that has an access rule (Config.Locations[].access)? The job and
+--  its grade come from the framework user, the ACE permission from the server itself: the client
+--  only hides the prompt, this is the decision.
+function SS.accessAllowed(src, loc)
+    local rule = WCLocations.access(loc)
+    if not rule then return true end
+    local job, grade
+    local okU, u = pcall(function() return w.framework:getUser(src) end)
+    if okU and type(u) == 'table' then
+        local okJ, j = pcall(function() return u:getJob() end)
+        local okG, g = pcall(function() return u:getJobGrade() end)
+        job = okJ and type(j) == 'string' and j or nil
+        grade = okG and tonumber(g) or 0
+    end
+    local hasAce = false
+    if rule.ace then
+        local okA, allowed = pcall(IsPlayerAceAllowed, tostring(src), rule.ace)
+        -- BOOL natives answer 1 (not true) on this runtime
+        hasAce = okA and (allowed == true or allowed == 1)
+    end
+    return WCLocations.allows(loc, job, grade, hasAce) == true
+end
+
 --- Open a session. opts = { locationId?, remote? }.
 --  Result: ok({ token, session }) or INVALID_PAYLOAD | RATE_LIMITED | *_DISABLED | NO_CHARACTER |
 --  BUSY | LOCATION_NOT_FOUND | LOCATION_DISABLED | TOO_FAR | CHARACTER_NOT_FOUND | DATABASE_ERROR.
@@ -143,6 +166,7 @@ function SS.open(src, kind, opts)
         if not loc.enabled or not WCLocations.isOpen(loc) then return fail('LOCATION_DISABLED') end
         if not WCLocations.isUsable(loc) then return fail(WCServices.code(def.service)) end
         if not withinRange(src, loc) then return fail('TOO_FAR') end
+        if not SS.accessAllowed(src, loc) then return fail('ACCESS_DENIED') end
     end
 
     -- The load may yield (database): reserve the player's slot so a second open() in that window
@@ -330,6 +354,18 @@ w.callback.register('w_creators:session:abandon', function(src)
     if not s or s.used or s.busy then return WCResult.ok({ closed = false }) end
     finish(src, 'abandoned')
     return WCResult.ok({ closed = true })
+end)
+
+--- w_creators:locations:access(): which of the locations with an access rule this player may use,
+--  { [locationId] = boolean }. Only so the client can hide a prompt it would be refused at: every
+--  open checks the rule again (SS.open).
+w.callback.register('w_creators:locations:access', function(src)
+    if not WCSecurity.rate(src, 'locations:access', 4, 10000) then return fail('RATE_LIMITED') end
+    local out = {}
+    for _, loc in ipairs(WCLocations.all()) do
+        if WCLocations.access(loc) then out[loc.id] = SS.accessAllowed(src, loc) end
+    end
+    return WCResult.ok(out)
 end)
 
 --- w_creators:session:result(token, opId): the recorded answer of an uncertain commit (read only).

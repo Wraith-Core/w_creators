@@ -3,16 +3,28 @@
 --  Death respawn itself is client-driven (client/respawn/respawn.lua, exports Resurrect); the server
 --  side only moves a living character to a spawn point on an administrator's request.
 --
---  Command: wc_respawn <playerId> [pointId]
---    Console, or a player holding the Config.Admin.ace ACE. pointId = a Config.Spawn.points[].id,
+--  Command: wc_respawn <citizenId> [pointId]
+--    Console, or a player holding the Config.Admin.ace ACE. The target is the citizen id staff
+--    type ('12', the old 'OMG95204'); '#5' names whoever is on server id 5. A server id changes on
+--    every connection and, now that citizen ids are plain digits, the two collide, so a bare number
+--    is never read as a server id. A respawn moves a live ped: an offline citizen is refused
+--    (PLAYER_OFFLINE). pointId = a Config.Spawn.points[].id,
 --    '__last' (the target's validated last location) or omitted (the first enabled point).
 --    Resolved and sent through WCSpawnServer.respawn(target, pointId, 'admin') ->
 --    w_creators:client:respawn(pos, { kind = 'admin', point }) on the target.
 --
---  WCRespawnServer.admin(adminSrc, target, pointId) -> Result (the command's logic).
+--  WCRespawnServer.admin(adminSrc, target, pointId) -> Result (the command's logic; `target` is the
+--  typed text, resolved by w.citizen).
 -- =====================================================================
 
 WCRespawnServer = {}
+
+-- w.citizen's failure reasons as Result codes (shared/result.lua carries their messages)
+local CITIZEN_FAILURE = {
+    invalid_id = 'INVALID_CITIZEN_ID',
+    not_found = 'PLAYER_NOT_FOUND',
+    offline = 'PLAYER_OFFLINE',
+}
 
 local function isAdmin(src)
     if src == 0 then return true end
@@ -42,11 +54,13 @@ function WCRespawnServer.admin(adminSrc, target, pointId)
         WCSecurity.violation(adminSrc, 'admin_respawn', { target = tostring(target) })
         return WCResult.fail('SERVICE_DISABLED')
     end
-    target = tonumber(target)
-    if not target or target % 1 ~= 0 or target < 1 or target > 65535 or not GetPlayerName(math.tointeger(target)) then
-        return WCResult.fail('INVALID_PAYLOAD')
+    if type(target) ~= 'string' and type(target) ~= 'number' then return WCResult.fail('INVALID_PAYLOAD') end
+    local who, reason, offline = w.citizen.requireOnline(target, { self = adminSrc > 0 and adminSrc or nil })
+    if not who then
+        return WCResult.fail(CITIZEN_FAILURE[reason] or 'PLAYER_NOT_FOUND',
+            offline and { citizenid = offline.citizenid, label = w.citizen.label(offline) } or nil)
     end
-    target = math.tointeger(target)
+    target = who.source
     if pointId ~= nil and (type(pointId) ~= 'string' or #pointId > 64) then return WCResult.fail('INVALID_SPAWN') end
 
     return WCSpawnServer.respawn(target, pointId, 'admin',

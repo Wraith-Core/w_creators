@@ -57,6 +57,8 @@ w.requestAnimDict = function(dict, timeout)
 end
 w.playAnim = function(ped, dict, clip, ...) rec('playAnim', ped, dict, clip, ...) end
 function StopAnimTask(ped, dict, clip, speed) rec('StopAnimTask', ped, dict, clip, speed) end
+-- the clip's own length (seconds); the states read it once the dictionary is loaded
+function GetAnimDuration(dict, clip) return AnimDuration or 1.2 end
 
 -- the server callback of §16.5: ok with the states unless CallbackResults says otherwise
 CallbackResults = {}
@@ -110,6 +112,8 @@ end
 def make_states_client(setup=None):
     rt = make_client()
     rt.run(STATES_STUBS)
+    # the tests of the instant path run without clips (production plays them: config/main.lua)
+    rt.run('Config.Experimental.clothingAnimations = false')
     if setup:
         rt.run(setup)
     rt.load('client/editor/tree.lua', 'client/editor/editor.lua', 'client/editor/panel.lua',

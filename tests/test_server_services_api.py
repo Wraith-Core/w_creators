@@ -36,7 +36,9 @@ class ApiReadTests(unittest.TestCase):
         # standardizeSkin iterates expressions and overlays: both are always tables
         self.assertEqual(self.rt.py(skin.expressions), {'jawWidth': 0.25})
         overlays = self.rt.py(skin.overlays)
-        self.assertEqual(overlays['eyebrow'], {'id': 12, 'opacity': 0.85, 'palette': 'metaped_tint_hair', 'tint0': 0})
+        # sexe: the texture set of the style (eyebrow style 1 is mp_u_faov_eyebrow_m_012 on either sex)
+        self.assertEqual(overlays['eyebrow'], {'id': 12, 'opacity': 0.85, 'palette': 'metaped_tint_hair', 'tint0': 0,
+                                               'sexe': 'm'})
         self.assertEqual(overlays['blush'], {'id': 1, 'opacity': 0.5, 'palette': 'metaped_tint_makeup', 'tint0': 4})
         clothes = self.rt.py(self.e('data.clothes'))
         self.assertEqual(set(clothes), set(self.rt.py(self.e('savedApp.clothing.equipped'))))

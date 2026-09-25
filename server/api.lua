@@ -15,6 +15,8 @@
 --    OpenSpawnSelector(src)               -> Result { points, kind }   (WCSpawnServer grant + selectSpawn)
 --    RespawnPlayer(src, pointId?, kind?)  -> Result { pos, kind, point } (WCSpawnServer.respawn)
 --    GetActiveCharacter(src)              -> { charid, sex } | nil
+--    PurgeCharacter(citizenid, ctx)       -> true, counts | false, reason (w_core's character deletion;
+--                                            not a Result)
 --
 --  The Open* exports validate the service, the location, the character and the distance, then send
 --  w_creators:client:open<Kind>(locationId); the client requests the matching <kind>:open callback,
@@ -98,9 +100,9 @@ end
 
 --- The framework-bridge "standard" skin of a v3 appearance (w_lib framework-bridge keys: model,
 --  headHash, bodyUpperHash, bodyLowerHash, eyesHash, teethHash, hair, beards_complete, bodyWeight,
---  bodyScale, expressions, overlays). bodyWeight is the waist outfit hash w.component.applySkin
---  equips; bodyType is left out: the body type is the BODIES_UPPER model (bodyUpperHash) and has
---  no outfit hash of its own.
+--  bodyScale, expressions, overlays, bodyType). bodyWeight is the waist outfit hash
+--  w.component.applySkin equips; bodyType is the body build outfit (AppearanceSchema.BODY_BUILDS)
+--  when the character has one (the BODIES_UPPER model stays bodyUpperHash).
 function Api.standardSkin(app)
     local skin = {
         model = 'mp_' .. app.sex,
@@ -117,11 +119,22 @@ function Api.standardSkin(app)
     }
     if app.hair.style ~= 0 then skin.hair = { hash = app.hair.style } end
     if app.sex == 'male' and app.hair.facial ~= 0 then skin.beards_complete = { hash = app.hair.facial } end
+    -- the body build is a metaped outfit the bridge's applySkin equips (bodyType), like bodyWeight
+    local build = app.body.build and AppearanceSchema.BODY_BUILDS[app.body.build]
+    if build then skin.bodyType = build end
     for _, layer in ipairs(WCOverlays.layers) do
         local o = app.overlays[layer.id]
-        local id = o and layer.ids[o.style]
+        local id, grid, set
+        if o then id, grid, set = WCOverlays.texture(layer, o.style) end
         if id ~= nil and layer.sexes[app.sex] then
-            skin.overlays[layer.library] = { id = id, opacity = o.opacity, palette = layer.palette, tint0 = o.color - 1 }
+            local entry = { id = id, opacity = o.opacity, palette = layer.palette, tint0 = o.color - 1 }
+            -- the sheet cell, the texture set and the 2nd / 3rd tints only when the style has them,
+            -- so a skin of the styles that existed before is unchanged
+            if grid then entry.sheetGrid = grid end
+            if set then entry.sexe = set end
+            if o.color2 then entry.tint1 = o.color2 - 1 end
+            if o.color3 then entry.tint2 = o.color3 - 1 end
+            skin.overlays[layer.library] = entry
         end
     end
     return skin
@@ -358,9 +371,16 @@ local function overlayOf(layer, value)
     if value.style ~= nil then
         style = exactInt(value.style, 1, layer.styles)
     else
-        local id = exactInt(value.id)
-        for index, texture in ipairs(layer.ids) do
-            if texture == id then style = index break end
+        -- the style whose texture, sheet cell and (eyebrows) texture set match; a skin without a
+        -- cell is cell 0 and one without a set matches either set (the first style wins, as before)
+        local id, grid = exactInt(value.id), exactInt(value.sheetGrid or 0) or 0
+        local set = (value.sexe == 'm' or value.sexe == 'f') and value.sexe or nil
+        for index = 1, layer.styles do
+            local texture, cell, texSet = WCOverlays.texture(layer, index)
+            if texture == id and (cell or 0) == grid and (set == nil or texSet == nil or texSet == set) then
+                style = index
+                break
+            end
         end
     end
     if not style then return nil end
@@ -426,7 +446,14 @@ local function skinDraft(saved, skin, overwrite)
         if not index then return nil, 'INVALID_PAYLOAD', 'bodyWeight' end
         draft.body.weight = index
     end
-    -- bodyType (a framework body-type outfit) has no v3 counterpart: the body type is bodyUpperHash.
+    -- bodyType: one of the body build outfits is the v3 body.build; any other value (a framework's
+    -- own body-type outfit) has no v3 counterpart and is ignored, as before builds existed
+    if skin.bodyType ~= nil then
+        local hash = WCUtil.u32(skin.bodyType)
+        for index, build in ipairs(AppearanceSchema.BODY_BUILDS) do
+            if hash and WCUtil.u32(build) == hash then draft.body.build = index end
+        end
+    end
 
     if skin.expressions ~= nil then
         if type(skin.expressions) ~= 'table' then return nil, 'INVALID_PAYLOAD', 'expressions' end
@@ -489,6 +516,9 @@ local function v3Invalid(sex, skin, saved)
     if body.weight ~= nil and not exactInt(body.weight, 1, #Api.WAIST_TYPES) then
         return 'INVALID_PAYLOAD', 'body.weight'
     end
+    if body.build ~= nil and not exactInt(body.build, 0, #AppearanceSchema.BODY_BUILDS) then
+        return 'INVALID_PAYLOAD', 'body.build'
+    end
     for id, value in pairs(skin.morph or {}) do
         local n = tonumber(value)
         if not WCUtil.isFinite(n) or n < -1 or n > 1 then return 'INVALID_PAYLOAD', 'morph.' .. tostring(id) end
@@ -504,6 +534,9 @@ local function v3Invalid(sex, skin, saved)
         end
         if not exactInt(o.style, 1, layer.styles) then return 'INVALID_COMPONENT', field end
         if o.color ~= nil and not exactInt(o.color, 1, WCOverlays.COLORS) then return 'INVALID_COMPONENT', field end
+        for _, key in ipairs({ 'color2', 'color3' }) do
+            if o[key] ~= nil and not exactInt(o[key], 1, WCOverlays.COLORS) then return 'INVALID_COMPONENT', field end
+        end
         if o.opacity ~= nil then
             local opacity = tonumber(o.opacity)
             if not WCUtil.isFinite(opacity) or opacity < 0 or opacity > 1 then return 'INVALID_COMPONENT', field end
@@ -674,12 +707,38 @@ function Api.RespawnPlayer(src, pointId, kind)
 end
 
 -- ---------------------------------------------------------------------
+--  Character deletion (w_core)
+-- ---------------------------------------------------------------------
+
+--- w_core's purge contract: remove everything w_creators keeps for a deleted character (appearance,
+--  owned clothing, outfits, the in-memory references) so its citizen id can be given to another
+--  character clean. ctx = { by, at, tombstone } (w_creators keeps no history under the id). Not a
+--  Result: true, { characters_appearence = n, w_creators_clothes = n, w_creators_outfits = n,
+--  w_creators_colorways = n,
+--  memory = n? } | false, reason ('forbidden' | 'invalid_id' | 'online' | 'busy' |
+--  'database_not_ready' | 'database'), refused before anything changes (WCCharacters.purge).
+--  Only w_core may call it: it wipes any character on demand. The check is the handler's first
+--  statement, before anything yields, so it reads the export's own caller.
+function Api.PurgeCharacter(citizenid, ctx)
+    if GetInvokingResource() ~= 'w_core' then return false, 'forbidden' end
+    return WCCharacters.purge(citizenid, ctx)
+end
+
+--- Is the player's bandana raised over the face (a masked player: police / wanted resources)? The
+--  same answer as the replicated state bag Config.ClothingStates.bandanaStateBag.
+function Api.IsBandanaUp(src)
+    src = playerId(src)
+    if not src or type(WCClothingActions) ~= 'table' then return false end
+    return WCClothingActions.bandanaUp(src) == true
+end
+
+-- ---------------------------------------------------------------------
 --  Exports
 -- ---------------------------------------------------------------------
 for _, name in ipairs({
     'GetCharacterAppearance', 'GetAppearance', 'SetClothes', 'SetSkin', 'ApplyCharacterAppearance',
     'OpenCosmeticSurgery', 'OpenClothingStore', 'OpenBarber', 'OpenWardrobe', 'OpenSpawnSelector',
-    'RespawnPlayer', 'GetActiveCharacter',
+    'RespawnPlayer', 'GetActiveCharacter', 'PurgeCharacter', 'IsBandanaUp',
 }) do
     exports(name, Api[name])
 end

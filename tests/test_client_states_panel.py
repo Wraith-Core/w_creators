@@ -23,7 +23,7 @@ class PanelTreeTests(unittest.TestCase):
         msg = self.open()
         self.assertTrue(self.rt.eval('WCClothing.isPanelOpen()'))
         paths = lua_list(self.rt.eval("actionPaths(lastMessage('panel').tree)"))
-        self.assertEqual(len(paths), 4)
+        self.assertEqual(len(paths), 5)   # hat, bandana, sleeves, collar, the shirt itself
         for path in paths:
             chain = lua_list(path)
             # root › taxonomy group › item › action
@@ -43,7 +43,7 @@ class PanelTreeTests(unittest.TestCase):
         shirt = lua_list(upper['children'])[0]
         self.assertEqual(shirt['id'], 'clothing.upper.shirts_full')
         self.assertEqual([c['control'] for c in lua_list(shirt['children'])],
-                         ['state.sleeves.rolled', 'state.collar.open'])
+                         ['state.sleeves.rolled', 'state.collar.open', 'state.shirt.off'])
 
     def test_action_rebuilds_the_tree_with_the_inverse(self):
         msg = self.open()

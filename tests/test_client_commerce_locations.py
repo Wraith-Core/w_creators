@@ -52,7 +52,8 @@ class BuildTests(LocationsTestCase):
 
     def test_blips_and_npcs(self):
         self.point('valentine_clothing')
-        self.assertEqual(self.eval('BlipsMade[1].sprite'), 'blip_shop_clothing')
+        # the game's own tailor sprite (blip_shop_clothing is not a sprite of the game: a plain dot)
+        self.assertEqual(self.eval('BlipsMade[1].sprite'), 'blip_shop_tailor')
         self.assertEqual(self.eval('BlipsMade[1].name'), 'متجر الملابس')
         ped = self.eval('P.npc')
         self.assertIsNotNone(ped)
@@ -63,7 +64,10 @@ class BuildTests(LocationsTestCase):
         self.assertEqual(self.eval('Peds[P.npc].model'), self.eval('GetHashKey("S_M_M_Tailor_01")'))
         self.point('tumbleweed_clothing')  # npc = false
         self.assertIsNone(self.eval('P.npc'))
-        self.assertEqual(self.eval('count("entity.create")'), 3)
+        # 3 tailors, and the catalogue book on each of the 4 stores' counters
+        self.assertEqual(self.eval('count("entity.create")'), 3 + 4)
+        npcs = sum(1 for p in self.eval('WCServicePoints.points()').values() if p.npc)
+        self.assertEqual(npcs, 3)
 
     def test_disabled_locations_and_services_are_skipped(self):
         n = self.rebuild('Config.Locations[1].enabled = false; Config.Services.barbers = false')
@@ -88,7 +92,8 @@ class BuildTests(LocationsTestCase):
                      ' EntitiesBefore = count("entity.create")')
         self.assertIsNone(self.point('valentine_surgery'))
         self.assertFalse(any(b['sprite'] == 'blip_shop_doctor' for b in self.rt.py(self.eval('BlipsMade')).values()))
-        self.assertEqual(self.eval('count("entity.create") - EntitiesBefore'), 3)
+        # the rebuild made the 3 tailors and the 4 catalogue books again, and nothing for the clinic
+        self.assertEqual(self.eval('count("entity.create") - EntitiesBefore'), 3 + 4)
 
     def test_a_surgery_clinic_with_a_prompt_dispatches_to_the_surgery_client(self):
         self.rebuild('for _, l in ipairs(Config.Locations) do if l.id == "valentine_surgery" then l.prompt = true end end')

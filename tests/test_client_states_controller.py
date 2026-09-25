@@ -25,7 +25,7 @@ class AvailableTests(unittest.TestCase):
     def test_only_equipped_items_and_the_inverse_of_the_current_state(self):
         got = controls(self.rt)
         # hat on → only "take off"; bandana down → "pull up"; shirt: sleeves down → roll, collar closed → open
-        self.assertEqual(got, ['state.hat.off', 'state.bandana.up', 'state.sleeves.rolled', 'state.collar.open'])
+        self.assertEqual(got, ['state.hat.off', 'state.bandana.up', 'state.sleeves.rolled', 'state.collar.open', 'state.shirt.off'])
         # not equipped: no coat, vest, gloves, mask, eyewear; boots without pants: not applicable
         for absent in ('coat', 'vest', 'gloves', 'mask', 'eyewear', 'boots', 'poncho'):
             self.assertFalse(any(c.startswith('state.%s.' % absent) for c in got), absent)
@@ -48,7 +48,7 @@ class AvailableTests(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]['id'], 'shirts_full')
         self.assertEqual(items[0]['label'], 'القميص')
-        self.assertEqual([a['group'] for a in lua_list(items[0]['actions'])], ['sleeves', 'collar'])
+        self.assertEqual([a['group'] for a in lua_list(items[0]['actions'])], ['sleeves', 'collar', 'shirt'])
 
     def test_cloak_named_after_the_equipped_piece(self):
         self.rt.run("WCState.appearance.clothing.equipped.cloaks = COAT")
@@ -159,12 +159,17 @@ class PerformTests(unittest.TestCase):
         r = self.rt.eval("WCClothing.perform('hat', 'off')")
         self.assertTrue(r['ok'])
 
-    def test_mounted_refused_when_an_animation_would_play(self):
+    def test_mounted_never_refused(self):
+        # a rider changes clothes: a clip made for riding plays (the hat), any other has none
         self.rt.run('Config.Experimental.clothingAnimations = true; Peds[MyPed].mounted = true')
-        self.assertRefused('STATE_NOT_APPLICABLE')
-        # a group without a configured animation is still allowed on a mount
+        self.rt.run("performAsync('hat', 'off')")
+        self.assertIn('playAnim', lua_list(self.rt.eval('ops()')))
+        self.rt.run('for i = 1, 8 do tick(100) end')
+        self.assertTrue(self.rt.eval('Result.ok'))
+        self.rt.run('clearLog()')
         r = self.rt.eval("WCClothing.perform('collar', 'open')")
         self.assertTrue(r['ok'])
+        self.assertNotIn('playAnim', lua_list(self.rt.eval('ops()')))
 
     def test_invalid_inputs(self):
         self.assertEqual(self.rt.eval("WCClothing.perform('hat', 'sideways')")['code'], 'STATE_NOT_SUPPORTED')
@@ -200,7 +205,7 @@ class AnimationTests(unittest.TestCase):
         ops = lua_list(self.rt.eval('ops()'))
         self.assertIn('playAnim', ops)
         play = [e for e in lua_list(self.rt.eval('Log')) if e['op'] == 'playAnim'][0]
-        self.assertEqual(play['args'][3], 'hat_off')
+        self.assertEqual(play['args'][3], 'hat_b')   # the game's item-selection hat gesture
         self.assertTrue(self.rt.eval("WCState.busy('clothingAction')"))
         self.rt.run('tick(100)')
         self.rt.run('Peds[MyPed].ragdoll = true')
@@ -225,7 +230,7 @@ class AnimationTests(unittest.TestCase):
 
     def test_reaching_the_midpoint_applies_fully(self):
         self.rt.run("performAsync('hat', 'off')")
-        self.rt.run('for i = 1, 5 do tick(100) end')   # hat: 1200 ms, midpoint 600 ms
+        self.rt.run('for i = 1, 5 do tick(100) end')   # hat: the clip's 1200 ms, the change at 45% (540 ms)
         self.assertFalse(self.rt.eval('Done'))
         self.assertNotIn('component.remove', lua_list(self.rt.eval('ops()')))
         self.rt.run('tick(100)')
@@ -244,11 +249,24 @@ class AnimationTests(unittest.TestCase):
         self.assertNotIn('playAnim', ops)
         self.assertIn('component.remove', ops)
 
-    def test_mask_goes_on_from_the_neck(self):
+    def test_mask_goes_on_from_the_satchel(self):
         self.rt.run("WCState.appearance.clothing.equipped.masks = 7777; WCState.appearance.clothing.states.mask = 'off'")
         self.rt.run("performAsync('mask', 'on')")
         play = [e for e in lua_list(self.rt.eval('Log')) if e['op'] == 'playAnim'][0]
-        self.assertEqual(play['args'][3], 'neck_2_face')
+        self.assertEqual((play['args'][2], play['args'][3]), ('mech_inventory@clothing@mask', 'satchel_2_face'))
+
+    def test_bandana_down_uses_the_mask_dictionary(self):
+        self.rt.run("WCState.appearance.clothing.states.bandana = 'up'")
+        self.rt.run("performAsync('bandana', 'down')")
+        play = [e for e in lua_list(self.rt.eval('Log')) if e['op'] == 'playAnim'][0]
+        self.assertEqual((play['args'][2], play['args'][3]), ('mech_inventory@clothing@mask', 'face_2_neck'))
+
+    def test_a_clip_the_game_lacks_changes_the_state_without_it(self):
+        self.rt.run('AnimDuration = 0')
+        r = self.rt.eval("WCClothing.perform('hat', 'off')")
+        self.assertTrue(r['ok'])
+        self.assertNotIn('playAnim', lua_list(self.rt.eval('ops()')))
+        self.assertIn('component.remove', lua_list(self.rt.eval('ops()')))
 
     def test_resource_stop_mid_animation_releases_everything(self):
         self.rt.run("performAsync('hat', 'off'); tick(100)")
@@ -280,14 +298,14 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(self.rt.eval("WCClothing.groupOfCategory('hats')"), 'hat')
         self.assertEqual(self.rt.eval("WCClothing.groupOfCategory('coats_closed')"), 'coat')
         self.assertEqual(self.rt.eval("WCClothing.groupOfCategory('cloaks')"), 'poncho')
-        self.assertIsNone(self.rt.eval("WCClothing.groupOfCategory('shirts_full')"))  # wearable: not a visibility group
+        self.assertEqual(self.rt.eval("WCClothing.groupOfCategory('shirts_full')"), 'shirt')  # the shirt comes off too
         r = self.rt.eval("Exported.RemoveClothingCategory('hats')")
         self.assertTrue(r['ok'])
         self.assertEqual(self.rt.eval('WCState.appearance.clothing.states.hat'), 'off')
         r = self.rt.eval("Exported.RestoreClothingCategory('hats')")
         self.assertTrue(r['ok'])
         self.assertEqual(self.rt.eval('WCState.appearance.clothing.states.hat'), 'on')
-        r = self.rt.eval("Exported.RemoveClothingCategory('shirts_full')")
+        r = self.rt.eval("Exported.RemoveClothingCategory('boots')")   # a wearable state, not a visibility one
         self.assertEqual(r['code'], 'STATE_NOT_SUPPORTED')
 
     def test_toggle_exports(self):

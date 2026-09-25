@@ -23,7 +23,8 @@ end
 
 --- A number handle of an existing entity.
 function H.entity(entity)
-    return type(entity) == 'number' and entity ~= 0 and DoesEntityExist(entity) == true
+    -- BOOL natives answer 1 (not true) on this runtime: never compare them with == true
+    return type(entity) == 'number' and entity ~= 0 and not not DoesEntityExist(entity)
 end
 
 --- An existing ped.

@@ -32,6 +32,12 @@ F.WATCH_MS = 250                 -- the death / forced-close watcher period
 F.FINISH_TIMEOUT = 10000         -- ms a committed flow waits for its editor to close
 F.RECONCILE_TRIES = 3            -- asks for the recorded answer of an uncertain commit
 F.RECONCILE_WAIT = 1000          -- ms between those asks while the server commit still runs
+F.RELEASE_MS = 100               -- ms between letting the player go (reading, tasks) and the move
+F.HEADING_HOLD_MS = 1500         -- ms the player is held on the stand's heading once the camera opens
+F.STAND_TOLERANCE = 1.0          -- metres off the stand (flat) after which the player is put back on it
+F.STAND_DROP = 2.5               -- metres off the stand's height (another floor) likewise
+F.STAND_CHECKS = 3               -- times the move to the stand is checked (and made again) under the fade
+F.STAND_CHECK_MS = 100           -- ms between those checks
 
 F.LOCK = 'service'               -- the WCState lock a running service flow holds
 
@@ -147,30 +153,125 @@ local function waitCollision(ped, x, y, z)
     WCUtil.waitUntil(function() return HasCollisionLoadedAroundEntity(ped) or nil end, F.COLLISION_TIMEOUT, 0)
 end
 
+--- Is the player on the fitting stand { x, y, z, heading }? His origin is about a metre above the
+--  floor the stand gives, so the height is compared loosely: the shop counter is several metres away
+--  or on another floor (Valentine's stand is upstairs), never within these tolerances.
+local function onStand(ped, stand)
+    local at = GetEntityCoords(ped)
+    local dx, dy = at.x - stand[1], at.y - stand[2]
+    return dx * dx + dy * dy <= F.STAND_TOLERANCE * F.STAND_TOLERANCE and math.abs(at.z - stand[3]) <= F.STAND_DROP
+end
+
+--- Put the player on the fitting stand again: set down on its floor (a frozen player is not settled
+--  by the game) and turned to its heading.
+local function placeOnStand(ped, stand)
+    SetEntityCoords(ped, stand[1], stand[2], stand[3], false, false, false, false)
+    pcall(WCNative.ped.placeOnGround, ped)
+    SetEntityHeading(ped, stand[4])
+end
+
 --- Private bucket, fade, then the move to the fitting stand. Returns true | false, Result.
 local function enterFittingRoom(flow, preview)
     local x, y, z, h = CreatorScene.coords(preview)
     if not x then return false, WCResult.fail('INVALID_PAYLOAD') end
-    local prepared = call('w_creators:scene:prepare')
-    if not prepared.ok then return false, prepared end
-    flow.isolated = true
     local ped = PlayerPedId()
     local at = GetEntityCoords(ped)
     flow.saved = { at.x, at.y, at.z, GetEntityHeading(ped) }
+    -- a store with a catalogue book: the player leafs through it first, in the shared world where
+    -- the others see it (bounded; a failed or cut-short reading never stops the visit)
+    if flow.kind == 'store' and flow.location and WCCatalogue.book(flow.location) then
+        local okRead, read = pcall(WCCatalogue.enter, flow.location)
+        flow.reading = okRead and read == true
+        -- the reading yielded for seconds: a flow stopped meanwhile (death, the server closing the
+        -- session) must not reach the prepare. Without a session the server would take it for the
+        -- start of a character switch, and the player would be faded and moved for nothing.
+        if flow.finished or flow.abortReason or isDead() then
+            if flow.reading then
+                flow.reading = false
+                pcall(WCCatalogue.stop)
+            end
+            return nil
+        end
+    end
+    local prepared = call('w_creators:scene:prepare')
+    if not prepared.ok then return false, prepared end
+    flow.isolated = true
     flow.faded = true
     StartFade(F.FADE_MS, F.FADE_KEY)
+    -- ⚠️ The reading ends under the fade, and the player is let go BEFORE he is moved. The scene
+    --    holds the player where it plays him (at the counter, facing the book); it was freed and the
+    --    player moved in the same frame, and the scene's release put him back: he never reached the
+    --    fitting room. The editor then opened on him at the counter, and its camera, in front of him,
+    --    stood behind the tailor across the counter: the tailor's back filled the screen, his head
+    --    above the frame (the owner's screenshot of Valentine). Now: out of the scene, his tasks
+    --    cleared, a moment for the game to settle, then the move (the Jump On store does the same,
+    --    with the same 100 ms), checked again below before the screen fades in.
     ped = PlayerPedId()
+    if flow.reading then pcall(WCCatalogue.release, ped) end
+    ClearPedTasksImmediately(ped)
+    Wait(F.RELEASE_MS)
+    -- a flow stopped during that moment is not moved (leave() undoes the bucket and the fade)
+    if flow.finished or flow.abortReason or isDead() then return nil end
+    ped = PlayerPedId()
+    local stand = { x, y, z, h }
     SetEntityCoords(ped, x, y, z, false, false, false, false)
     SetEntityHeading(ped, h)
+    flow.stand = stand
     flow.moved = true
     waitCollision(ped, x, y, z)
+    -- the stand's coordinates are the floor he stands on: set him down on it before he is frozen
+    -- (a frozen player is not settled by the game, and a stand given a little high left him floating)
+    pcall(WCNative.ped.placeOnGround, ped)
+    SetEntityHeading(ped, h)
+    -- a release that lands late (the scene still ending his part in it) pulls him back to the
+    -- counter after the move: looked at again a few frames on, still under the fade, and made again
+    -- when it did not hold, so nobody sees him at the counter nor a jump once the screen is back
+    for _ = 1, F.STAND_CHECKS do
+        Wait(F.STAND_CHECK_MS)
+        ped = PlayerPedId()
+        if onStand(ped, stand) then break end
+        WCDebug.warn('services', 'the move to the fitting stand did not hold: made again')
+        placeOnStand(ped, stand)
+    end
     return true
+end
+
+-- The editors that dress the player (the store, the wardrobe) frame him with the store framings
+-- (WCCamera.SETS.shop); the barber and the clinic keep their own.
+local SHOP_CAMERA = { store = true, wardrobe = true }
+
+--- Right before the editor opens its camera: put the player back on his stand if something moved
+--  him off it, turn him to the stand's heading, and tell the camera to frame from that heading
+--  with the store framings (a wardrobe: where he stands, the way he faces).
+--  ⚠️ The camera frames whatever spot the player is on when it opens, from the way he faces then,
+--     and keeps that direction for the whole visit. A player left at the counter was framed from
+--     behind the tailor; one turned for an instant (WCPreviewEnv.enter clears his tasks after the
+--     move turned him) would be framed from his side. So the last check of the stand is here, the
+--     stand's heading is what the camera frames from, and he is held on it for a moment
+--     (WCCamera.anchor).
+local function anchorCamera(flow)
+    if not SHOP_CAMERA[flow.kind] or type(WCCamera) ~= 'table' or type(WCCamera.anchor) ~= 'function' then return end
+    local ped = PlayerPedId()
+    local heading
+    local stand = flow.stand
+    if stand then
+        if not onStand(ped, stand) then
+            WCDebug.warn('services', 'the player was off the fitting stand: put back on it')
+            placeOnStand(ped, stand)
+        end
+        heading = stand[4]
+        SetEntityHeading(ped, heading)
+    else
+        heading = GetEntityHeading(ped)
+    end
+    pcall(WCCamera.anchor, ped, { heading = heading, set = 'shop', hold = F.HEADING_HOLD_MS })
 end
 
 --- Undo the preview: the fitting room (coordinates, bucket), then the environment (freeze, HUD,
 --  controls: the player stays frozen and WCPreviewEnv.active() stays true until back on the shop
 --  floor) and the fade. Each step runs once.
 local function leave(flow)
+    local returned = flow.moved == true
     if flow.moved and not flow.faded then
         flow.faded = true
         StartFade(F.FADE_MS, F.FADE_KEY)
@@ -182,6 +283,9 @@ local function leave(flow)
         SetEntityHeading(ped, c[4])
         flow.returnHeading = c[4]
         waitCollision(ped, c[1], c[2], c[3])
+        -- the saved point is where his body was (GetEntityCoords), and SetEntityCoords takes a
+        -- floor: he came back a metre up and dropped onto the shop floor once unfrozen
+        pcall(WCNative.ped.placeOnGround, ped)
     end
     if flow.isolated then
         flow.isolated = false
@@ -199,6 +303,16 @@ local function leave(flow)
     if flow.faded then
         flow.faded = false
         EndFade(F.FADE_MS)
+    end
+    -- back at the counter: the player closes the catalogue (its own thread: the flow is over)
+    if flow.reading then
+        flow.reading = false
+        local loc = flow.location
+        if returned and not isDead() then
+            CreateThread(function() pcall(WCCatalogue.exit, loc) end)
+        else
+            pcall(WCCatalogue.stop)
+        end
     end
 end
 
@@ -353,7 +467,10 @@ end
 local function commit(flow, working, extra)
     if flow.finished or flow.committed then return WCResult.fail('SESSION_NOT_FOUND') end
     local opId = type(extra) == 'table' and type(extra.opId) == 'string' and extra.opId or fallbackOpId(flow, working)
-    local result = call(flow.spec.commit, flow.token, opId, working)
+    -- what else the commit carries (the store: the payment currency, the outfit to save the look as)
+    local more = type(flow.spec.commitExtra) == 'function' and flow.spec.commitExtra(extra) or nil
+    local result = more and call(flow.spec.commit, flow.token, opId, working, more)
+        or call(flow.spec.commit, flow.token, opId, working)
     flow.lastOpId = opId
     if result.ok then
         local data = type(result.data) == 'table' and result.data or {}
@@ -432,6 +549,12 @@ local function openFlow(flow)
 
     if spec.fittingRoom and data.preview ~= nil and data.preview ~= false then
         local entered, failure = enterFittingRoom(flow, data.preview)
+        -- nil: stopped while the player read the catalogue (nothing was prepared or moved), or
+        -- while he was let go before the move (not moved; finishing undoes the bucket and fade)
+        if entered == nil then
+            stopped(flow)
+            return false, stopCode(flow)
+        end
         if not entered then
             notify(failure.message or WCResult.messageKey(failure.code))
             F.finish(flow, 'error')
@@ -440,29 +563,43 @@ local function openFlow(flow)
         if stopped(flow) then return false, stopCode(flow) end
     end
 
+    -- the store and the wardrobe light the player (Config.Clothing.fittingLight): the colours on
+    -- sale are judged in a dim shop
+    local light = (spec.kind == 'store' or spec.kind == 'wardrobe') and Config.Clothing
+        and WCPreviewEnv.lightOf(Config.Clothing.fittingLight) or nil
     flow.env = WCPreviewEnv.enter({ ped = PlayerPedId(), freeze = true, hud = true, controls = true,
-                                    holster = true, clearTasks = true }) == true
+                                    holster = true, clearTasks = true, light = light }) == true
     if not flow.env then
         F.finish(flow, 'error')
         return false, 'BUSY'
     end
-    if flow.faded then
-        flow.faded = false
-        EndFade(F.FADE_MS)
-    end
+    -- the fitting room's fade stays down until the editor's camera is up (below); a flow stopped
+    -- meanwhile fades back in from leave()
     if stopped(flow) then return false, stopCode(flow) end
 
     local opts = spec.options(flow, data, flow.location)
     opts.onCommit = function(working, extra) return commit(flow, working, extra) end
     opts.onCancel = function() F.finish(flow, 'cancel') end
+    -- after the options: a barber / clinic seat is taken inside them, and it is the last move
+    anchorCamera(flow)
     local opened, code = WCEditor.open(PlayerPedId(), spec.mode, data.appearance, opts)
     if not opened then
+        -- the anchor was made for this editor's camera: never for the next open of the player
+        if type(WCCamera) == 'table' and type(WCCamera.clearAnchor) == 'function' then pcall(WCCamera.clearAnchor) end
         notify(WCResult.messageKey(code or 'INTERNAL_ERROR'))
         F.finish(flow, 'error')
         return false, code or 'INTERNAL_ERROR'
     end
     local s = WCEditor.session()
     flow.editorId = s and s.id or nil
+    -- ⚠️ The screen comes back only now, on the editor's camera. Faded in before the editor opened,
+    --    it showed the game's own third-person camera first, behind the player, until the editor's
+    --    camera cut in (the Jump On store shows its camera at once). The panel is already up; the
+    --    fade-in is the last step of the open.
+    if flow.faded then
+        flow.faded = false
+        EndFade(F.FADE_MS)
+    end
     watch(flow)
     return true
 end
@@ -516,6 +653,7 @@ local function stopFlow()
     release(flow)
     flow.finished = true
     local ped = PlayerPedId()
+    pcall(WCCatalogue.stop)
     if editorSession(flow) then pcall(WCEditor.close) end
     if flow.env then
         flow.env = false
@@ -553,7 +691,12 @@ P.HOUR_KEY = 'w_creators:hour' -- the GlobalState key holding the server's curre
 local OPEN_LABEL = 'فتح'
 local CLOSED_TITLE = 'مغلق · يفتح الساعة %s'
 local TYPE_LABELS = { clothing = 'متجر الملابس', wardrobe = 'الخزانة', barber = 'الحلاق', surgery = 'عيادة التجميل' }
-local DEFAULT_SPRITE = 'blip_shop_clothing'
+-- A real sprite of the game: the older 'blip_shop_clothing' does not exist and drew a plain dot
+local DEFAULT_SPRITE = 'blip_shop_tailor'
+
+P.ACCESS_REFRESH_MS = 30000 -- how often the answer of w_creators:locations:access is refreshed
+local accessCache = {}      -- [locationId] = boolean: the server's last answer (the rule's locations only)
+local accessWatch = false
 
 -- The client entry point of each location type (read at call time: they load after this file).
 local ENTRY = {
@@ -605,9 +748,50 @@ function P.isOpen(loc)
     return WCLocations.isOpen(loc, hour)
 end
 
+--- May this player use the location (its access rule, Config.Locations[].access)? Without a rule
+--  always; with one, the server's last answer, and yes until it has answered (the server's open
+--  refuses anyway: this only hides a prompt the player would be refused at).
+local ruled = setmetatable({}, { __mode = 'k' }) -- [location table] = has an access rule (the prompt asks per frame)
+
+function P.accessible(loc)
+    if type(loc) ~= 'table' then return true end
+    local rule = ruled[loc]
+    if rule == nil then
+        rule = WCLocations.access(loc) ~= nil
+        ruled[loc] = rule
+    end
+    if not rule then return true end
+    return accessCache[loc.id] ~= false
+end
+
+--- Ask the server again which of the rule-bound locations this player may use.
+function P.refreshAccess()
+    local result = call('w_creators:locations:access')
+    if not result.ok or type(result.data) ~= 'table' then return false end
+    local fresh = {}
+    for id, allowed in pairs(result.data) do
+        if type(id) == 'string' then fresh[id] = allowed == true end
+    end
+    accessCache = fresh
+    return true
+end
+
+--- Keep the access answers fresh (a job can change at any time) while a rule-bound location exists.
+local function watchAccess()
+    if accessWatch then return end
+    accessWatch = true
+    CreateThread(function()
+        while accessWatch do
+            local ok, err = pcall(P.refreshAccess)
+            if not ok then WCDebug.warn('services', 'access refresh failed: %s', tostring(err)) end
+            Wait(P.ACCESS_REFRESH_MS)
+        end
+    end)
+end
+
 --- May the prompt of this location be shown / used now?
 function P.canInteract(loc)
-    return P.isOpen(loc) and F.blocked() == nil
+    return P.isOpen(loc) and P.accessible(loc) and F.blocked() == nil
 end
 
 --- The prompt title while the location is closed: "<label> · <town> · Closed · opens at 06:00".
@@ -635,7 +819,7 @@ end
 --  (and its title says so) while the location is closed. The action itself re-checks the hours.
 function P.promptAllowed(point)
     syncHours(point)
-    return F.blocked() == nil
+    return F.blocked() == nil and P.accessible(point.loc)
 end
 
 --- Open the service of a location (the prompt's action; runs in the prompt's thread).
@@ -711,12 +895,13 @@ local function createNpc(loc)
     return ped
 end
 
---- Remove every prompt, blip and NPC.
+--- Remove every prompt, blip, NPC and catalogue book.
 function P.clear()
     for _, point in ipairs(points) do
         if point.prompt then pcall(point.prompt.remove) end
         if point.blip then pcall(w.blip.remove, point.blip) end
         if point.npc then pcall(w.entity.delete, point.npc) end
+        if point.book then pcall(WCCatalogue.remove, point.book) end
     end
     points = {}
 end
@@ -736,7 +921,10 @@ function P.build()
                 syncHours(point)
                 if type(loc.blip) == 'table' then point.blip = createBlip(loc, anchor) end
                 if type(loc.npc) == 'table' then point.npc = createNpc(loc) end
-                if point.prompt or point.blip or point.npc then points[#points + 1] = point end
+                -- the catalogue book on a clothing store's counter (Config.Clothing.catalogue)
+                if loc.book ~= nil then point.book = WCCatalogue.spawn(loc) end
+                if WCLocations.access(loc) then watchAccess() end
+                if point.prompt or point.blip or point.npc or point.book then points[#points + 1] = point end
             end
         end
     end
@@ -774,6 +962,7 @@ OnLanguageChange(function() P.relabel() end)
 
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
+    accessWatch = false
     local cleared, clearErr = pcall(P.clear)
     if not cleared then WCDebug.warn('services', 'removing the service locations failed: %s', tostring(clearErr)) end
     local ok, err = pcall(stopFlow)

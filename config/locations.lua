@@ -19,17 +19,29 @@
 --    allowedServices   { hair = true, facialHair = true, details = true } | nil (barber)
 --    hours             { open = 6, close = 22 } | nil: open from 06:00 until 21:59 in the server's local
 --                      time (close < open spans midnight); a closed location is refused (LOCATION_DISABLED)
+--    book              vector4 | nil (clothing): the catalogue book on the counter (x, y, z, heading).
+--                      With Config.Clothing.catalogue on, the book prop stands there and the player
+--                      reads it when the store opens and closes (client/services/locations.lua)
+--    outfits           true | false (clothing): the store also offers the saved outfits (equip only)
+--                      and "save this look as an outfit" on purchase (default true)
+--    access            nil | { jobs = { [jobName] = minGrade }, ace = 'permission' } (any location):
+--                      only players of one of the jobs (at that grade or above) or holding the ACE
+--                      permission may open it; the server refuses the others (ACCESS_DENIED)
 -- =====================================================================
 
+-- The blip sprites are the game's own: blip_shop_tailor (the tailor's needle) and
+-- blip_shop_wardrobe. The earlier 'blip_shop_clothing' is not a sprite of the game, so the map
+-- drew it as a plain dot.
 Config.LocationDefaults = {
     clothing = {
         interactionRadius = 2.0,
         prompt = true,
         npc = false,
-        blip = { sprite = 'blip_shop_clothing', label = 'متجر الملابس' },
+        blip = { sprite = 'blip_shop_tailor', label = 'متجر الملابس' },
         camera = 'fullBody',
         storeProfile = 'general',
         pricingProfile = 'standard',
+        outfits = true,
     },
     barber = {
         interactionRadius = 2.0,
@@ -50,7 +62,7 @@ Config.LocationDefaults = {
         interactionRadius = 2.0,
         prompt = true,
         npc = false,
-        blip = { sprite = 'blip_shop_clothing', label = 'الخزانة' },
+        blip = { sprite = 'blip_shop_wardrobe', label = 'الخزانة' },
         camera = 'fullBody',
     },
 }
@@ -63,6 +75,7 @@ Config.Locations = {
         id = 'valentine_clothing', type = 'clothing', enabled = true,
         label = 'متجر الملابس', town = 'فالنتاين',
         coords = vector3(-326.17, 773.757, 117.5),
+        book = vector4(-326.17, 773.757, 117.5, -170.0),
         preview = vector4(-329.31, 775.11, 120.63, 294.79),
         npc = { model = 'S_M_M_Tailor_01', coords = vector4(-325.67, 772.63, 116.44, 11.3) },
     },
@@ -70,6 +83,7 @@ Config.Locations = {
         id = 'saintdenis_clothing', type = 'clothing', enabled = true,
         label = 'متجر الملابس', town = 'سانت دينيس',
         coords = vector3(2554.619, -1167.834, 53.746),
+        book = vector4(2554.619, -1167.834, 53.746, 0.0),
         preview = vector4(2555.89, -1161.23, 52.7, 12.85),
         npc = { model = 'S_M_M_Tailor_01', coords = vector4(2554.6, -1166.83, 52.7, 180.95) },
     },
@@ -77,6 +91,7 @@ Config.Locations = {
         id = 'blackwater_clothing', type = 'clothing', enabled = true,
         label = 'متجر الملابس', town = 'بلاك ووتر',
         coords = vector3(-761.98, -1292.61, 43.885),
+        book = vector4(-761.98, -1292.61, 43.885, 180.0),
         preview = vector4(-767.74, -1295.17, 42.84, 304.87),
         npc = { model = 'S_M_M_Tailor_01', coords = vector4(-761.75, -1293.92, 42.84, 357.16) },
     },
@@ -84,6 +99,7 @@ Config.Locations = {
         id = 'tumbleweed_clothing', type = 'clothing', enabled = true,
         label = 'متجر الملابس', town = 'تمبلويد',
         coords = vector3(-5486.660, -2936.75, -0.346),
+        book = vector4(-5486.660, -2936.75, -0.346, -144.0),
         preview = vector4(-5479.77, -2933.07, -1.36, 181.29),
         npc = false, -- no tailor at this location
     },

@@ -137,7 +137,9 @@ class OpenTests(StoreTestCase):
     def test_server_open_event_opens_the_store(self):
         self.run('CallbackResults = { ["w_creators:store:open"] = storeData() }')
         self.run('fireEvent("w_creators:client:openStore", nil, "saintdenis_clothing")')
-        self.run('tick(0)')
+        # the flow runs in the event's thread: it lets the player go a moment before the move, and
+        # looks again a moment after it that the move held
+        self.run('tick(0); tick(WCServiceFlow.RELEASE_MS); tick(WCServiceFlow.STAND_CHECK_MS)')
         self.assertEqual(self.eval('callbacks("w_creators:store:open")[1][2]'), 'saintdenis_clothing')
         self.assertEqual(self.eval('WCEditor.session().opts.subtitle'), 'سانت دينيس')
 

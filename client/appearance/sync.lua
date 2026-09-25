@@ -211,7 +211,25 @@ function Sync.state(serverId, groupId, value)
                 base.clothing.states = type(base.clothing.states) == 'table' and base.clothing.states or {}
                 base.clothing.states[groupId] = value
             end
+            -- a garment back on (the shirt, the trousers): the states acting on it (sleeves, collar,
+            -- boots) were reset while it was off, so they are drawn again from the cached value
+            if value ~= 'off' then
+                local deps = {}
+                for _, def in ipairs(WCClothingStates.groups) do
+                    if def.hiddenBy == groupId and WCClothingStates.applicable(app, def.id) then deps[#deps + 1] = def.id end
+                end
+                if #deps > 0 then
+                    pcall(Appearance.Refresh, ped)   -- commit the garment first
+                    for _, id in ipairs(deps) do
+                        pcall(Appearance.ApplyClothingState, ped, app, id, WCClothingStates.current(app, id))
+                    end
+                end
+            end
             pcall(Appearance.Refresh, ped)
+            -- the hair's own state on the committed change (a hat taken off, a bandana raised or
+            -- lowered): a long hair left tucked has no crown (Appearance.SettleHair)
+            local settled, changed = pcall(Appearance.SettleHair, ped, app)
+            if settled and changed then pcall(Appearance.Refresh, ped) end
             inFlight[serverId] = nil
             return true
         end

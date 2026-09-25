@@ -170,7 +170,10 @@ class OwnershipTests(unittest.TestCase):
                 { category = 'x' },
             }, 'bogus')
         ''')
-        self.assertEqual(self.e('#q'), 3)
+        # three item rows, then the owned-colour row of the tinted one (colourways)
+        self.assertEqual(self.e('#q'), 4)
+        self.assertIn('INSERT IGNORE INTO w_creators_colorways', self.e('q[4].query'))
+        self.assertEqual(self.e('q[4].values[3]'), 'metaped_tint_leather')
         self.assertIn('INSERT IGNORE', self.e('q[1].query'))
         self.assertEqual(self.e('q[1].values[2]'), 0xfffffffb)
         self.assertEqual(self.e('q[1].values[4]'), 'admin')

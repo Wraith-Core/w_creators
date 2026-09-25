@@ -6,6 +6,7 @@
 
 - تجهيز مشهد واحد للاختيار والإنشاء: تأكيد العزل من السيرفر، تثبيت شخصية المعاينة، ثم انتظار جاهزية المظهر قبل كشف المشهد. عند تعذر التحميل يظهر زر إعادة المحاولة من المكتبة.
 - الكاميرا تتجه إلى الشخصية الفعلية وتثبت زاويتها أثناء تدوير الشخصية. `Config.Scene.editingPed` يحدد مكان التعديل، و`Config.Scene.selectionPed` يحدد مكان المعاينة (`config/main.lua`)؛ ضبط اللقطات في `client/camera/camera.lua` (`WCCamera`).
+- مشهد الإنشاء على خشبة مسرح سانت دينيس: الرجل والمرأة متجاوران والكاميرا على الاثنين. ← يفتح المحرر على الرجل مباشرة و→ على المرأة، ويُعدَّل كل منهما في مكانه (`editingPed = nil`) والآخر مخفي. زر «تغيير الجنس» في المحرر يعيد إلى الاثنين ويحفظ مسودة كل جنس والاسم المكتوب، والجنس يُرسل للسيرفر عند الحفظ فقط. الإضاءة الملوّنة وعدد المارة وأماكن الشخصيات والكاميرا كلها في `Config.Scene`.
 - الضغط على الوجه أو العينين أو الجسم أو الساقين أو الحذاء يقرّب الجزء مباشرةً عبر `w.raycast.pedPartFromScreen`. السحب يدوّر الشخصية، وعجلة الماوس تقرّب وتبعد، والزر اليمين يعيد العرض الكامل. تلميح الكاميرا في أسفل الوسط، ويعمل التحكم نفسه في الإنشاء والخياط والخزانة والحلاق.
 - مسار تطبيق واحد للإنشاء والمعاينة والظهور ومزامنة اللاعبين.
 - تخزين معرفات القطع الثابتة؛ قراءة صيغة `{model, variation}` القديمة وتحويلها عند الحفظ دون حذف الشخصيات.
@@ -118,8 +119,8 @@ ensure w_ambulancejob       # optional
 | File | Tables | What you change there |
 |---|---|---|
 | `config/main.lua` | `Config.Debug`, `Config.Framework`, `Config.Services`, `Config.Characters`, `Config.Creator`, `Config.Scene`, `Config.Experimental`, `Config.Keys`, `Config.Admin` | service toggles, slots, deletion, identity rules, selection/gender prompts, creator stages and cutscene, the creator room, research flags (all off), keys, admin ACEs and dev tools |
-| `config/locations.lua` | `Config.LocationDefaults`, `Config.Locations` | every clothing store, wardrobe, barber and surgery clinic: `id`, `type`, `enabled`, `coords`, `interactionRadius`, `npc`, `blip`, `prompt`, `preview`, `camera`, `storeProfile`, `pricingProfile`, `allowedServices`, `hours` |
-| `config/clothing.lua` | `Config.Clothing` (`taxonomy`, `prices`, `tints`, `storeProfiles`, `pricingProfiles`, `applyOrder`, `rules`, `essentialNotRemovable`), `Config.ClothingStates` | the category tree, prices per category (a negative or missing price means not for sale), tint palettes and price, conflicts, clothing-state groups |
+| `config/locations.lua` | `Config.LocationDefaults`, `Config.Locations` | every clothing store, wardrobe, barber and surgery clinic: `id`, `type`, `enabled`, `coords`, `interactionRadius`, `npc`, `blip`, `prompt`, `preview`, `camera`, `storeProfile`, `pricingProfile`, `allowedServices`, `hours`, `book` (the store's catalogue book), `outfits`, `access` (jobs / ACE) |
+| `config/clothing.lua` | `Config.Clothing` (`taxonomy`, `prices`, `modelPrices`, `payment`, `tints`, `storeProfiles`, `pricingProfiles`, `resell`, `suggestions`, `fittingLight`, `catalogue`, `items`, `applyOrder`, `rules`, `essentialNotRemovable`), `Config.ClothingStates` (+ `commands`, `bandanaStateBag`) | the category tree, prices per category and per model, in cash or gold (a negative or missing price means not for sale), tint palettes, limits and price, selling back, the tailor's suggestions, the fitting-room light, the catalogue book, the optional inventory items, conflicts, clothing-state groups and their commands |
 | `config/barber.lua` | `Config.Barber`, `Config.Grooming` | barber service prices and `prices.visitCap`; growth stages, `minutesPerStage`, `saveIntervalSeconds` |
 | `config/surgery.lua` | `Config.CosmeticSurgery` | `price`, `allow` (sections a procedure may change), `sessionMinutes` |
 | `config/wardrobe.lua` | `Config.Wardrobe` | `maxSavedOutfits`, `outfitNameMax`, `allowRemote` |
@@ -150,12 +151,12 @@ files and the database. No price or coordinate is ever read from the client.
 |---|---|---|
 | `Config.Keys.interact` (`E`) | service locations | location `prompt = true` |
 | `Config.Characters.selection.keys` (`RETURN`, `DELETE` held `deletion.holdTime` ms, `LEFT`, `RIGHT`) | selection screen | — |
-| `Config.Characters.genderPrompt` (`LEFT`, `RIGHT`, `RETURN`, `BACK`) | creator gender scene | — |
+| `Config.Characters.genderPrompt` (`LEFT` = the man, `RIGHT` = the woman: opens the editor at once; `BACK`) | creator gender scene | the editor's root Back ("change the sex") returns to it and keeps both drafts |
 | `Config.Spawn.selector.keys` (`RETURN`, `LEFT`, `RIGHT`; `cancel`, default `BACK`) | spawn selector | `cancel` only for an in-world selector (kinds `admin` / `death`) |
 | `/characters` | client | `Config.Characters.allowSwitch = true`; refused while dead, in an editor or a session |
 | `/clothing`, keybind `wc_clothing_actions` (default `Config.Keys.clothingActions`, `nil` = unbound) | client | `Config.Services.clothingActions` |
 | `/reloadappearance` | client | re-reads the saved appearance (server rate limit: 1 per 10 s) |
-| `wc_respawn <playerId> [pointId]` | server console or `Config.Admin.ace` | `pointId` = a point id, `__last`, or omitted (first enabled point) |
+| `wc_respawn <citizenId> [pointId]` | server console or `Config.Admin.ace` | the target's citizen id (`#5` = whoever is on server id 5; he must be in the game); `pointId` = a point id, `__last`, or omitted (first enabled point) |
 | `wc_migrate_appearances` | server console only | upgrades every legacy appearance row in batches of 100 |
 | `wc_catalog_validate` | server console or `Config.Admin.devAce` | `Config.Admin.devTools = true` |
 | `wc_inspect`, `wc_apply <hash>`, `wc_remove <category>`, `wc_restore` | client, `Config.Admin.devAce` | `Config.Admin.devTools = true`; local ped only |

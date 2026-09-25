@@ -4,11 +4,12 @@
 --  Appearance.RestoreCharacter from a v3 appearance (§5.1), in one fixed order:
 --
 --    validate ped + model → outfit preset 3 → commit + ready → strip clothes → BODIES_LOWER,
---    BODIES_UPPER → heads, eyes, teeth → hair → facial hair → waist type → scale → clothing
+--    BODIES_UPPER → heads, eyes (custom tint), teeth → hair → facial hair → body build (when set) →
+--    waist type → scale → clothing
 --    (Config.Clothing.applyOrder, tints the config allows, hidden visibility states skipped) →
 --    body commit + ready → wearable clothing states (inapplicable ones reset to base) → morph
---    (reset every channel, then the values) → final refresh + ready → overlays (w.pedTexture,
---    on the committed head).
+--    (reset every channel, then the values) → final refresh + ready → the hair's own state
+--    (A.SettleHair) → overlays (w.pedTexture, on the committed head).
 --
 --  The features are batched: nothing refreshes the ped per feature (audit A11). There are three
 --  structural commits: the preset (it resets the drawable slots and must be committed before the
@@ -43,7 +44,8 @@ local HEAD_ORDER = { 'heads', 'eyes', 'teeth' }
 --  Small helpers
 -- ---------------------------------------------------------------------
 local function pedExists(ped)
-    return type(ped) == 'number' and ped ~= 0 and DoesEntityExist(ped) == true
+    -- BOOL natives answer 1 (not true) on this runtime: never compare them with == true
+    return type(ped) == 'number' and ped ~= 0 and not not DoesEntityExist(ped)
 end
 
 --- The w_lib category argument of a catalogue category.
@@ -220,6 +222,31 @@ function A.SetWaist(ped, weight)
     return (pcall(w.component.setWaistType, ped, hash))
 end
 
+--- The body build (body.build): the build outfit of AppearanceSchema.BODY_BUILDS, equipped before
+--  the waist (a build outfit resets the waist, so the waist always follows it). No build = nothing
+--  equipped: the ped keeps the body the outfit preset gave it, as every character had before.
+A.BODY_BUILDS = AppearanceSchema.BODY_BUILDS
+function A.SetBuild(ped, build)
+    local index = WCUtil.int(build, 0, #A.BODY_BUILDS, 0)
+    if index == 0 then return false end
+    local hash = A.BODY_BUILDS[index]
+    local named = EquipMetaPedOutfit
+    if named then
+        local ok = pcall(named, ped, hash)
+        if ok then return true end
+    end
+    return (pcall(w.component.setBodyType, ped, hash))
+end
+
+--- The eyes' tint: { palette, tint0..2 } of a custom eye colour (head.eyesTint), or nil (the eye
+--  component's own colour).
+local function eyeTint(app)
+    local t = type(app.head) == 'table' and app.head.eyesTint or nil
+    if type(t) ~= 'table' then return nil end
+    return { palette = AppearanceSchema.EYE_PALETTE, tint0 = t.tint0, tint1 = t.tint1, tint2 = t.tint2 }
+end
+A.eyeTint = eyeTint
+
 --- The ped scale (height); always a float (an integer collapses every bone to the origin).
 function A.SetHeight(ped, height)
     return WCNative.ped.setScale(ped, WCUtil.number(height, 0.9, 1.1, 1.0) + 0.0)
@@ -256,6 +283,19 @@ function A.ApplyClothingState(ped, app, groupId, value)
     if not category then return false, 'STATE_NOT_APPLICABLE' end
     local equipped, tints = equippedOf(app), tintsOf(app)
     local hash = equipped[category]
+
+    if group.mechanism == 'bodyWearable' then
+        -- the body item itself: 'auto' puts it back to the game's base state
+        local body = tbl(app.body)
+        local item = group.body == 'lower' and body.lower or body.upper
+        local state = value == 'auto' and 'base' or value
+        local ok, err = pcall(w.component.setWearableState, ped, category, item, state)
+        if not ok then
+            WCDebug.warn('appearance', 'body state %s=%s failed: %s', tostring(groupId), tostring(value), tostring(err))
+            return false, 'STATE_NOT_SUPPORTED'
+        end
+        return true
+    end
 
     if group.mechanism == 'visibility' then
         if value == 'off' then
@@ -320,8 +360,58 @@ local function applyWearableStates(ped, app, only)
             else
                 resetWearable(ped, app, group)
             end
+        elseif group.mechanism == 'bodyWearable' and (not only or only[group.id])
+            and WCClothingStates.applicable(app, group.id) then
+            -- the body-part fix, after the clothes it corrects: a fresh render leaves 'auto' to the
+            -- game (nothing is set); a change (only) sets it, 'auto' included (back to base)
+            local value = WCClothingStates.current(app, group.id)
+            if only or value ~= 'auto' then A.ApplyClothingState(ped, app, group.id, value) end
         end
     end
+end
+
+-- ---------------------------------------------------------------------
+--  The hair's own wearable state
+-- ---------------------------------------------------------------------
+
+--- Put the hair back in its own state (BASE) when no hat covers the crown.
+--  ★ Only the long MP hair styles have more than BASE / POMADE: CLOTHING_ITEM_M_HAIR_005, 008, 010,
+--    011, 013, 020, 022-025 and several female ones also have BASE_TUCKED / POMADE_TUCKED (some
+--    *_STIFF), per the game's shop item data (femga rdr3_discoveries wearable_states.lua), each with
+--    its own "_tuck" drawable. The game moves an item to such a state through the shop-item
+--    triggers of other garments, as a raised bandana tucks the beard (w_lib undoes that one). The
+--    tucked hair is drawn without its crown (it is meant to sit under a hat), which is why only
+--    long hair ever shows the bald top (the owner's screenshot: bandana up, no hat). Which garment
+--    tucked it is inferred, not proven: the raised bandana, or a hat that has left the head since
+--    (taken off here, or knocked off by the game: WCClothing watches for that one).
+--    Nothing moves it back. Taking a garment off (RemoveTagFromMetaPed) or lowering the bandana does
+--    not undo a trigger: w_lib re-applies the beard by hand when the bandana goes down, VORP resets
+--    the boots after the pants. w_lib also re-applies only the states of clothing categories, never
+--    the hair's. Only the full render re-applies the hair from scratch, so the crown came and went
+--    with whichever path drew the ped last (and a render with the bandana still up tucks it again).
+--    Worse, w_lib sets every remembered clothing state again after each component change (its
+--    delayed reapplyCached), which fires the bandana's trigger again. So the rule lives in w_lib
+--    (w.component.restoreHairState, also run by that delayed re-apply); the paths that change
+--    garments here call it after their own commit (the trigger may resolve on the refresh) so they
+--    hand the ped back with the crown, then commit again when it changed the hair.
+--  The resource offers no hair state (no pomade), so the hair's own state is base. With a hat on,
+--  the tucked hair is what the game draws under it and is left alone.
+---@param ped integer
+---@param app table the appearance the ped shows now (its hair and hat decide)
+---@return boolean changed true when the hair was reset (the caller commits: Appearance.Refresh)
+function A.SettleHair(ped, app)
+    if not pedExists(ped) or type(app) ~= 'table' then return false end
+    local style = tbl(app.hair).style
+    if not style or style == 0 then return false end
+    if visibleClothing(app).hats then return false end
+    -- the export hands functions back as callable funcrefs (type 'table'): test presence only
+    if not w.component.restoreHairState then return false end
+    local ok, changed = pcall(w.component.restoreHairState, ped)
+    if not ok then
+        WCDebug.log('appearance', 'hair state reset failed on ped %s: %s', tostring(ped), tostring(changed))
+        return false
+    end
+    return changed == true
 end
 
 --- The overlay layer (w.pedTexture) application, provided by client/appearance/overlays.lua.
@@ -382,7 +472,7 @@ local function render(ped, app, opts)
     put(BODY_ORDER[1], app.body.lower)
     put(BODY_ORDER[2], app.body.upper)
     put(HEAD_ORDER[1], app.head.head)
-    put(HEAD_ORDER[2], app.head.eyes)
+    put(HEAD_ORDER[2], app.head.eyes, eyeTint(app))
     put(HEAD_ORDER[3], app.head.teeth)
 
     -- 4. hair and facial hair
@@ -390,7 +480,8 @@ local function render(ped, app, opts)
     put('hair', hair.style)
     if app.sex == 'male' then put('mustache', hair.facial) end
 
-    -- 5. waist and height
+    -- 5. build (when set), waist and height
+    if app.body.build then A.SetBuild(ped, app.body.build) end
     A.SetWaist(ped, app.body.weight)
     A.SetHeight(ped, app.body.height)
 
@@ -420,6 +511,9 @@ local function render(ped, app, opts)
         WCDebug.warn('appearance', 'ped %s did not become ready after the restore', tostring(ped))
         return false, 'NOT_READY', failed
     end
+    -- the hair was applied fresh in step 4, but a garment state drawn in step 8 (a raised bandana)
+    -- can have tucked a long hair since: without a hat that is a bald crown (A.SettleHair)
+    if A.SettleHair(ped, app) then A.Refresh(ped) end
 
     -- 10. overlays on the committed head: w.pedTexture builds the face texture on the albedo of the
     --     head the ped carries now, and commits it itself (refreshNow)
@@ -457,7 +551,8 @@ end
 local function needsFullRestore(before, after)
     if type(before) ~= 'table' or before.sex ~= after.sex then return true end
     local bb, ab, bh, ah = tbl(before.body), tbl(after.body), tbl(before.head), tbl(after.head)
-    return bb.upper ~= ab.upper or bb.lower ~= ab.lower or bh.head ~= ah.head
+    -- a build outfit cannot be taken off again, only replaced: a build change starts from the preset
+    return bb.upper ~= ab.upper or bb.lower ~= ab.lower or bh.head ~= ah.head or bb.build ~= ab.build
 end
 
 local function sameTint(a, b)
@@ -478,14 +573,15 @@ local function diff(ped, before, after)
         return ok
     end
 
-    -- eyes / teeth
+    -- eyes (and their custom tint) / teeth
     local bh, ah = tbl(before.head), tbl(after.head)
-    if bh.eyes ~= ah.eyes then put('eyes', ah.eyes) end
+    if bh.eyes ~= ah.eyes or not WCUtil.deepEqual(bh.eyesTint, ah.eyesTint) then put('eyes', ah.eyes, eyeTint(after)) end
     if bh.teeth ~= ah.teeth then put('teeth', ah.teeth) end
 
     -- hair / facial hair
     local bhair, ahair = tbl(before.hair), tbl(after.hair)
-    if bhair.style ~= ahair.style then put('hair', ahair.style) end
+    local hairChanged = bhair.style ~= ahair.style
+    if hairChanged then put('hair', ahair.style) end
     local bf = before.sex == 'male' and bhair.facial or 0
     local af = after.sex == 'male' and ahair.facial or 0
     if bf ~= af then put('mustache', af) end
@@ -523,7 +619,7 @@ local function diff(ped, before, after)
     -- (e.g. the pants of the boots) changed
     local only = {}
     for _, group in ipairs(WCClothingStates.groups) do
-        if group.mechanism == 'wearable' then
+        if group.mechanism == 'wearable' or group.mechanism == 'bodyWearable' then
             local touched = WCClothingStates.current(before, group.id) ~= WCClothingStates.current(after, group.id)
                 or WCClothingStates.applicable(before, group.id) ~= WCClothingStates.applicable(after, group.id)
             for _, c in ipairs(group.categories) do
@@ -531,6 +627,11 @@ local function diff(ped, before, after)
             end
             for _, c in ipairs(group.requires) do
                 if reapplied[c] then touched = true end
+            end
+            -- a set body state is drawn again after any garment went on: it corrects the clothes
+            if group.mechanism == 'bodyWearable' and next(reapplied)
+                and WCClothingStates.current(after, group.id) ~= 'auto' then
+                touched = true
             end
             if touched then only[group.id] = true end
         end
@@ -587,9 +688,17 @@ local function diff(ped, before, after)
         if not pedExists(ped) then return false, failed, 'INVALID_PED' end
         if not A.Refresh(ped) then return false, failed, 'NOT_READY' end
     end
+    -- the hair's own state on the committed garments: a hat taken off, a bandana raised or lowered
+    -- in the preview (A.SettleHair)
+    if A.SettleHair(ped, after) then
+        if not pedExists(ped) then return false, failed, 'INVALID_PED' end
+        A.Refresh(ped)
+    end
 
-    -- overlays on the committed head: w.pedTexture rebuilds the whole head layer set and commits it
-    if not WCUtil.deepEqual(tbl(before.overlays), tbl(after.overlays)) then
+    -- overlays on the committed head: w.pedTexture rebuilds the whole head layer set and commits it.
+    -- Eyebrows that follow the hair are drawn in the hair's tints: a new hair colour redraws them.
+    local brows = tbl(tbl(after.overlays).eyebrows)
+    if not WCUtil.deepEqual(tbl(before.overlays), tbl(after.overlays)) or (hairChanged and brows.matchHair) then
         if not pedExists(ped) then return false, failed, 'INVALID_PED' end
         if applyOverlays(ped, after) then A.WaitReady(ped) end
     end

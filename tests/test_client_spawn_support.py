@@ -50,7 +50,7 @@ function GetGroundZAndNormalFor_3dCoord(x, y, z)
     return Ground[1], Ground[2] or (z - 2.0), vector3(0, 0, 1)
 end
 CollisionLoaded = true
-function HasCollisionLoadedAroundEntity() return CollisionLoaded end
+function HasCollisionLoadedAroundEntity() return CollisionLoaded and 1 or false end -- 1 like the runtime
 
 -- misc natives --------------------------------------------------------------------------------
 for _, name in ipairs({ 'NetworkSetEntityOnlyExistsForParticipants', 'LoadSceneStart', 'LoadSceneStop' }) do

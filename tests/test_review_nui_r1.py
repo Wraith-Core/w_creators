@@ -117,7 +117,7 @@ class WardrobeStateTests(EditorBase):
         self.assertIsNotNone(shirt)
         self.assertEqual(shirt.label, 'القميص')
         self.assertEqual([a.control for a in lua_list(shirt.children)],
-                         ['state.sleeves.rolled', 'state.collar.open'])
+                         ['state.sleeves.rolled', 'state.collar.open', 'state.shirt.off'])
 
 
 class WardrobeLabelTests(unittest.TestCase):
@@ -144,7 +144,7 @@ class WardrobeLabelTests(unittest.TestCase):
         self.assertIsNone(shirt.summary)
         labels = {a.control: a.label for a in lua_list(shirt.children)}
         # the inverse action with its own verb, never the current state
-        self.assertEqual(labels, {'state.sleeves.down': 'إنزال الأكمام', 'state.collar.open': 'فتح الياقة'})
+        self.assertEqual(labels, {'state.sleeves.down': 'إنزال الأكمام', 'state.collar.open': 'فتح الياقة', 'state.shirt.off': 'خلع القميص'})
         head = groups['states.head']
         hat = lua_list(head.children)[0]
         self.assertEqual([a.label for a in lua_list(hat.children)], ['خلع القبعة'])
@@ -261,10 +261,13 @@ class NuiWiringTests(unittest.TestCase):
         back = self.editor[self.editor.index('const back = () =>'):]
         back = back[:back.index('};')]
         self.assertRegex(back, r'identityDirty\(payload\.identity,\s*identity\)')
-        self.assertRegex(back, r'backAction\(\{confirm, pathLength: validPath\.length, dirty(, search)?\}\)')
+        # direct: the creator's root Back ("change the sex") keeps the look, so it never asks
+        self.assertRegex(back, r'backAction\(\{confirm, pathLength: validPath\.length, dirty(, search)?'
+                               r'(, direct: !!payload\.backDirect)?\}\)')
 
     def test_save_modal_renders_the_price_lines(self):
-        self.assertRegex(self.editor, r'priceLines\(price\)')
+        # (the strings go with it: a gold amount is written with the payload's own words)
+        self.assertRegex(self.editor, r'priceLines\(price(, S)?\)')
         self.assertIn('className="price-lines"', self.editor)
         self.assertRegex(self.editor, r'modal\.lines\.map')
         css = read(RESOURCE / 'web' / 'src' / 'styles.css')

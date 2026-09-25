@@ -117,10 +117,13 @@ export function identityDirty(identity, form) {
 
 // What Back / Escape does: dismiss the open modal, clear an active search (the search is one
 // navigation level), go up one level, ask to save/discard (root, dirty) or close (root, clean).
-export function backAction({ confirm, pathLength, dirty, search }) {
+// `direct` (payload.backDirect: the creator's "change the sex", which keeps the look as a draft)
+// closes from the root without the question: nothing is lost.
+export function backAction({ confirm, pathLength, dirty, search, direct }) {
   if (confirm) return 'dismiss';
   if (String(search || '').trim() !== '') return 'clearSearch';
   if (pathLength > 0) return 'pop';
+  if (direct) return 'close';
   return dirty ? 'confirmLeave' : 'close';
 }
 
@@ -164,16 +167,20 @@ export function requestReducer(state, event) {
 }
 export const isPending = state => state?.status === 'loading';
 
-// Numbers: storage value <-> displayed value (display = {scale, decimals}).
+// Numbers: storage value <-> displayed value (display = {scale, decimals, format?}).
 export function toDisplay(value, display) {
   const scale = Number(display?.scale) || 1;
   return Number(value || 0) * scale;
 }
+// display.format ('%s m', from the payload's own words) wraps the number in its unit: the creator's
+// height reads as metres or feet. No unit text is written here.
 export function formatDisplay(value, display) {
   const decimals = Number.isInteger(display?.decimals) ? display.decimals : 2;
   const shown = toDisplay(value, display);
   const text = shown.toFixed(decimals);
-  return text === '-0' || /^-0\.0*$/.test(text) ? text.slice(1) : text;
+  const out = text === '-0' || /^-0\.0*$/.test(text) ? text.slice(1) : text;
+  const format = typeof display?.format === 'string' && display.format.includes('%s') ? display.format : null;
+  return format ? format.replace('%s', out) : out;
 }
 export function fromDisplay(text, display, min = -Infinity, max = Infinity) {
   const scale = Number(display?.scale) || 1;
@@ -184,12 +191,20 @@ export function fromDisplay(text, display, min = -Infinity, max = Infinity) {
 
 const pad2 = n => String(n).padStart(2, '0');
 
-// The options of a choice node: explicit options (badge labels appended) or a generated range.
+// A colour chip value from Lua: a #rgb / #rrggbb string, anything else is dropped (it ends up in a
+// CSS custom property, so only a plain hex colour is let through).
+export const swatchOf = v => (typeof v === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(v) ? v : null);
+
+// The options of a choice node: explicit options (badge labels appended, colour chip kept) or a
+// generated range.
 export function choiceOptions(node, strings = {}) {
   if (Array.isArray(node?.options)) {
     return node.options.map(o => {
       const badge = o.badgeLabel || (o.badge ? strings[o.badge] : '');
-      return { value: o.value, label: badge ? `${o.label} · ${badge}` : String(o.label ?? '') };
+      const out = { value: o.value, label: badge ? `${o.label} · ${badge}` : String(o.label ?? '') };
+      const swatch = swatchOf(o.swatch);
+      if (swatch) out.swatch = swatch;
+      return out;
     });
   }
   const range = node?.range;
@@ -200,18 +215,64 @@ export function choiceOptions(node, strings = {}) {
   return out;
 }
 
-export const formatMoney = n => `$${(Number(n) || 0).toFixed(2)}`;
+// An amount in its currency: '$12.50' in cash; in gold the payload's own words
+// (strings.goldAmount, e.g. '%s ذهب' / '%s gold'), so no currency text is written here.
+export const formatMoney = (n, currency, strings) => {
+  const amount = (Number(n) || 0).toFixed(2);
+  if (currency === 'gold') return String(strings?.goldAmount || '%s').replace('%s', amount);
+  return `$${amount}`;
+};
 
 // The rows of a price breakdown (payload.price.lines = [{label, amount}], §8.1) as {label, value}.
 // Shown only when the lines add up to the total: a capped barber visit has no line for the cap, and
 // amounts that do not add up would misstate what is charged (the total alone is shown then).
-export function priceLines(price) {
+export function priceLines(price, strings) {
   const lines = list(price?.lines).filter(l => l && Number.isFinite(Number(l.amount)));
   if (!lines.length) return [];
   const cents = n => Math.round(Number(n) * 100);
   if (lines.reduce((sum, l) => sum + cents(l.amount), 0) !== cents(price.total)) return [];
-  return lines.map(l => ({ label: String(l.label ?? ''), value: formatMoney(l.amount) }));
+  return lines.map(l => ({ label: String(l.label ?? ''), value: formatMoney(l.amount, price?.currency, strings) }));
 }
+
+// A slider value that avoids the indices a palette disables (node.skip): the nearest allowed value
+// in the direction the hand moved (from `prev`), else the nearest the other way, within min..max.
+export function skipValue(value, prev, skip, min, max) {
+  const blocked = new Set(list(skip).map(Number));
+  let v = Math.max(min, Math.min(max, Math.round(Number(value))));
+  if (!blocked.has(v)) return v;
+  const step = Number(value) >= Number(prev) ? 1 : -1;
+  for (const dir of [step, -step]) {
+    for (let x = v + dir; x >= min && x <= max; x += dir) if (!blocked.has(x)) return x;
+  }
+  return Number.isFinite(Number(prev)) ? Number(prev) : v;
+}
+
+// Where an index sits on a palette strip (0..1, the middle of its cell): the strip spans min..max.
+export const stripFraction = (index, min, max) => {
+  const cells = Math.max(1, Number(max) - Number(min) + 1);
+  return Math.max(0, Math.min(1, (Number(index) - Number(min) + 0.5) / cells));
+};
+
+// A palette strip always holds the whole palette, tint 0 .. TINT_MAX left to right (docs/CLOTHING.md
+// §5.2), whatever bounds a palette's limits give the slider: the chip reads the tint's own cell.
+export const TINT_MAX = 254;
+
+// The part of a whole-palette strip a slider of min..max shows, as CSS background size and
+// position-x percentages: the strip is scaled so the min..max cells fill the track, then shifted so
+// cell `min` sits at its left edge (a background-position percentage p places the image at
+// p × (track − image), so p = min / (cells − shown)).
+export function stripWindow(min, max) {
+  const cells = TINT_MAX + 1;
+  const lo = Math.max(0, Math.min(TINT_MAX, Math.round(Number(min) || 0)));
+  const hi = Math.max(lo, Math.min(TINT_MAX, Math.round(Number.isFinite(Number(max)) ? Number(max) : TINT_MAX)));
+  const shown = hi - lo + 1;
+  if (shown >= cells) return { size: 100, position: 0 };
+  return { size: cells / shown * 100, position: lo / (cells - shown) * 100 };
+}
+
+// A palette strip path from Lua (node.track, 'tex/palettes/<name>.png'): only that plain shape is
+// let through (it ends up in a CSS url()).
+export const trackPath = v => (typeof v === 'string' && /^tex\/palettes\/[A-Za-z0-9_]+\.png$/.test(v) ? v : null);
 
 // Split the children of a group into render segments, keeping their order:
 //  rows      navigable children and actions (MenuRow)
@@ -284,5 +345,118 @@ export function reviewItems(node, identity, form) {
     label: f?.label || '',
     value: String((f?.type === 'info' ? f?.value : form?.[f?.key]) ?? '').trim(),
   }));
-  return [...typed, ...rows];
+  // a row Lua also lists (the sex, an info field) is shown once, with the identity rows
+  const own = new Set(typed.map(t => t.label).filter(Boolean));
+  return [...typed, ...rows.filter(r => !own.has(r?.label))];
+}
+
+// The full name on the creator's Review card (its handwritten signature line): the typed names, or
+// the kept ones of a locked identity. '' without an identity or before anything is typed.
+export function identityName(identity, form) {
+  const value = key => {
+    const f = list(identity?.fields).find(x => x?.key === key);
+    if (!f) return '';
+    return String((f.type === 'info' ? f.value : form?.[key]) ?? '').trim();
+  };
+  return [value('firstname'), value('lastname')].filter(Boolean).join(' ');
+}
+
+// Text that holds Arabic letters (a name from the server on an English screen, or the other way
+// round): it is marked so the Latin letter-spacing, capitals and slant never reach Arabic letters.
+export const hasArabic = s => /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷿ﹰ-﻿]/.test(String(s ?? ''));
+
+// A balance on the selection card, as the pause menu writes it: Western digits, two decimals below
+// 100,000 and none above (a fortune never pushes the name out of the bar), a dash when unknown.
+export function cardMoney(v, dollar) {
+  const n = typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN);
+  if (!Number.isFinite(n)) return '—';
+  const digits = Math.abs(n) >= 100000 ? 0 : 2;
+  const s = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return `${n < 0 ? '-' : ''}${dollar ? '$' : ''}${s}`;
+}
+
+// ---- The date of birth as day · month · year (DateField.jsx) -------------------------------------
+// The browser's <input type="date"> draws mm/dd/yyyy in its own language whatever the page says, so
+// the creator picks the three parts itself. The value it sends is still 'YYYY-MM-DD' (the Lua check
+// and dobBounds are unchanged), and only a complete date inside the field's min..max: anything else
+// is '' (missing), which keeps the save closed.
+export const isLeapYear = y => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+
+// Days in a month; February has 29 until the year is known.
+export function daysInMonth(y, m) {
+  if (m === 2) return Number.isInteger(y) && !isLeapYear(y) ? 28 : 29;
+  return [4, 6, 9, 11].includes(m) ? 30 : 31;
+}
+
+// 'YYYY-MM-DD' -> { y, m, d }, or null for anything that is not a real calendar date.
+export function parseIsoDate(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s ?? '').trim());
+  if (!m) return null;
+  const y = Number(m[1]), mo = Number(m[2]), d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > daysInMonth(y, mo)) return null;
+  return { y, m: mo, d };
+}
+
+// The field's min / max (ISO strings from Lua dobBounds) as parts; without them (no server date)
+// a wide window, the server validates the age anyway.
+export const DATE_FALLBACK = { min: { y: 1800, m: 1, d: 1 }, max: { y: 2100, m: 12, d: 31 } };
+export function dateBounds(min, max) {
+  return { min: parseIsoDate(min) || DATE_FALLBACK.min, max: parseIsoDate(max) || DATE_FALLBACK.max };
+}
+
+const dateKey = p => p.y * 10000 + p.m * 100 + p.d;
+
+// The ISO value of the parts when they are a complete date inside the bounds, else ''.
+export function composeIsoDate(parts, bounds) {
+  const { y, m, d } = parts || {};
+  if (![y, m, d].every(Number.isInteger)) return '';
+  if (m < 1 || m > 12 || d < 1 || d > daysInMonth(y, m)) return '';
+  const b = bounds || DATE_FALLBACK;
+  const k = dateKey({ y, m, d });
+  if (k < dateKey(b.min) || k > dateKey(b.max)) return '';
+  return `${String(y).padStart(4, '0')}-${pad2(m)}-${pad2(d)}`;
+}
+
+// A month or year change that leaves the day past the month's end (31 -> February) takes the last day.
+export function clampDateParts(parts) {
+  const out = { ...(parts || {}) };
+  if (Number.isInteger(out.d) && Number.isInteger(out.m)) out.d = Math.min(out.d, daysInMonth(out.y, out.m));
+  return out;
+}
+
+// Whether one choice of a part ('d' | 'm' | 'y') can still give a date inside the bounds with the
+// other parts as they are (the chooser disables the rest).
+export function dateOptionAllowed(kind, value, parts, bounds) {
+  const b = bounds || DATE_FALLBACK;
+  const p = parts || {};
+  const lo = dateKey(b.min), hi = dateKey(b.max);
+  const v = Number(value);
+  if (!Number.isInteger(v)) return false;
+  if (kind === 'y') return v >= b.min.y && v <= b.max.y;
+  if (kind === 'm') {
+    if (v < 1 || v > 12) return false;
+    if (!Number.isInteger(p.y)) return true;
+    return dateKey({ y: p.y, m: v, d: daysInMonth(p.y, v) }) >= lo && dateKey({ y: p.y, m: v, d: 1 }) <= hi;
+  }
+  if (v < 1 || v > (Number.isInteger(p.m) ? daysInMonth(p.y, p.m) : 31)) return false;
+  if (!Number.isInteger(p.y) || !Number.isInteger(p.m)) return true;
+  const k = dateKey({ y: p.y, m: p.m, d: v });
+  return k >= lo && k <= hi;
+}
+
+// The keyboard on a part: Up / Down step it (a day or month wraps round, a year stops at the
+// bounds; an empty part starts from its first or last value).
+export function stepDatePart(kind, parts, delta, bounds) {
+  const b = bounds || DATE_FALLBACK;
+  const p = { ...(parts || {}) };
+  if (kind === 'y') {
+    const start = Number.isInteger(p.y) ? p.y + delta : (delta > 0 ? b.min.y : b.max.y);
+    p.y = Math.max(b.min.y, Math.min(b.max.y, start));
+  } else {
+    const n = kind === 'm' ? 12 : daysInMonth(p.y, p.m);
+    const cur = p[kind];
+    const v = Number.isInteger(cur) ? cur + delta : (delta > 0 ? 1 : n);
+    p[kind] = ((v - 1) % n + n) % n + 1;
+  }
+  return clampDateParts(p);
 }

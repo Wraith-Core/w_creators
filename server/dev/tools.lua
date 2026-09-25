@@ -12,7 +12,7 @@
 --                              that sends W:ADMIN:SpawnObject to the caller's client (client dev tools).
 --  The callback w_creators:dev:allowed(command) is always registered: it answers SERVICE_DISABLED
 --  unless Config.Admin.devTools is on, and otherwise lets a player holding Config.Admin.devAce run
---  the client dev commands (wc_inspect, wc_apply, wc_remove, wc_restore; client/dev/tools.lua).
+--  the client dev commands (wc_inspect, wc_apply, wc_remove, wc_restore, wc_states; client/dev/tools.lua).
 --  The console command wc_migrate_appearances (§6.2) is always available: it is registered by
 --  server/appearance/repository.lua (console only, batches of 100) and is not duplicated here.
 --
@@ -24,13 +24,26 @@ local Dev = WCDevTools
 
 local SEXES = { 'male', 'female' }
 local CAMERA_PRESETS = WCUtil.set({ 'fullBody', 'upperBody', 'lowerBody', 'head', 'face', 'eyes', 'hair',
-                                    'facialHair', 'hands', 'feet', 'accessories' })
+                                    'facialHair', 'hands', 'handLeft', 'handRight', 'teeth', 'feet',
+                                    'accessories' })
 local BARBER_SERVICES = { hair = true, facialHair = true, details = true }
 local SURGERY_ALLOW = { face = true, body = true, eyes = true, skin = true, hair = true, facialHair = true,
                         clothing = true }
 
 local function finiteNonNegative(v)
     return type(v) == 'number' and WCUtil.isFinite(v) and v >= 0
+end
+
+--- A clothing price as the config may give it: a number (cash) or { cash = n, gold = n } with at
+--  least one currency, every amount finite and not negative.
+local function validPrice(v)
+    if type(v) ~= 'table' then return finiteNonNegative(v) end
+    local any = false
+    for key, amount in pairs(v) do
+        if not WCCatalog.CURRENCY_SET[key] or not finiteNonNegative(amount) then return false end
+        any = true
+    end
+    return any
 end
 
 local function listOf(v)
@@ -112,7 +125,7 @@ local function checkPrices(r, taxonomy)
         return
     end
     for _, category in ipairs(WCUtil.sortedKeys(prices)) do
-        if not finiteNonNegative(prices[category]) then
+        if not validPrice(prices[category]) then
             r.error('prices: %s has an invalid price %s', tostring(category), tostring(prices[category]))
         end
         if not taxonomy[category] then r.warn('prices: %s is priced but not in the taxonomy', tostring(category)) end
@@ -124,6 +137,18 @@ local function checkPrices(r, taxonomy)
         local profile = Config.Clothing.pricingProfiles[id]
         if type(profile) ~= 'table' or not finiteNonNegative(profile.multiplier) then
             r.error('pricing profile %s: invalid multiplier', tostring(id))
+        end
+    end
+    -- per-model prices: -1 (not sold), a price, or { multiplier }
+    for _, sex in ipairs(SEXES) do
+        local byCategory = type(Config.Clothing.modelPrices) == 'table' and Config.Clothing.modelPrices[sex] or {}
+        for category, models in pairs(type(byCategory) == 'table' and byCategory or {}) do
+            if not taxonomy[category] then r.warn('model prices (%s): unknown category %s', sex, tostring(category)) end
+            for model, entry in pairs(type(models) == 'table' and models or {}) do
+                local ok = entry == -1 or validPrice(entry)
+                    or (type(entry) == 'table' and finiteNonNegative(entry.multiplier))
+                if not ok then r.error('model prices (%s): %s model %s is invalid', sex, tostring(category), tostring(model)) end
+            end
         end
     end
     if type((Config.Clothing.pricingProfiles or {}).standard) ~= 'table' then
@@ -159,7 +184,12 @@ local function checkTints(r, taxonomy)
         r.warn('tints: Config.Clothing.tints is missing (tints disabled)')
         return
     end
-    if not finiteNonNegative(tints.price) then r.error('tints: invalid price %s', tostring(tints.price)) end
+    if not validPrice(tints.price) then r.error('tints: invalid price %s', tostring(tints.price)) end
+    for palette, limit in pairs(type(tints.limits) == 'table' and tints.limits or {}) do
+        local lo, hi = type(limit) == 'table' and tonumber(limit.min), type(limit) == 'table' and tonumber(limit.max)
+        -- WCCatalog.tintLimits swaps a reversed pair, so this is only a warning
+        if lo and hi and lo > hi then r.warn('tints: %s limits min > max (swapped)', tostring(palette)) end
+    end
     local known = WCUtil.set((w.component and w.component.data and w.component.data.palettes) or {})
     if next(known) == nil then r.warn('tints: w_lib provides no palette list (w.component.data.palettes)') end
     local function checkList(where, list)
@@ -288,10 +318,11 @@ local function checkOutfits(r)
             for _, item in ipairs(type(preset) == 'table' and preset.items or {}) do
                 local category = type(item) == 'table' and item.category or nil
                 local hash = type(category) == 'string' and WCCatalog.offered(sex, category)
-                    and WCCatalog.resolve(sex, category, { item.model, item.variant }) or nil
+                    and WCCatalog.presetHash(sex, item) or nil
                 if not hash then
-                    r.warn('starting outfits: %s %s item %s %s/%s does not resolve (skipped at runtime)', sex,
-                        tostring(id), tostring(category), tostring(item and item.model), tostring(item and item.variant))
+                    r.warn('starting outfits: %s %s item %s %s does not resolve (skipped at runtime)', sex,
+                        tostring(id), tostring(category), type(item) == 'table' and type(item.item) == 'string'
+                            and item.item or (tostring(item and item.model) .. '/' .. tostring(item and item.variant)))
                 else
                     equipped[category] = hash
                 end
@@ -379,7 +410,7 @@ end
 -- (client/dev/tools.lua asks before each one)? SERVICE_DISABLED unless Config.Admin.devTools is on;
 -- only the four client dev commands; the player must hold Config.Admin.devAce. A refusal of an
 -- enabled tool is logged as a security violation.
-Dev.CLIENT_COMMANDS = { wc_inspect = true, wc_apply = true, wc_remove = true, wc_restore = true }
+Dev.CLIENT_COMMANDS = { wc_inspect = true, wc_apply = true, wc_remove = true, wc_restore = true, wc_states = true }
 Dev.DENIED = 'هذا الأمر مخصص للمطورين'
 
 function Dev.clientAllowed(src, command)

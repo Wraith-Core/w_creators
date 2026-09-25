@@ -38,25 +38,16 @@ const UI_TEXTURES = [
   'weapon_kit_camera',
 ];
 for (const n of UI_TEXTURES) root.setProperty(`--tex-${n}`, tex(`tex/ui/${n}.png`));
+// The game's own clothing icons (inventory_items, white sketch art): drawn as images in a round disc.
+const CLOTH_ICONS = ['bandolier', 'belt', 'boots', 'bracelet', 'bracers', 'chaps', 'cloak', 'coat', 'dress', 'glasses', 'glove', 'gunbelt', 'hair_accs', 'hat', 'holster', 'm_sweater', 'mask', 'neckerchief', 'outfit', 'pants', 'poncho', 'ring', 'satchel', 'scarf', 'shirt', 'skirt', 'socks', 'spats', 'spurs', 'suspenders', 'vest'];
+for (const n of CLOTH_ICONS) root.setProperty(`--cloth-${n}`, tex(`tex/cloth/${n}.png`));
 
-// The official RDR fonts + the Arabic font (Tajawal). @font-face does not read CSS variables,
-// so it is built as text with ABS_BASE paths directly.
-const AR_RANGE =
-  'U+0600-06FF,U+0750-077F,U+0870-089F,U+08A0-08FF,U+FB50-FDFF,U+FE70-FEFF,U+200C-200F,U+2010-2011,U+0660-0669';
-const LAT_RANGE = 'U+0000-00FF,U+0131,U+0152-0153,U+2000-206F,U+2074,U+20AC,U+2122,U+2212';
-const fontStyle = document.createElement('style');
-fontStyle.textContent = `
-  @font-face { font-family: "RDR Lino"; src: url("${ABS_BASE}fonts/RDRLino-Regular.woff2") format("woff2"); font-display: swap; }
-  @font-face { font-family: "Hapna Slab"; src: url("${ABS_BASE}fonts/HapnaSlabSerif-DemiBold.woff2") format("woff2"); font-display: swap; }
-  @font-face { font-family: "RDR Catalogue"; src: url("${ABS_BASE}fonts/RDRCatalogueBold-Bold.woff2") format("woff2"); font-display: swap; }
-  @font-face { font-family: "Noto Sans Arabic"; src: url("${ABS_BASE}fonts/NotoSansArabic.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
-  @font-face { font-family: "Tajawal"; font-weight: 400; src: url("${ABS_BASE}fonts/tajawal-arabic-400-normal.woff2") format("woff2"); unicode-range: ${AR_RANGE}; font-display: swap; }
-  @font-face { font-family: "Tajawal"; font-weight: 500; src: url("${ABS_BASE}fonts/tajawal-arabic-500-normal.woff2") format("woff2"); unicode-range: ${AR_RANGE}; font-display: swap; }
-  @font-face { font-family: "Tajawal"; font-weight: 700; src: url("${ABS_BASE}fonts/tajawal-arabic-700-normal.woff2") format("woff2"); unicode-range: ${AR_RANGE}; font-display: swap; }
-  @font-face { font-family: "Tajawal"; font-weight: 400; src: url("${ABS_BASE}fonts/tajawal-latin-400-normal.woff2") format("woff2"); unicode-range: ${LAT_RANGE}; font-display: swap; }
-  @font-face { font-family: "Tajawal"; font-weight: 700; src: url("${ABS_BASE}fonts/tajawal-latin-700-normal.woff2") format("woff2"); unicode-range: ${LAT_RANGE}; font-display: swap; }
-`;
-document.head.appendChild(fontStyle);
+// The faces are not declared here: index.html links the server's one theme at run time
+// (https://cfx-nui-w_lib/nui/assets/wraith-theme.css = w_lib/nui/theme tokens.css + fonts.css +
+// base.css), the same Lalezar / Amiri / Tajawal / EB Garamond / RDR Lino files the loading screen and
+// the pause menu use, with their licences. It is linked from index.html and not imported here because
+// Vite would rewrite its absolute URL; the torn edge and the paper grain come from it too
+// (--w-tex-tear, --w-tex-grain).
 
 // ── The RDR menu sounds ──────────────────────────────────────────────────────
 // They are preloaded and cloned when played so fast clicks overlap with no cutting out.
@@ -90,5 +81,4 @@ if (IS_GAME) document.documentElement.classList.add('rsm-ingame');
 
 createRoot(document.getElementById('app')).render(<App />);
 
-import './store-adapter.css';
 import './responsive';

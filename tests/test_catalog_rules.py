@@ -83,7 +83,8 @@ class CatalogTests(unittest.TestCase):
 
     def test_tints(self):
         self.assertEqual(self.e('WCCatalog.tintable("hats")[1]'), 'metaped_tint_hat')
-        self.assertEqual(self.e('#WCCatalog.tintable("shirts_full")'), 5)
+        # the default list (metaped_tint_horse joined it: offered everywhere, as the game allows)
+        self.assertEqual(self.e('#WCCatalog.tintable("shirts_full")'), 6)
         self.assertIsNone(self.e('WCCatalog.tintable("jewelry_rings_left")'))
         self.assertIsNone(self.e('WCCatalog.tintable("heads")'))
         ok = '{palette = "metaped_tint_leather", tint0 = 1, tint1 = 254, tint2 = 0}'

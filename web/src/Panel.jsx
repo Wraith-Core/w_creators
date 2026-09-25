@@ -78,8 +78,11 @@ export default function Panel({payload, onPayload, onClose}) {
 
   return <div className="editor-shell" dir={session.dir || (session.locale === 'ar' ? 'rtl' : 'ltr')}>
     <section className="wst-panel atelier" aria-label={session.title} aria-busy={busy}>
-      <Frame/>
-      <header className="wst-header"><small className="wst-title atelier-brand">{BRAND}</small><h1>{session.title}</h1><span className="wst-rule header-rule" aria-hidden="true"/></header>
+      <div className="wc-mast"><span className="wc-mark" dir="ltr">{BRAND}</span><span className="wc-mast-rule" aria-hidden="true"/></div>
+      <div className="wc-card wc-head"><Frame/>
+      <header className="wst-header"><h1>{session.title}</h1></header>
+      </div>
+      <div className="wc-card wc-work"><Frame/>
       <div className="wst-plate menu-heading">
         {validPath.length > 0 && <button className="wst-button menu-back" aria-label={S.back} disabled={busy} onClick={back}><Glyph tex="selection_arrow_left"/></button>}
         <h2>{headingFor(nodes)}</h2>
@@ -91,10 +94,13 @@ export default function Panel({payload, onPayload, onClose}) {
           {current.kind === 'group' && children.length === 0 && <p className="empty-search" role="status">{S.empty}</p>}
         </fieldset>
       </main>
+      </div>
+      <div className="wc-card wc-foot"><Frame/>
       <footer>
         {request.status === 'error' && request.error && <p className="error" role="alert">{request.error}</p>}
         <div className="commit">{validPath.length > 0 && <button className="wst-button" disabled={busy} onClick={back}>{S.back}</button>}<button className="wst-button primary" disabled={busy} onClick={close}>{S.close}</button></div>
       </footer>
+      </div>
     </section>
     {modal && <div className="modal-shade"><section className="wst-panel confirmation" role="dialog" aria-modal="true" aria-labelledby="confirmation-title"><Frame/>
       <h2 id="confirmation-title">{modal.title}</h2><div className="wst-rule wc-hr"/>

@@ -45,29 +45,70 @@ function O.tintable(layer)
     return WCOverlays.tintable(layer)
 end
 
+local function opacityOf(v)
+    local opacity = tonumber(v)
+    return (opacity and opacity >= 0.0 and opacity <= 1.0) and (opacity + 0.0) or 1.0
+end
+
+--- One texture of a layer: { id, opacity, sheetGrid?, sexe? } or nil when the style does not exist.
+--  sheetGrid picks the design on a sheet texture (the makeup), sexe the texture set a style
+--  belongs to (the eyebrows: without it w.pedTexture takes the ped's own set).
+local function texturePayload(layer, style, opacity)
+    local id, grid, set = WCOverlays.texture(layer, style)
+    if id == nil then return nil end
+    local payload = { id = id, opacity = opacityOf(opacity) }
+    if grid then payload.sheetGrid = grid end
+    if set then payload.sexe = set end
+    return payload
+end
+
 --- The w.pedTexture payload of one stored layer: layerName, payload (nil when not renderable).
+--  A layer with stacked instances (the scars' `extra`) answers a list of payloads: w.pedTexture
+--  draws every entry of an array as its own texture layer.
 ---@param layerId string WCOverlays id (e.g. 'blush')
----@param o table { style, color, opacity }
+---@param o table { style, color, opacity, color2?, color3?, extra? }
 ---@param sex? string
 ---@return string|nil library, table|nil payload
 function O.payload(layerId, o, sex)
     local layer = WCOverlays.byId[layerId]
     if not layer or type(o) ~= 'table' then return nil end
     if sex and not WCOverlays.allowed(layerId, sex) then return nil end
-    local style = math.tointeger(tonumber(o.style))
-    if not style or style < 1 then return nil end
-    local id = layer.ids[style]
-    if id == nil then return nil end
-    local payload = { id = id }
-    local opacity = tonumber(o.opacity)
-    payload.opacity = (opacity and opacity >= 0.0 and opacity <= 1.0) and (opacity + 0.0) or 1.0
+    local payload = texturePayload(layer, o.style, o.opacity)
+    if not payload then return nil end
     local color = math.tointeger(tonumber(o.color))
     if color and color >= 1 and O.tintable(layer) then
         payload.palette = layer.palette
         payload.tint0 = color - 1
+        -- the 2nd / 3rd tint of a multi-tint texture (foundation, lipstick, eyeshadow); absent = 0
+        local c2, c3 = math.tointeger(tonumber(o.color2)), math.tointeger(tonumber(o.color3))
+        if c2 and c2 >= 1 and (layer.tints or 1) >= 2 then payload.tint1 = c2 - 1 end
+        if c3 and c3 >= 1 and (layer.tints or 1) >= 3 then payload.tint2 = c3 - 1 end
+    end
+    if (layer.extra or 0) > 0 and type(o.extra) == 'table' and #o.extra > 0 then
+        local list = { payload }
+        for i, e in ipairs(o.extra) do
+            if i > layer.extra then break end
+            local more = type(e) == 'table' and texturePayload(layer, e.style, e.opacity) or nil
+            if more then list[#list + 1] = more end
+        end
+        return layer.library, list
     end
     return layer.library, payload
 end
+
+--- The eyebrows drawn in the hair's colour (overlays.eyebrows.matchHair): the hair component's
+--  own palette tints, read back from the ped once the hair is on it. nil = no hair (or no tint):
+--  the colour chosen in the eyebrows panel is drawn instead.
+local function hairTint(ped, app)
+    if type(app.hair) ~= 'table' or not app.hair.style or app.hair.style == 0 then return nil end
+    if not (w and w.component and w.component.getCategoryTint) then return nil end
+    local ok, tint = pcall(w.component.getCategoryTint, ped, 'hair', true)
+    if not ok or type(tint) ~= 'table' then return nil end
+    local t0, t1, t2 = math.tointeger(tonumber(tint.tint0)), math.tointeger(tonumber(tint.tint1)), math.tointeger(tonumber(tint.tint2))
+    if not t0 then return nil end
+    return { tint0 = t0, tint1 = t1 or 0, tint2 = t2 or 0 }
+end
+O.hairTint = hairTint
 
 --- The full layer set of an appearance: { [library layer] = payload }.
 function O.build(app)
@@ -87,6 +128,16 @@ function O.apply(ped, app)
         return false
     end
     local set = O.build(app)
+    local brows = type(app) == 'table' and type(app.overlays) == 'table' and app.overlays.eyebrows or nil
+    local browLayer = WCOverlays.byId.eyebrows
+    if type(brows) == 'table' and brows.matchHair and browLayer and type(set[browLayer.library]) == 'table' then
+        local tint = hairTint(ped, app)
+        if tint then
+            local payload = set[browLayer.library]
+            payload.palette = browLayer.palette
+            payload.tint0, payload.tint1, payload.tint2 = tint.tint0, tint.tint1, tint.tint2
+        end
+    end
     prune()
     applied[ped] = set
     local ok, err = pcall(function()

@@ -80,6 +80,8 @@ function Wardrobe.open(src, locationId)
         maxOutfits = maxOutfits(),
         outfitsEnabled = outfitsEnabled(),
         remote = s.remote == true,
+        -- selling back from here (Config.Clothing.resell.inWardrobe), for the editor to offer it
+        resell = WCClothingStore.resellConfig(),
         expiresIn = math.max(0, s.expires - os.time()),
     })
 end
@@ -92,7 +94,7 @@ local function validStates(states, app)
     for group, value in pairs(states) do
         local def = type(group) == 'string' and WCClothingStates.byId[group]
         if def and def.persist and WCClothingStates.isValid(group, value)
-            and (app == nil or WCClothingStates.applicable(app, group)) then
+            and (app == nil or WCClothingStates.applicable(app, group, true)) then
             out[group] = value
         end
     end
@@ -110,10 +112,15 @@ function Wardrobe.plan(saved, submitted, owned, outfitIds)
 
     local resolved, code, detail = WCOwnership.resolveEquipped(saved.sex, clothing.equipped)
     if not resolved then return nil, code, detail end
+    if clothing.tints ~= nil and type(clothing.tints) ~= 'table' then return nil, 'INVALID_PAYLOAD' end
     local tints = {}
     for category, hash in pairs(resolved) do
-        -- stored dyes (owned / saved): kept as stored even with tints disabled or narrowed (§5.4)
-        local tint, notOwned = WCOwnership.wornTint(saved, owned, category, hash)
+        -- stored dyes (owned / saved): kept as stored even with tints disabled or narrowed (§5.4).
+        -- The colour picked here must be one the character owns of the item (colourways); `false`
+        -- is the item's original colour; no tint keeps the owned (last worn) one.
+        local submittedTint = nil
+        if type(clothing.tints) == 'table' then submittedTint = clothing.tints[category] end
+        local tint, notOwned = WCOwnership.wornTint(saved, owned, category, hash, submittedTint)
         if tint == false then return nil, notOwned, category end
         tints[category] = tint
     end

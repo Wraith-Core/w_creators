@@ -187,7 +187,8 @@ class SelectorSelectTests(unittest.TestCase):
         self.assertTrue(self.e('noted(WCResult.messageKey("NO_CHARACTER"))'))
 
     def test_final_exit_unloads_the_room_once_the_player_left(self):
-        rt = make_characters(setup=TWO + '; IplInactive[Config.Scene.imaps[1]] = true')
+        # a room built from maps (the theatre needs none; the old floating studio had three)
+        rt = make_characters(setup=TWO + '; Config.Scene.imaps = { 183712523, -1699673416, 1679934574 }; IplInactive[Config.Scene.imaps[1]] = true')
         settle(rt, 500, 12)  # the room maps never report active: the load waits its 5 s timeout
         self.assertTrue(rt.eval('WCSelector.active()'))
         rt.run('clearLog(); press("RETURN")')

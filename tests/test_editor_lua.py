@@ -467,12 +467,28 @@ class OperationTests(EditorBase):
 
     def test_random_is_creator_only_and_moderate(self):
         self.open_creator()
-        r = self.action(op='random')
-        self.assertTrue(r.ok, r.message)
-        morph = self.rt.eval('WCEditor.session().working.morph')
-        for _, v in morph.items():
-            self.assertLessEqual(abs(v), 0.25)
-        self.assertEqual(self.working('.hair.facial'), 0)
+        for _ in range(12):
+            r = self.action(op='random')
+            self.assertTrue(r.ok, r.message)
+            morph = self.rt.eval('WCEditor.session().working.morph')
+            for _, v in morph.items():
+                self.assertLessEqual(abs(v), 0.25)
+            # the fuller randomize: build, weight and height near the middle, valid teeth, eyebrows
+            # that follow the hair, a beard (if any) in the hair's colour; never makeup or face paint
+            self.assertTrue(6 <= self.working('.body.weight') <= 16)
+            self.assertTrue(0.95 <= self.working('.body.height') <= 1.05)
+            self.assertTrue(self.rt.eval('WCCatalog.resolve("male", "teeth", WCEditor.session().working.head.teeth) ~= nil'))
+            self.assertTrue(self.working('.overlays.eyebrows.matchHair'))
+            self.assertTrue(self.rt.eval('''(function()
+                local app = WCEditor.session().working
+                if app.hair.facial == 0 then return true end
+                local cats = WCCatalog.forSex('male')
+                local beard, hair = cats.mustache.hashes[app.hair.facial], cats.hair.hashes[app.hair.style]
+                if not beard then return false end
+                local a, b = WCCatalog.colorSuffix(beard.name), hair and WCCatalog.colorSuffix(hair.name)
+                return a == nil or b == nil or a == b end)()'''))
+            for layer in ('foundation', 'blush', 'lipsticks', 'eyeliners', 'shadows', 'paintedmasks'):
+                self.assertIsNone(self.working('.overlays.' + layer), layer)
         self.rt.run('WCEditor.close()')
         self.rt.eval("openEditor('barber', 'male', {})")
         self.assertEqual(self.action(op='random').code, 'INVALID_PAYLOAD')

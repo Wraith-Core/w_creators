@@ -41,7 +41,9 @@ The `/clothing` command and the keybind are registered only when the service is 
 
 ## 2. State groups
 
-`Config.ClothingStates.groups`, in panel order. Every group is configured `verified = 'likely'`.
+`Config.ClothingStates.groups`, in panel order. The original thirteen are configured
+`verified = 'likely'`; the four added with the clothing store (loadout, vestTuck, bodyUpper, bodyLower)
+are `'experimental'` until they are seen in game.
 `verified` is informational: no code reads it. Its values are `'likely'` (documented and used by w_lib)
 and `'experimental'` (research only).
 
@@ -58,6 +60,12 @@ and `'experimental'` (research only).
 | `poncho` | upper › ponchos | `ponchos`, `cloaks` | `on` / `off` | visibility | yes | — |
 | `gloves` | arms › gloves | `gloves` | `on` / `off` | visibility | yes | `…@gloves` `gloves_on` / `gloves_off` |
 | `boots` | feet › boots | `boots` | `over` / `under` | wearable `base` / `under_pants`, **requires `pants`** | yes | — |
+| `shirt` | upper › shirts_full | `shirts_full` | `on` / `off` | visibility | yes | outfit change |
+| `pants` | lower › pants | `pants` | `on` / `off` | visibility | yes | tailor's trousers clips |
+| `loadout` | accessories › loadouts | `loadouts` | `right` / `left` | wearable `base` / `base_right` (w_lib's loadout states) | yes | — |
+| `vestTuck` | upper › vests | `vests` | `over` / `under` | wearable `base` / `under_pants`, **requires `pants`**, hidden while the vest is `off`; labelled "corset" on a woman | yes | — |
+| `bodyUpper` | upper › (the body) | `BODIES_UPPER` (the body item) | `auto` + every state name w_lib knows | bodyWearable | yes | — |
+| `bodyLower` | lower › (the body) | `BODIES_LOWER` (the body item) | `auto` + every state name w_lib knows | bodyWearable | yes | — |
 
 ### 2.1 Mechanisms
 
@@ -75,6 +83,14 @@ refresh.
   - The w_lib helpers `sleeveRoll`, `sleeveUnroll`, `collarOpen` and `collarClose`. They read the
     shirt's other half from the ped, so the combined state is one of `base`,
     `closed_collar_rolled_sleeve`, `open_collar_full_sleeve` or `open_collar_rolled_sleeve`.
+- **bodyWearable** (the body-part fix: skin showing through a garment)
+  - `w.component.setWearableState(ped, 'BODIES_UPPER' | 'BODIES_LOWER', <body item>, <state>)`, after
+    the clothes it corrects. `auto` leaves the game's own state on a full render (nothing is set) and
+    puts `base` back when chosen; a set state is drawn again whenever a garment goes on.
+  - The values are `auto` plus every state name in `w.component.data.wearableStates` (`valuesFrom =
+    'wearableStates'`; `base` is `auto`'s). The server accepts those names and nothing else; the client
+    **offers only the states the worn body item really has**, asking the game
+    (`WCNative.clothing.wearableStates`). When the game gives no list, no body state is offered.
 - **Ordering.** Wearable states are applied only after the item they act on has been committed. The
   w_lib helpers read the ped's current component and tints back.
 - **Resets.** An equipped wearable item whose group cannot act (boots with a skirt or a dress, no
@@ -93,7 +109,18 @@ A group is **applicable** (`WCClothingStates.applicable(app, groupId)`) when:
 - one of its categories is equipped (the first one equipped is the one it acts on), **and**
 - if it has `requires`, one of those categories is equipped too.
 
-Currently only `boots` has a requirement: `pants`.
+`boots` and `vestTuck` require `pants`.
+
+**The item must have the state.** Before offering or performing a wearable value, the client asks the
+game which wearable states the worn item has (`WCClothing.supports`, cached per item). A value whose
+w_lib state the item lacks is neither offered nor performed (`STATE_NOT_APPLICABLE`, `data.reason =
+'item'`): a neckerchief with no `mask_up` state cannot be raised. When the game answers nothing the
+garment's state is let through (the server and the pipeline decide), except for the body-part states.
+
+A group with `hiddenBy` (sleeves and collar: `shirt`; boots: `pants`) is also not applicable while
+that group is `'off'`. The persistence filters (store / surgery `settleStates`, wardrobe, outfits,
+creation) call `applicable(app, groupId, true)`, which skips this check: the saved state of a hidden
+garment is kept and drawn again when the garment goes back on.
 
 An **action** is offered (`WCClothingStates.actions(app)`) when the feature is enabled, the group is
 applicable, and the target value differs from the current one. The current value is the stored state,
@@ -128,6 +155,9 @@ example "Roll up sleeves" or "Take off cloak".
 | Client export | `OpenClothingActions()` → Result |
 | Client export | `SetClothingState(groupId, value)` → Result `{ group, value, changed, states }` |
 | Client export | `ToggleHat()`, `ToggleBandana()`, `ToggleSleeves()` → Result (next value of the group) |
+| Commands | one per group (`Config.ClothingStates.commands`): `/hat`, `/glasses`, `/mask`, `/bandana`, `/sleeves`, `/collar`, `/coat`, `/vest`, `/poncho`, `/gloves`, `/boots`, `/shirt`, `/pants`, `/loadout`, `/tuck`. Each flips its group through `WCClothing.toggle` (same guards, animation and server check). A name given twice, one another resource already registered (`GetRegisteredCommands`), an unknown group or a malformed name is skipped with a warning at start. Chat suggestions in the player's language |
+| Client export | `IsBandanaUp()` → boolean (the local character's bandana raised) |
+| Server export / state bag | `IsBandanaUp(src)` → boolean; the replicated player state bag `Config.ClothingStates.bandanaStateBag` (`wcBandanaUp`), set when the bandana goes up or down and cleared when the runtime states are forgotten |
 | Client export | `RemoveClothingCategory(category)` / `RestoreClothingCategory(category)` → Result. Visibility groups only, and only when that category is the piece worn (`RemoveClothingCategory('cloaks')` never hides a poncho) |
 | Client export (read) | `GetCurrentOutfit()` → `{ outfit, equipped, tints, states }` |
 | Server callback | `w_creators:clothing:setState(group, value)` → `{ states }` |
@@ -229,15 +259,13 @@ skipped. **Requires live verification.**
   undocumented, and it does not change `app.clothing.equipped`. It stays behind
   `Config.Experimental.hatAccess` (off) and no production path calls it. The `hat` state removes and
   re-applies the hat hash instead. See [NATIVES.md](NATIVES.md).
-- **Other w_lib wearable states** (`w.component.data.wearableStates`) are **not configured**:
-  - vest tucked under the pants (`vests` `under_pants`)
-  - loadout side (`loadouts` `base_right`)
-  - hair pomade (`hair` `pomade`: a hair look, not clothing)
-
-  They could be added as `wearable` groups, but each needs live verification per item. The composite
-  names in w_lib's `others` list are also not configured: open coat (`base_coat_open…`), tucked shirt
-  (`base_tucked`, `tuck`), pants inside the boots (`under_boots`, `under_spats`, `under_chaps`) and
-  glove variants. They depend on the combination of worn items, and no validated mapping exists.
+- **Other w_lib wearable states.** The vest tucked under the pants (`vestTuck`) and the loadout side
+  (`loadout`) are configured (experimental, §2). Still not configured as garment groups: hair pomade
+  (`hair` `pomade`: a hair look, not clothing) and the composite names of w_lib's `others` list on
+  garments (open coat `base_coat_open…`, tucked shirt `base_tucked` / `tuck`, pants inside the boots
+  `under_boots` / `under_spats` / `under_chaps`, glove variants): they depend on the combination of
+  worn items and no validated mapping exists. The body-part groups (`bodyUpper`, `bodyLower`) offer
+  those names on the body item itself, limited to what the game lists for it.
 - **Removing or unequipping through a state.** By design, a state never changes ownership or the
   equipped set. Use the wardrobe or the store to change the equipped set.
 - **Persisting the bandana.** `persist = false` is deliberate. A raised bandana is a moment-to-moment
@@ -278,3 +306,9 @@ all of the following:
 | 12 | Guards | While mounted: works without an animation, refused with one. Dead or ragdolled: refused. With a store open: `BUSY` |
 | 13 | Animation interruption | Start `hat` off and get knocked down before the midpoint: the hat stays on |
 | 14 | Late joiner | A sets hat `off` and bandana `up`. B joins afterwards and sees both |
+| 15 | `loadout` right/left | Wear a bandolier: `left` moves it to the other shoulder (w_lib calls `base_right` "left": check which side each value really shows, and swap the two in the config if needed) |
+| 16 | `vestTuck` over/under | With pants: the vest (a corset on a woman) goes under the pants and back. Remove the pants: the action disappears and the vest renders in `base` |
+| 17 | Body-part fix | Wear a shirt that lets skin show through: the panel lists the body item's own states; pick one, relog, it stays; `auto` puts the game's state back |
+| 18 | Commands | `/hat`, `/tuck`… flip their group; a name another resource owns is not taken (console warning) |
+| 19 | Long hair crown | Male long hair (e.g. `M_HAIR_023`, centre parted), a bandana, no hat. `bandana up`: the top of the head keeps its hair (no bald crown). `down`: same. Put a hat on, `bandana up`, `hat off`: the crown comes back at once. With the hat on, have the game knock it off (a punch, a fall from the horse): the crown comes back within about a second. Relog with the bandana up: crown intact. Same checks from the wheel and in the creator (hide clothes → show). B sees the same on A. Short hair: no change at all |
+| 19 | Bandana state bag | `up`: `Player(src).state.wcBandanaUp` is `true` on the server and on other clients; relog or a store purchase clears it |

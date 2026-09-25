@@ -16,6 +16,8 @@
 --    WCCharacters.recover(src)             resolve an untracked logged-in player (restart) -> 'active' | 'flow' | nil, code
 --    WCCharacters.slots(src)               character slots of the player (default + ACE permissions)
 --    WCCharacters.ownerOf(charid)          the player whose active character this is, or nil
+--    WCCharacters.purge(charid, ctx)       w_core's deletion (export PurgeCharacter): rows + memory
+--                                          -> true, counts | false, reason
 --
 --  Callbacks (all answer a WCResult):
 --    w_creators:characters:list          -> { characters = [card], slots, canCreate, deletion }
@@ -24,8 +26,9 @@
 --                                        sections the repair saves; no clothing stage) }
 --    w_creators:characters:loaded        -> { spawn = 'selector' | 'direct' | 'event' } (a repeated call
 --                                           replays the last answer while its character is active)
---    w_creators:characters:beginCreate   (sex?) -> { token }
+--    w_creators:characters:beginCreate   (sex?) -> { token, sex?, locked? }
 --    w_creators:characters:create        (token, identity, app) -> { appearance, charid }
+--    w_creators:characters:keepAlive     (token) -> {}   renews the grant while the editor is open
 --    w_creators:characters:cancelCreate  (token) -> {}
 --    w_creators:characters:delete        (charid, confirmText?) -> { charid }
 --  Legacy net event: w_creators:server:creationReady (= loaded).
@@ -52,6 +55,10 @@ local busy = {}      -- [src] = operation name (one character operation per play
 -- there after DELETE_CONFIRM_MS (an asynchronous core): the w_creators data is kept until a retry
 -- finds the row gone.
 local cleanup = {}
+-- [charid] = src while that player's characters:delete waits on the framework's deletion; set to
+-- 'purged' when w_core purged this resource during it (Chars.purge). The delete then has nothing
+-- left to remove and skips its own appearance delete. Always cleared when the framework call ends.
+local deleting = {}
 -- [src] = ms: a switch of this player lapsed outside the character scene; no new switch starts
 -- before then (a lapse is a client that left the flow: repeating it kept him character-less).
 local lapsed = {}
@@ -67,6 +74,18 @@ local GRANT_TTL_MS = 30 * 60 * 1000
 -- opens it) for this long even with allowSwitch off; afterwards the normal switch rules apply.
 local RECOVERY_WINDOW_MS = 2 * 60 * 1000
 local DELETE_CONFIRM_MS = 5000
+-- w_core's refusal reasons (WCore.Player.DeleteCharacter, second return) -> result codes. w_core
+-- now purges everything a deleted character has (money back to the reserve, assets released) and
+-- no longer refuses for funds / a loan / assets; those codes stay mapped for an older w_core. A
+-- purge a resource refused as 'busy' (a write in flight: w_creators' own PurgeCharacter answers
+-- it) is a retry. Any other reason is DATABASE_ERROR.
+local DELETE_REFUSALS = {
+    economy_not_ready = 'ECONOMY_NOT_READY',
+    busy              = 'BUSY',
+    funds             = 'DELETE_HOLDS_FUNDS',
+    loan              = 'DELETE_HOLDS_LOAN',
+    assets            = 'DELETE_HOLDS_ASSETS',
+}
 local LOGIN_TIMEOUT_MS = 10000
 local MAX_CHARID = 64
 local MAX_APP_BYTES = 65536
@@ -288,14 +307,19 @@ local function deathOwnerSaysDead(src)
     return dead ~= nil and dead ~= false
 end
 
+-- The framework's own flags too (the only ones when the death system is not running):
+-- metadata.isdead / inlaststand on the RSG family, the character's isdead on VORP.
+local function frameworkSaysDead(src)
+    local done, char = pcall(function() return exports.w_lib:FwGetCharacter(src) end)
+    if not done or type(char) ~= 'table' then return false end
+    local flags = type(char.metadata) == 'table' and char.metadata or char
+    return flags.isdead == true or flags.isdead == 1 or flags.inlaststand == true or flags.inlaststand == 1
+end
+
+-- ⚠️ Never GetEntityHealth(ped) here: on this RedM build the server reads 0 for a LIVING player's
+--    ped, so every player counted as dead and every character switch answered BUSY.
 local function isDead(src)
-    local ped = GetPlayerPed(src)
-    if ped and ped ~= 0 then
-        local done, health = pcall(GetEntityHealth, ped)
-        health = done and tonumber(health) or nil
-        if health ~= nil and health <= 0 then return true end
-    end
-    return deathOwnerSaysDead(src)
+    return deathOwnerSaysDead(src) or frameworkSaysDead(src)
 end
 
 --- Can the player leave his active character now (§9.1)? ok | false, code.
@@ -359,6 +383,14 @@ local function inScene(src)
     return type(WCScene) == 'table' and type(WCScene.isIsolated) == 'function' and WCScene.isIsolated(src) == true
 end
 
+--- The block staff put on a character (w_core_character_blocks, w_admin's characters page):
+--- { reason, blocked_by, blocked_at } or nil. Without w_core nothing is blocked.
+local function blockOf(charid)
+    if GetResourceState('w_core') ~= 'started' then return nil end
+    local done, block = pcall(function() return exports.w_core:GetCharacterBlock(charid) end)
+    return done and type(block) == 'table' and block or nil
+end
+
 local restoreSwitch
 
 --- A lapsed switch whose logged-in framework character has no usable look (a provisioned creation,
@@ -370,7 +402,11 @@ local function relogSwitch(src, s)
     s.relogAt = nowMs
     if Chars.ownerOf(s.from) then return false end
     local p, g = pending[src], grants[src]
+    -- ⚠️ the lock first: blockOf waits on the database, and nothing else may start a flow for this
+    --    player while it waits
     busy[src] = 'switchLapsed'
+    -- a character staff blocked meanwhile is not logged in again (w_core Login refuses it too)
+    if blockOf(s.from) then busy[src] = nil return false end
     local called, loggedIn = pcall(Bridge.LoginCharacter, src, s.from)
     local ready = called and loggedIn ~= false and WCUtil.waitUntil(function()
         return GetPlayerName(src) ~= nil and frameworkCharid(src) == s.from
@@ -609,6 +645,9 @@ local function buildCard(row, fw, withAppearance)
         bank = tonumber(row.bank),
         gold = tonumber(row.gold),
         appearance = app,
+        -- the citizen id is shown on the card; a character staff blocked says so (and why)
+        citizenId = charid,
+        blocked = (function() local b = blockOf(charid) return b and (b.reason ~= '' and b.reason or true) or nil end)(),
     }
 end
 
@@ -634,7 +673,7 @@ local function presetEquipped(sex, preset)
     local equipped = {}
     for _, item in ipairs(type(preset.items) == 'table' and preset.items or {}) do
         if type(item) == 'table' and WCCatalog.isClothing(item.category) then
-            local hash = WCCatalog.resolve(sex, item.category, { model = item.model, variant = item.variant })
+            local hash = WCCatalog.presetHash(sex, item)
             if hash then equipped[item.category] = hash end
         end
     end
@@ -672,7 +711,7 @@ local function restrictClothing(app, sex)
     local statesOn = WCClothingStates.enabled()
     for group, _ in pairs(clothing.states) do
         -- the clothing actions off: a creation never starts with a state the player cannot undo
-        if not statesOn or not WCClothingStates.applicable(app, group) then clothing.states[group] = nil end
+        if not statesOn or not WCClothingStates.applicable(app, group, true) then clothing.states[group] = nil end
     end
     return app
 end
@@ -764,6 +803,10 @@ function Chars.select(src, charid)
             end
             return fail(ownCode)
         end
+        -- ★ a blocked character is not played: "contact the administration"; the account's
+        --   other characters stay selectable (w_core Login refuses it as well)
+        local block = blockOf(charid)
+        if block then return fail('CHARACTER_BLOCKED', { reason = block.reason }) end
         if Chars.ownerOf(charid) then return fail('BUSY') end
 
         grants[src], lastLoaded[src] = nil, nil
@@ -865,14 +908,17 @@ function Chars.beginCreate(src, sex)
     -- started over: the same token replays the stored create result, so no second framework
     -- character is registered and the first one is not orphaned.
     local done = pending[src]
-    if done and done.isNew and done.token then return ok({ token = done.token, sex = done.sex }) end
+    -- locked = true: that sex can no longer change, so the creator offers only it (the gender
+    -- scene refuses the other one at once instead of after a whole design was built for it)
+    if done and done.isNew and done.token then return ok({ token = done.token, sex = done.sex, locked = true }) end
 
     local g = grantValid(src)
     if g and g.kind == 'create' then
         -- The sex is locked once the framework character exists (a half-finished creation): the
-        -- answer carries the server's sex, which the creator opens the editor with.
+        -- answer carries the server's sex and says it is locked; before that it only records the
+        -- sex of the design about to be saved.
         if sex and not g.provisioned then g.sex = sex end
-        return ok({ token = g.token, sex = g.sex })
+        return ok({ token = g.token, sex = g.sex, locked = (g.provisioned ~= nil and g.sex ~= nil) or nil })
     end
     local allowed, code = ensureSelecting(src)
     if not allowed then return fail(code) end
@@ -1041,9 +1087,15 @@ function Chars.create(src, token, identity, raw)
     local p = pending[src]
     if p and p.token == token then return ok({ appearance = WCUtil.copy(p.app), charid = p.charid }) end
 
+    local held = grants[src]
     local g = grantValid(src)
     if not g or g.token ~= token then
-        WCDebug.warn('characters', 'player %s: create without a valid grant', tostring(src))
+        -- ⚠️ All three of these produced one indistinguishable message. Name the cause: an EXPIRED
+        --    grant means the player worked longer than GRANT_TTL_MS and the heartbeat never arrived.
+        local why = (not held and 'no grant on record')
+            or (held ~= g and 'the grant expired')
+            or 'the token does not match the grant'
+        WCDebug.warn('characters', 'player %s: create refused — %s', tostring(src), why)
         return fail('CREATION_NOT_GRANTED')
     end
     if type(raw) ~= 'table' or not WCSecurity.payload(raw, MAX_APP_BYTES) then return fail('INVALID_PAYLOAD') end
@@ -1053,6 +1105,26 @@ function Chars.create(src, token, identity, raw)
         if g.kind == 'repair' then return createRepair(src, g, raw) end
         return createNew(src, g, identity, raw)
     end)
+end
+
+--- w_creators:characters:keepAlive — renew the creation grant while the creator is really open.
+--  ⚠️ GRANT_TTL_MS is 30 minutes and the grant was issued once and NEVER renewed, while the editor
+--     makes no server call at all between beginCreate and create. A player who spent longer than
+--     that building a character had the save refused with CREATION_NOT_GRANTED and lost every bit of
+--     the work. The TTL still does its job (a grant dies with an idle or vanished client); it just no
+--     longer punishes someone who is actively working.
+---@return table Result
+function Chars.keepAlive(src, token)
+    src = playerId(src)
+    if not src then return fail('INVALID_PAYLOAD') end
+    -- one renewal per 10 s is plenty for the client's 60 s heartbeat
+    if not WCSecurity.rate(src, 'characters:keepAlive', 3, 10000) then return fail('RATE_LIMITED') end
+    if type(token) ~= 'string' or #token > 64 then return fail('CREATION_NOT_GRANTED') end
+    if active[src] then return fail('CREATION_NOT_GRANTED') end
+    local g = grantValid(src)
+    if not g or g.token ~= token then return fail('CREATION_NOT_GRANTED') end
+    g.expires = now() + GRANT_TTL_MS
+    return ok({ expires = GRANT_TTL_MS })
 end
 
 --- w_creators:characters:cancelCreate
@@ -1125,10 +1197,21 @@ function Chars.delete(src, charid, confirmText)
         -- The framework row first, alone: the appearance, owned clothes and outfits are deleted
         -- (one transaction in WCAppearanceRepo.delete) only once the framework row is really gone,
         -- so a refused, failed or rolled-back framework deletion leaves the character intact.
-        local called, accepted = pcall(Bridge.DeleteFrameworkCharacter, src, charid)
+        -- w_core purges every resource during its deletion, this one included (PurgeCharacter:
+        -- Chars.purge, which never waits on this player's `busy` lock): the delete below then finds
+        -- nothing and succeeds (it stays for the other cores and as the safety net).
+        -- The framework's own reason, when it gives one, is the player's message: an older w_core
+        -- refuses a character that still holds money, a loan or property for that, not for "the
+        -- database".
+        deleting[charid] = src
+        local called, accepted, reason = pcall(Bridge.DeleteFrameworkCharacter, src, charid)
+        local purgedMeanwhile = deleting[charid] == 'purged'
+        deleting[charid] = nil
         if not called or accepted ~= true then
-            WCDebug.warn('characters', 'deleting %s: the framework refused or failed: %s', charid, tostring(accepted))
-            return fail('DATABASE_ERROR')
+            local code = called and DELETE_REFUSALS[reason] or 'DATABASE_ERROR'
+            WCDebug.warn('characters', 'deleting %s: the framework refused or failed: %s', charid,
+                tostring(called and (reason or accepted) or accepted))
+            return fail(code)
         end
         -- rsg / qbr delete asynchronously: the framework row must really be gone.
         local gone = WCUtil.waitUntil(function()
@@ -1137,12 +1220,18 @@ function Chars.delete(src, charid, confirmText)
         end, DELETE_CONFIRM_MS, 250)
         if not gone then
             WCDebug.warn('characters', 'the framework row of %s is still present after the deletion', charid)
-            cleanup[src] = cleanup[src] or {}
-            cleanup[src][charid] = 'unconfirmed'
+            -- nothing of w_creators is owed once w_core purged it: a retry deletes the row again
+            if not purgedMeanwhile then
+                cleanup[src] = cleanup[src] or {}
+                cleanup[src][charid] = 'unconfirmed'
+            end
             return fail('DATABASE_ERROR')
         end
         local g = grants[src]
         if g and (g.charid == charid or g.provisioned == charid) then grants[src] = nil end
+        -- w_core purged this resource during its deletion: nothing is left to delete, and no
+        -- cleanup is recorded that could later run against the number once it is reassigned.
+        if purgedMeanwhile then return ok({ charid = charid }) end
         local removed, repoDone = pcall(WCAppearanceRepo.delete, charid)
         if not removed or repoDone ~= true then
             WCDebug.warn('characters', 'deleting the appearance data of %s failed: %s', charid, tostring(repoDone))
@@ -1154,6 +1243,140 @@ function Chars.delete(src, charid, confirmText)
     end)
 end
 
+-- ---------------------------------------------------------------------
+--  Purge (w_core's character deletion: exports.w_creators:PurgeCharacter)
+-- ---------------------------------------------------------------------
+-- A deleted character's number can be handed to another character later (a vanity id that was
+-- not renewed), so nothing of it may stay: not its rows, and not a reference in memory that would
+-- attach its look, its pending flow or a re-login to whoever gets the number next.
+
+-- How long a purge waits for the writers of the character (a save in flight, the grooming write
+-- of a player w_core just kicked, an outfit write) before it refuses and changes nothing.
+Chars.PURGE_LOCK_WAIT_MS = 10000
+local PURGE_OUTFIT_LOCK_MS = 60000
+local purgeCounter = 0
+
+-- The id a purge is asked for: a non-empty string of at most MAX_CHARID characters without
+-- whitespace or control characters (an integer is accepted as its digits), or nil.
+local function purgeId(citizenid)
+    if math.type(citizenid) == 'integer' then citizenid = tostring(citizenid) end
+    if type(citizenid) ~= 'string' or #citizenid == 0 or #citizenid > MAX_CHARID then return nil end
+    if citizenid:find('[%s%c]') then return nil end
+    return citizenid
+end
+
+-- Is `src` connected with the framework having `charid` logged in?
+local function loggedInOn(src, charid)
+    return GetPlayerName(src) ~= nil and frameworkCharid(src) == charid
+end
+
+-- The connected player who holds the character right now (in play, or in the flow with it logged
+-- in: selected, being repaired, provisioned by a creation, being switched away from), or nil.
+-- w_core kicks the owner before it purges; one still here means the character is in use.
+local function purgeHolder(charid)
+    for src, entry in pairs(active) do
+        if entry.charid == charid and GetPlayerName(src) ~= nil then return src end
+    end
+    for src, p in pairs(pending) do
+        if p.charid == charid and loggedInOn(src, charid) then return src end
+    end
+    for src, g in pairs(grants) do
+        if (g.charid == charid or g.provisioned == charid) and loggedInOn(src, charid) then return src end
+    end
+    for src, s in pairs(switching) do
+        if s.from == charid and loggedInOn(src, charid) then return src end
+    end
+    return nil
+end
+
+-- Drop every stale reference to a purged character (players who left or moved on). A lapsed
+-- switch would log its player back into `from` (relogSwitch), and a pending selection or grant
+-- would finish on it: on a reused number that is someone else's character. The active entries of
+-- players who left are the playerDropped handler's (it fires characterCleared). Returns the count.
+local function forgetPurged(charid)
+    local n = 0
+    for src, p in pairs(pending) do
+        if p.charid == charid then pending[src] = nil n = n + 1 end
+    end
+    for src, g in pairs(grants) do
+        if g.charid == charid or g.provisioned == charid then grants[src] = nil n = n + 1 end
+    end
+    for src, s in pairs(switching) do
+        if s.from == charid then switching[src] = nil n = n + 1 end
+    end
+    for src, last in pairs(lastLoaded) do
+        if type(last.entry) == 'table' and last.entry.charid == charid then lastLoaded[src] = nil n = n + 1 end
+    end
+    for src, owed in pairs(cleanup) do
+        if owed[charid] then
+            owed[charid] = nil
+            n = n + 1
+            if next(owed) == nil then cleanup[src] = nil end
+        end
+    end
+    return n
+end
+
+--- Purge everything w_creators keeps for a deleted character: its appearance, owned clothing and
+--  outfits (WCAppearanceRepo.purge, one transaction) and every reference in memory. Called by
+--  w_core (server thread, may yield) with the owner already kicked. It holds the character's
+--  appearance lock and outfit lock while it deletes, so a write in flight finishes first and a
+--  later one finds no row (every writer loads under the lock; saves are UPDATEs, so nothing is
+--  recreated). Refused before anything changes when the id is invalid, the character is still in
+--  use, a writer does not finish in time or the schema is not ready. No money and no history here.
+--  Returns true, { characters_appearence, w_creators_clothes, w_creators_outfits, memory? } |
+--  false, 'invalid_id' | 'online' | 'busy' | 'database_not_ready' | 'database'.
+function Chars.purge(citizenid, ctx)
+    local charid = purgeId(citizenid)
+    if not charid then return false, 'invalid_id' end
+    ctx = type(ctx) == 'table' and ctx or {}
+    local holder = purgeHolder(charid)
+    if holder then
+        WCDebug.warn('characters', 'purging %s refused: player %s still holds it', charid, tostring(holder))
+        return false, 'online'
+    end
+
+    purgeCounter = purgeCounter + 1
+    local owner = ('purge:%s:%d'):format(charid, purgeCounter)
+    local outfitKey = 'outfits:' .. charid
+    local waitMs = tonumber(Chars.PURGE_LOCK_WAIT_MS) or 10000
+    if not WCUtil.waitUntil(function() return WCSessions.lockCharacter(charid, owner) end, waitMs, 250) then
+        WCDebug.warn('characters', 'purging %s refused: its appearance is still being written', charid)
+        return false, 'busy'
+    end
+    local done, removed, counts = pcall(function()
+        if not WCUtil.waitUntil(function() return WCSecurity.lock(outfitKey, PURGE_OUTFIT_LOCK_MS) end, waitMs, 250) then
+            return false, 'busy'
+        end
+        local inner, purged, result = pcall(function()
+            -- the waits yielded: the character may have been taken in the meantime
+            if purgeHolder(charid) then return false, 'online' end
+            local purgedOk, rows = WCAppearanceRepo.purge(charid)
+            if not purgedOk then return false, rows end
+            -- a characters:delete of this character waiting on w_core: its own delete is not needed
+            if deleting[charid] then deleting[charid] = 'purged' end
+            local forgotten = forgetPurged(charid)
+            if forgotten > 0 then rows.memory = forgotten end
+            return true, rows
+        end)
+        WCSecurity.unlock(outfitKey)
+        if not inner then error(purged, 0) end
+        return purged, result
+    end)
+    WCSessions.unlockCharacter(charid, owner)
+    if not done then
+        WCDebug.warn('characters', 'purging %s failed: %s', charid, tostring(removed))
+        return false, 'database'
+    end
+    if removed ~= true then
+        WCDebug.warn('characters', 'purging %s refused: %s', charid, tostring(counts))
+        return false, counts or 'database'
+    end
+    WCDebug.log('characters', 'character %s purged (by %s): %d appearance, %d clothing, %d outfit row(s)', charid,
+        tostring(ctx.by or '?'), counts.characters_appearence, counts.w_creators_clothes, counts.w_creators_outfits)
+    return true, counts
+end
+
 w.callback.register('w_creators:characters:list', function(src) return Chars.list(src) end)
 w.callback.register('w_creators:characters:select', function(src, charid) return Chars.select(src, charid) end)
 w.callback.register('w_creators:characters:loaded', function(src) return Chars.loaded(src) end)
@@ -1161,6 +1384,7 @@ w.callback.register('w_creators:characters:beginCreate', function(src, sex) retu
 w.callback.register('w_creators:characters:create', function(src, token, identity, app)
     return Chars.create(src, token, identity, app)
 end)
+w.callback.register('w_creators:characters:keepAlive', function(src, token) return Chars.keepAlive(src, token) end)
 w.callback.register('w_creators:characters:cancelCreate', function(src, token) return Chars.cancelCreate(src, token) end)
 w.callback.register('w_creators:characters:delete', function(src, charid, confirmText)
     return Chars.delete(src, charid, confirmText)

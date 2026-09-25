@@ -32,6 +32,19 @@ grab('surgeryHair', "openEditor('surgery', 'male', { sections = { 'hair', 'facia
 grab('barber', "openEditor('barber', 'male', { sections = { 'hair', 'facialHair', 'eyebrows', 'makeup' }, context = { growth = { hair = { stage = 1, remainingMinutes = 30 }, beard = { stage = 2, remainingMinutes = 5 } } } })")
 grab('store', "openEditor('store', 'male', { context = { storeProfile = 'general', owned = {}, prices = { hats = 3.5 } } })",
      ["{ id = sid(), op = 'set', control = 'clothing.hats.style', value = 1 }"])
+grab('storeExtras', """
+    Config.Clothing.prices.hats = { cash = 3.5, gold = 0.2 }
+    local hat = WCCatalog.forSex('male').hats.models[2][1].hash
+    local owned = { [tostring(hat)] = { category = 'hats', source = 'store', pricePaid = 6, currency = 'cash',
+        palette = 'metaped_tint_hat', tint0 = 1, tint1 = 2, tint2 = 3,
+        colors = { { palette = 'metaped_tint_hat', tint0 = 9, tint1 = 9, tint2 = 9 } } } }
+    openEditor('store', 'male', { onResell = function() return WCResult.ok({}) end, context = {
+        storeProfile = 'general', owned = owned, currencies = { 'cash', 'gold' }, tintPrice = 2.5,
+        outfits = { { id = 3, name = 'Work', data = { equipped = { hats = hat } } } }, outfitsEnabled = true,
+        maxOutfits = 3, resell = { enabled = true, percent = 0.33 } } })""",
+     ["{ id = sid(), op = 'set', control = 'clothing.hats.style', value = 2 }",
+      "{ id = sid(), op = 'set', control = 'store.currency', value = 2 }",
+      "{ id = sid(), op = 'set', control = 'clothing.boots.style', value = 2 }"])
 grab('wardrobe', """
     local app = AppearanceSchema.default('male')
     local owned = {}

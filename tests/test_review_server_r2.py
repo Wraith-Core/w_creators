@@ -71,7 +71,7 @@ class SwitchSceneTests(Flow):
         self.in_world()
         self.assertTrue(self.call('characters:list', 1).ok)        # an injected list: switch started in the world
         self.assertIsNone(self.active())
-        self.rt.run('health[1] = 0')
+        self.rt.run('dead[1] = true')
         self.later()
         self.assertEqual(self.call('characters:select', 1, 'vorp:1').code, 'BUSY')
         self.assertEqual(self.call('characters:beginCreate', 1).code, 'BUSY')
@@ -108,7 +108,7 @@ class SwitchSceneTests(Flow):
         self.assertEqual(self.rt.client_events('w_creators:client:applyRemoteAppearance')[-1].args[1], 1)
         self.assertIsNone(self.e('WCSpawnServer.pending(1)'), 'no spawn grant for a lapsed switch')
         # the §9.1 rules apply to the next attempt again
-        self.rt.run('health[1] = 0')
+        self.rt.run('dead[1] = true')
         self.later()
         self.assertEqual(self.call('characters:select', 1, 'vorp:1').code, 'BUSY')
         self.assertEqual(self.active(), 'vorp:1')
@@ -124,7 +124,7 @@ class SwitchSceneTests(Flow):
         self.in_world()
         self.assertTrue(self.call('characters:list', 1).ok)
         self.past_grace()
-        self.rt.run('health[1] = 0')
+        self.rt.run('dead[1] = true')
         self.assertEqual(self.call('characters:select', 1, 'vorp:1').code, 'BUSY')
         self.assertEqual(self.active(), 'vorp:1')
         self.assertEqual(self.call('characters:loaded', 1).code, 'NO_CHARACTER')
@@ -136,7 +136,7 @@ class SwitchSceneTests(Flow):
         self.rt.run('Players[1].coords = vector3(1230.0, -1290.0, 76.0)')
         self.assertTrue(self.call('characters:list', 1).ok)         # inside the 2-minute window
         self.later(3600 * 1000)
-        self.rt.run('health[1] = 0')
+        self.rt.run('dead[1] = true')
         r = self.call('characters:select', 1, 'vorp:2')
         self.assertFalse(r.ok)
         self.assertIn(r.code, ('SERVICE_DISABLED', 'BUSY'))
@@ -151,7 +151,7 @@ class SwitchSceneTests(Flow):
         self.assertTrue(r.ok, r.code)
         self.assertEqual(self.e('charids[1]'), 'vorp:2')
         self.past_grace()
-        self.rt.run('health[1] = 0')                                # died in the world meanwhile
+        self.rt.run('dead[1] = true')                                # died in the world meanwhile
         self.assertEqual(self.call('characters:loaded', 1).code, 'NO_CHARACTER')
         self.assertEqual(self.active(), 'vorp:2')
         self.assertIsNone(self.e('WCSpawnServer.pending(1)'))
@@ -509,7 +509,7 @@ class MigrationVerifyTests(unittest.TestCase):
         for col in ('appearance', 'appearance_version', 'updated_at'):
             self.assertTrue(self.e('WCMigrations.columnExists("characters_appearence", "%s")' % col))
         self.assertTrue(self.e('WCMigrations.tableExists("w_creators_outfits")'))
-        self.assertEqual(len(self.e('FakeDB.migrations')), 4, 'the ledger is not duplicated')
+        self.assertEqual(len(self.e('FakeDB.migrations')), 6, 'the ledger is not duplicated')
         self.assertTrue(self.e('WCMigrations.waitReady(10)'))
 
     def test_a_healthy_schema_is_left_alone(self):

@@ -62,11 +62,11 @@ Upper body (upper)           camera upperBody
   dresses         Dresses & gowns          camera fullBody
   armor           Armour                   camera upperBody
 Arms & hands (arms)          camera hands
-  gloves          Gloves                   camera hands      art gloves
-  gauntlets       Gauntlets                camera hands
-  jewelry_bracelets    Bracelets           camera hands
-  jewelry_rings_left   Rings (left)        camera hands
-  jewelry_rings_right  Rings (right)       camera hands
+  gloves          Gloves                   camera handRight  art gloves
+  gauntlets       Gauntlets                camera handRight
+  jewelry_bracelets    Bracelets           camera handLeft
+  jewelry_rings_left   Rings (left)        camera handLeft
+  jewelry_rings_right  Rings (right)       camera handRight
 Lower body (lower)           camera lowerBody
   pants           Pants                    camera lowerBody
   skirts          Skirts        sex=female camera lowerBody
@@ -78,13 +78,13 @@ Feet (feet)                  camera feet
   boot_accessories Boot accessories        camera feet
 Accessories (accessories)    camera accessories
   suspenders      Suspenders               camera upperBody
-  belts           Belts                    camera accessories
+  belts           Belts                    camera upperBody
   belt_buckles    Buckles                  camera accessories
   gunbelts        Gun belts                camera accessories art gunbelt
   gunbelt_accs    Gun belt accessories     camera accessories
   holsters_left   Left holster             camera accessories
   loadouts        Loadouts                 camera upperBody
-  satchels        Satchels                 camera accessories
+  satchels        Satchels                 camera upperBody
   badges          Badges                   camera upperBody
   accessories     Other accessories        camera fullBody
 ```
@@ -135,6 +135,39 @@ A location picks one with `pricingProfile` (default `standard`).
 - `WCCatalog.available` checks that the item has a price under the `standard` profile. **Keep
   `standard` defined** even when your stores use other profiles.
 
+### 3.1 Per-model prices
+
+`Config.Clothing.modelPrices[sex][category][model]` overrides the category price for one catalogue
+model (the store's "<category> NN" style number):
+
+| Value | Meaning |
+|---|---|
+| `-1` | not sold: the model is hidden in stores and a purchase is refused (`COMPONENT_NOT_AVAILABLE`) |
+| `9` or `{ cash = 9, gold = 0.4 }` | the model's own price |
+| `{ multiplier = 1.25 }` | the category price × 1.25 |
+
+The pricing profile's multiplier applies after it. `WCCatalog.price(category, hash, profile, sex)`
+(and `priceSpecOf`, every currency) is the one rule; the editor shows the model's own price on the item
+(`WCEditorTree.itemPrice`, display only). Configured: empty (every model at its category price).
+
+### 3.2 Currencies: cash and gold
+
+A price is a number (cash) or a table naming its currencies: `{ cash = 5 }`, `{ gold = 0.25 }`, or
+`{ cash = 5, gold = 0.25 }` (either one). The same shapes work in `modelPrices` and for
+`tints.price`. `Config.Clothing.payment.currencies = { 'cash', 'gold' }` lists what stores take, in
+the order of the store's **Payment** choice.
+
+- The store's open data lists `currencies` (cash, and gold when something on sale is priced in gold)
+  and `priceSpecs` (`{ [category] = { cash?, gold? } }`). With more than one currency the editor shows
+  the **Payment** choice at the top of the store; it changes no garment.
+- The commit carries `{ currency }`. The server works the total out in that currency
+  (`WCClothingStore.plan(saved, app, owned, loc, currency)`); an item or a colour without a price in it
+  is refused before any charge (`CURRENCY_NOT_ACCEPTED`), and so is a currency the store does not take.
+  In the editor such an item blocks the save with its name (`payload.saveBlocked`).
+- `WCEconomy.charge / refund / withCharge` take the currency: cash is the framework's money type `0`,
+  gold `1` (w_lib's bridge, every supported core). A refund returns the same currency.
+- Items are never a payment here.
+
 ---
 
 ## 4. Store profiles
@@ -153,7 +186,9 @@ An item is sold (`WCCatalog.available(profile, sex, category, hash)`) only when 
 - the category is offered to the sex;
 - the category is included and not excluded;
 - the item's model is inside the `models` range (if one is set);
-- the item has a price.
+- the model is not listed in the profile's `restricted[category]` (e.g. a uniform only a job's own
+  store sells: that store gets a location `access` rule and a profile without the restriction);
+- the item has a price in at least one currency (a model priced `-1` has none).
 
 An unknown `storeProfile` sells nothing.
 
@@ -166,8 +201,10 @@ An unknown `storeProfile` sells nothing.
 | Key | Configured | Meaning |
 |---|---|---|
 | `enabled` | `true` | governs **new** tints only (see below) |
-| `price` | `2.5` | charged once per changed tint in a store purchase |
-| `default` | `metaped_tint_generic_clean`, `metaped_tint_leather`, `metaped_tint_hair`, `metaped_tint_horse_leather`, `metaped_tint_makeup` | palettes of a category without its own list |
+| `price` | `2.5` | charged for each colour of an item the character does not own yet (a number or `{ cash, gold }`) |
+| `default` | `metaped_tint_generic_clean`, `metaped_tint_leather`, `metaped_tint_hair`, `metaped_tint_horse_leather`, `metaped_tint_makeup`, `metaped_tint_horse` | palettes of a category without its own list |
+| `limits` | `{}` | per palette `{ min, max, disabled = { indices } }`: the tint sliders' bounds; an index outside them or disabled is refused (`WCCatalog.validTint`) and the slider steps over it |
+| `swatches` | `true` | the tint sliders draw the palette's colours as their track, from `web/build/tex/palettes/<palette>.png` (see below) |
 | `palettes.hats` | `metaped_tint_hat`, `metaped_tint_hat_clean`, `metaped_tint_generic_clean` | |
 | `palettes.<leather>` | `metaped_tint_leather`, `metaped_tint_horse_leather`, `metaped_tint_generic_clean` | boots, gloves, gauntlets, belts, gunbelts, gunbelt_accs, holsters_left, satchels, loadouts, chaps, spats, boot_accessories |
 | `palettes.skirts` | `metaped_tint_skirt_clean`, `metaped_tint_generic_clean` | |
@@ -189,7 +226,43 @@ An unknown `storeProfile` sells nothing.
     owned tint, or its saved tint for the saved worn item that has no owned tint.
   - Going back to the baseline is free.
   - The editor preview (`WCEditorTree.price`) uses the same rule, for display only.
-- The **wardrobe cannot dye**. It always applies the owned tint.
+- The **wardrobe cannot dye**. It wears an item in its original colour or in one of the colours the
+  character owns of it (colourways, below); an unowned colour falls back to the owned one.
+
+### 5.1 Colourways: several owned colours of one garment
+
+`w_creators_colorways(charid, hash, palette, tint0..2, price_paid, currency, acquired_at)`, unique on
+`(charid, hash, palette, tint0, tint1, tint2)` (migration `006_colorways`), holds every colour a
+character owns of each garment. The palette columns of `w_creators_clothes` stay the colour the item was
+**last worn** in, so the older readers keep working. The migration copies every dye owned so far into
+the new table (`INSERT IGNORE`: idempotent).
+
+- `WCOwnership.list` adds `colors` to each owned row; `colorsOf(owned, hash)` (the last worn first) and
+  `ownsColor(owned, hash, tint)` answer from it. The original colour is always owned with the item.
+- **Store.** A colour the character owns of the item is **free** (it only becomes the colour the item
+  is worn in); a colour it does not own yet costs `tints.price` and becomes owned (a colour row, and the
+  last-worn colour). The editor lists the owned colours above the palette (control
+  `clothing.<category>.owned`) so picking one sets palette and tints at no cost.
+- **Wardrobe.** The item panel has a **Colour** choice (`clothing.<category>.colorway`): the original,
+  then each owned colour. `false` in `app.clothing.tints` is the explicit original colour; no tint keeps
+  the owned one (`WCOwnership.wornTint(saved, owned, category, hash, submitted)`).
+- **Outfits** store each item's colour (`data.tints[category]` = a tint, or `false` for the original).
+  Only owned colours of owned items are accepted (`INVALID_TINT`); an unowned worn item only in its
+  saved colour. An outfit saved before colourways has no `tints` and wears the owned colours.
+- The surgery clinic's clothing keeps the owned (last-worn) colour.
+- Every grant with a tint also owns the colour (`WCOwnership.grantQueries`), the rows after the items.
+- The purge deletes the colour rows with the character; the table is in w_core's citizen-id registry.
+
+### 5.2 Palette swatches
+
+A tint slider node carries `track = 'tex/palettes/<palette>.png'` (only that shape is used). The NUI
+draws that strip as the slider's track and a chip of the chosen tint's colour, read from the strip
+(tint `i` is the middle of cell `i` of the whole 0..254 palette). A slider narrowed by the palette's
+`limits` shows only its `min..max` cells of the strip (`stripWindow`, web/src/treeState.js), so the
+track and the chip stay the colours the tint really picks. A palette without a strip keeps the plain
+slider. **Owner action:** the strips are not shipped: export them from the game's own palette
+textures (`metaped_tint_*`) into `web/public/tex/palettes/<palette>.png` (one row of colours, tint 0 on
+the left, 255 wide), then rebuild the NUI.
 
 ---
 
@@ -200,7 +273,7 @@ An unknown `storeProfile` sells nothing.
 | Rule | Configured |
 |---|---|
 | `conflicts` (symmetric) | coats ↔ coats_closed · ponchos ↔ cloaks · pants ↔ skirts · dresses ↔ pants · dresses ↔ skirts |
-| `requires` (at least one of) | gunbelt_accs → gunbelts · belt_buckles → belts |
+| `requires` (at least one of) | gunbelt_accs → gunbelts · belt_buckles → belts · boot_accessories → boots |
 
 - `WCRules.equip(equipped, category, hash)`: the new item wins over the items it conflicts with.
   Dependants left without their requirement are removed, and an item whose own requirement is missing
@@ -230,8 +303,9 @@ A category that is not listed is applied after the listed ones, sorted by name. 
 
 ## 7. Store transaction
 
-Callbacks: `w_creators:store:open(locationId)`, `w_creators:store:commit(token, opId, app)`, and
-`w_creators:session:close(token)`. Client flow: `client/clothing/store.lua` through `WCServiceFlow`.
+Callbacks: `w_creators:store:open(locationId)`, `w_creators:store:commit(token, opId, app, extra?)`,
+`w_creators:store:resell(token, hash)` and `w_creators:session:close(token)`. Client flow:
+`client/clothing/store.lua` through `WCServiceFlow`. `extra = { currency?, outfitName? }`.
 
 ### 7.1 Open
 
@@ -244,19 +318,34 @@ Callbacks: `w_creators:store:open(locationId)`, `w_creators:store:commit(token, 
 - **Location.** The location must exist and be a `clothing` location (`LOCATION_NOT_FOUND`), enabled
   and open (`LOCATION_DISABLED`).
 - **Distance.** Within `interactionRadius + 3` m of `coords` or `preview` (`TOO_FAR`).
+- **Access.** A location with an `access` rule (§12) is refused to anyone it does not admit
+  (`ACCESS_DENIED`).
 
 Then:
 
 - A **degraded** appearance is refused (`INTERNAL_ERROR`).
 - The owned list is read (`DATABASE_ERROR`).
 
-The result is `{ token, appearance, owned, prices, tintPrice, storeProfile, pricingProfile, preview,
-expiresIn }`. The session lasts 1800 s.
+The result is `{ token, appearance, owned, prices, priceSpecs, currencies, tintPrice, tintPrices,
+storeProfile, pricingProfile, preview, outfits, outfitsEnabled, maxOutfits, resell, expiresIn }`. The
+session lasts 1800 s. `outfits` is the character's saved outfits (read only, §13) when the location's
+`outfits` is on (default) and the `savedOutfits` service is.
 
 ### 7.2 Preview (client)
 
-1. The client calls `w_creators:scene:prepare` (private routing bucket), fades out and moves the player
-   to the location's `preview` stand.
+1. At a store with a catalogue `book` the player first reads the book (§12), then the client calls
+   `w_creators:scene:prepare` (private routing bucket), fades out and moves the player to the
+   location's `preview` stand. The fitting-room light is drawn while the editor is open.
+   - The reading scene holds the player at the counter: it lets him go first (`WCCatalogue.release`),
+     his tasks are cleared and the move waits `WCServiceFlow.RELEASE_MS` (100 ms). Under the fade the
+     move is checked `STAND_CHECKS` times, `STAND_CHECK_MS` apart, and made again when the scene's
+     release undid it; the editor's camera open checks once more (`anchorCamera`). A player left at
+     the counter was framed from the far side of it, behind the tailor, whose back filled the screen.
+   - The camera frames him from the stand's heading with the Jump On store's ped-relative framings
+     (`WCCamera.SETS.shop`: full body 2.0 m / fov 60, body 1.5 m / 45, pants 2.0 m / 40, boots
+     1.5 m / 30 seen a little from the side, the head and each hand on their bones). The wardrobe
+     does the same from where the player stands. The screen fades back in only once the editor and
+     its camera are up, so the game's own camera behind the player is never shown in between.
 2. `WCEditor` opens in `store` mode, section `clothing` only.
 3. Try-ons are drawn locally with `Appearance.ApplyDiff`. The price shown is the editor's estimate.
 4. Cancel, death, or a server-forced close (`w_creators:client:sessionClosed`) restores the snapshot,
@@ -305,10 +394,21 @@ expiresIn }`. The session lasts 1800 s.
    - `clothing_purchased` is logged per item, then `appearance_changed`.
    - The server event `w_creators:server:appearanceChanged(src, charid, 'store')` fires.
 
-The result is `{ appearance, charged, purchases = [{ category, hash, price, tint, dyed }] }`.
+The result is `{ appearance, charged, currency, purchases = [{ category, hash, price, tint, dyed }],
+outfit? }`.
+
+**Buy and save as outfit.** `extra.outfitName` saves the committed look as an outfit in the **same
+transaction** as the purchase (`WCOutfits.insertQuery`): one charge, one save. It is checked before any
+charge, under the character's outfit lock: the store offers outfits and `savedOutfits` is on
+(`OUTFITS_DISABLED`), the name (`INVALID_OUTFIT_NAME`), the limit (`OUTFIT_LIMIT`), the contents as
+they will be once the purchase is granted (each item owned or bought now, each colour owned or bought
+now). A look with nothing bought can still be saved as an outfit. The save confirmation shows the name
+field while the character is under the limit (`payload.saveOutfit`).
 
 **Grants.** A new item without a tint is a plain grant (`INSERT IGNORE`, keeps an existing row). A dye
-sets the owned tint. Resetting to the original colour clears the owned tint. The clothes the player
+sets the owned tint and owns the colour. Resetting to the original colour clears the owned tint. A
+purchase records what the item cost and its currency (`price_paid`, `currency`, migration
+`005_clothes_paid`): only such an item can be sold back (§14). The clothes the player
 arrived in are **not** granted. Clothing applied by another resource, such as a job uniform through
 `SetClothes`, never becomes owned.
 
@@ -322,7 +422,8 @@ arrived in are **not** granted. Clothing applied by another resource, such as a 
 
 | Concept | Where | Written by |
 |---|---|---|
-| **Owned** item | `w_creators_clothes(charid, hash, category, palette, tint0..2, source, acquired_at)`, unique `(charid, hash)` | store (`store`), creation (`starter`), lazy upgrade (`legacy`), `WCOwnership.grant` (default `admin`). The wardrobe **never** writes ownership |
+| **Owned** item | `w_creators_clothes(charid, hash, category, palette, tint0..2, source, acquired_at, price_paid, currency)`, unique `(charid, hash)` | store (`store`), creation (`starter`), lazy upgrade (`legacy`), `WCOwnership.grant` (default `admin`), an unwrapped garment item (`gift`). The wardrobe **never** writes ownership (except its optional resell / wrap, which remove it) |
+| **Owned colour** | `w_creators_colorways(charid, hash, palette, tint0..2, price_paid, currency, acquired_at)` | every grant with a tint (§5.1) |
 | **Equipped** item | `app.clothing.equipped` (+ `app.clothing.tints`) | store, wardrobe, surgery clothing, creator, `SetClothes` |
 | **Runtime state** | `app.clothing.states` (persisting) + server memory (non-persisting) | [CLOTHING_STATES.md](CLOTHING_STATES.md) |
 
@@ -370,12 +471,13 @@ maxOutfits, outfitsEnabled, remote, expiresIn }`.
 - On success: save, broadcast, then `appearanceChanged(src, charid, 'wardrobe')`.
 
 **Outfits** (`w_creators_outfits(id, charid, name, data, created_at, updated_at)`,
-`data = { equipped, states }`; tints always come from ownership):
+`data = { equipped, states, tints? }`; each tint an owned colour of the item, `false` the original,
+none the owned colour, §5.1):
 
 | Callback | Arguments | Result |
 |---|---|---|
-| `w_creators:outfits:save` | `token, name, equipped, states` | `{ outfit, outfits }`. Fails with `OUTFIT_LIMIT` at the limit |
-| `w_creators:outfits:update` | `token, id, equipped, states` | `{ outfit, outfits }` |
+| `w_creators:outfits:save` | `token, name, equipped, states, tints?` | `{ outfit, outfits }`. Fails with `OUTFIT_LIMIT` at the limit |
+| `w_creators:outfits:update` | `token, id, equipped, states, tints?` | `{ outfit, outfits }` |
 | `w_creators:outfits:rename` | `token, id, name` | `{ outfit, outfits }` |
 | `w_creators:outfits:delete` | `token, id` | `{ outfits }` |
 
@@ -431,8 +533,8 @@ Server enforcement (`restrictClothing` in `server/characters/characters.lua`):
 
 A store is a config edit only. Add an entry to `Config.Locations` (`config/locations.lua`). The fields
 merge over `Config.LocationDefaults.clothing` (`interactionRadius = 2.0`, `prompt = true`, `npc = false`,
-blip `blip_shop_clothing`, `camera = 'fullBody'`, `storeProfile = 'general'`, `pricingProfile =
-'standard'`):
+blip `blip_shop_tailor`, `camera = 'fullBody'`, `storeProfile = 'general'`, `pricingProfile =
+'standard'`, `outfits = true`):
 
 ```lua
 {
@@ -446,6 +548,8 @@ blip `blip_shop_clothing`, `camera = 'fullBody'`, `storeProfile = 'general'`, `p
     storeProfile = 'general',            -- a Config.Clothing.storeProfiles id
     pricingProfile = 'standard',         -- a Config.Clothing.pricingProfiles id
     hours = { open = 6, close = 22 },    -- optional; server local time; open 06:00–21:59
+    book = vector4(1325.0, -1290.0, 77.0, 90.0),    -- optional: the catalogue book on the counter (§12)
+    access = { jobs = { tailor = 0 } },  -- optional: who may use it (§12)
 },
 ```
 
@@ -463,3 +567,90 @@ Rules:
   spawn, the fitting-stand camera, and collision at `preview`.
 - **Opening from another resource.** The server export `OpenClothingStore(src, id)` opens a store for
   a player. It sends the player to the same `w_creators:store:open` checks.
+
+---
+
+## 12. Store presence: blips, the catalogue book, the fitting-room light, access
+
+- **Blips.** Stores use the game's `blip_shop_tailor`, wardrobes `blip_shop_wardrobe`
+  (`Config.LocationDefaults`). The earlier `blip_shop_clothing` is not a sprite of the game and drew a
+  plain dot. (w_map's catalogue reader now reads `config/locations.lua` with these sprites.)
+- **The catalogue book** (`Config.Locations[].book`, a vector4; `Config.Clothing.catalogue`). The four
+  stores' books are at their prompt (`coords`) with the book's heading. With `catalogue.enabled`:
+  - `WCServicePoints` creates the game's catalogue prop (`mp001_s_mp_catalogue01x_store`), local and
+    frozen, with the store's prompt, and deletes it with it (a rebuild, a disabled service, a stop);
+  - before the fade to the fitting room the player reads it: the game's anim scene
+    `script@ambient@shop@CATALOG_PLAYER`, playlist `PBL_ENTER`, its origin the book lowered by
+    `scene.drop` (1.065 m) at the book's heading, capped at `scene.waitMs` (2.5 s). Death or a step of
+    more than 3 m ends the reading, never the visit. The scene is freed under the fade;
+  - back at the counter, `PBL_EXIT_INDEX` plays (its clips' dictionary `mech_inspection@catalog` is
+    loaded first), freed when it ends or after `scene.exitMs`;
+  - every exit path and a resource stop free the scene without waiting.
+  **Requires live verification** at the four books: the scene's role name for the player
+  (`scene.entity = 'player'`) and, if the scene animates the book, its role (`scene.bookEntity`).
+- **Fitting-room light** (`Config.Clothing.fittingLight = { enabled, intensity = 10, range = 15,
+  offset = { 0.5, 2.0, 0.3 }, color }`): drawn every frame by `WCPreviewEnv` at that offset from the
+  player (right, forward, up) while the store or the wardrobe editor is open.
+- **Access** (`Config.Locations[].access = { jobs = { [job] = minGrade }, ace = 'permission' }`, any
+  location). The server refuses anyone it does not admit (`ACCESS_DENIED`, `WCSessions.accessAllowed`:
+  the framework user's job and grade, `IsPlayerAceAllowed`), at the open and at the commit. The client
+  hides the prompt from the server's answer (`w_creators:locations:access`, refreshed every 30 s while
+  a rule-bound location exists).
+- **The tailor** is dressed by w_lib (`w.entity.create` gives a story NPC its random outfit variation).
+
+## 13. Outfits in the store, the tailor's suggestions, take off everything
+
+- **Outfits** (location `outfits = true`, the default): the store's 8th group lists the character's
+  saved outfits to **put on only** (a starting look to buy around). A piece no longer owned stays off;
+  each piece in its outfit colour when still owned. Saving, renaming and deleting stay in the wardrobe;
+  "save this look as an outfit" goes with the purchase (§7.3).
+- **The tailor's suggestions** (`Config.Clothing.suggestions = { useStartingOutfits = true, male = {},
+  female = {} }`): ready looks in the same group, each `{ id, label, items = { { category, item } |
+  { category, model, variant } } }`, plus the creator's starting outfits when `useStartingOutfits` is
+  on. Putting one on dresses the working look in the items of it this store sells (or the character
+  owns), priced as usual; the body stays.
+- **Take off everything** (`clothing.undress`, store and wardrobe): every removable garment of the
+  working look comes off at once; free, saved by the normal commit, undone by Undo.
+
+## 14. Selling back
+
+`Config.Clothing.resell = { enabled = true, percent = 0.33, inWardrobe = false }`.
+`w_creators:store:resell(token, hash)` (a store session, or a wardrobe one with `inWardrobe`):
+
+- rate limit 6 per 10 s; the same gates as that session's commit, since a sale pays money out: the
+  service on (`STORE_DISABLED` / `WARDROBE_DISABLED`), the location open, in range and its `access` rule
+  still met (`ACCESS_DENIED`); a remote wardrobe only while `Config.Wardrobe.allowRemote` is on
+  (`LOCATION_NOT_FOUND`). The character's appearance lock and outfit lock are held while it runs
+  (`BUSY`);
+- the item must be owned (`ITEM_NOT_OWNED`), **bought** in a store with a recorded price
+  (`source = 'store'`, `price_paid`, `currency`; a starting, legacy, admin or gifted item was never paid
+  for: `NOT_RESELLABLE`), not worn in the saved look (`ITEM_WORN`) and in no saved outfit
+  (`ITEM_IN_OUTFIT`);
+- its row and its owned colours are deleted in one transaction, **then** `price_paid × percent`
+  (rounded to cents) is paid back in the currency it was paid in. A refund that fails puts the rows
+  back (`INTERNAL_ERROR`; a failed put-back is logged as `security_violation`);
+- logged as `clothing_sold`; the answer carries the new ownership list for the editor.
+
+In the editor an owned, not-worn, bought item shows **Sell back · $x** (a danger action: the confirm
+modal asks first); after the sale the category goes back to the saved item.
+
+## 15. Clothing as inventory items (optional, off)
+
+`Config.Clothing.items = { enabled = false, garment = 'w_garment', outfitCard = 'w_outfit_card' }`
+(`server/clothing/items.lua`). Ownership stays in w_creators' tables; holding an item grants nothing.
+
+- **Wrap a garment** (wardrobe, `w_creators:wardrobe:wrap(token, hash)`): an owned item that is not
+  worn, not in an outfit and not a starting piece leaves the character (its rows, one transaction) and
+  is handed over as the garment item with metadata `{ sex, category, hash, tint, colors, label }`
+  (`w.framework:giveItem`). A failed hand-over puts the rows back (`INVENTORY_FULL`). The wardrobe
+  commit's gates apply (the service, the location and its `access` rule, a remote wardrobe only while
+  remote wardrobes are allowed).
+- **Use a garment**: the same sex only (`WRONG_SEX`); an item the character owns already is refused
+  (the item is kept). The item and its colours are granted as `gift` (never resold), **then** the item
+  is taken; a failed take removes the grant again.
+- **Share an outfit** (wardrobe, `w_creators:outfits:share(token, id)`): a card item with
+  `{ name, sex, items = { { category, hash, tint } } }`. It grants nothing.
+- **Use a card** at a clothing store (within its reach, open, allowed): the store opens with the card's
+  look tried on (`w_creators:client:openStore(locationId, look)`): owned pieces free, the rest priced as
+  usual by the store's own commit. Elsewhere: "use it inside a clothing store".
+- The two item names must exist in the inventory (w_inventory's item list). Logged as `clothing_item`.

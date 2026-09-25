@@ -92,7 +92,7 @@ class DeadSwitchServerTests(CharsBase):
         self.select_and_load(1, 'vorp:1')
         self.rt.run(DEATH_OWNER_STARTED)
         self.rt.run('ambulanceDead[1] = true')           # hospital bed heal timer: ped alive
-        self.assertEqual(self.e('health[1]'), None)
+        self.assertEqual(self.e('dead[1]'), None)
         self.assertEqual(self.call('scene:prepare', 1).code, 'BUSY')
         self.assertEqual(self.call('characters:beginCreate', 1).code, 'BUSY')
         self.assertEqual(self.e('WCCharacters.active(1).charid'), 'vorp:1')
@@ -515,7 +515,7 @@ class CreatorClientReplayTests(unittest.TestCase):
         rt = make_characters(setup=setup)
         rt.run('press("RETURN")')
         settle(rt)
-        rt.run('press("RETURN")')
+        rt.run('press("LEFT")')  # picking the man opens his editor at once
         settle(rt)
         self.assertEqual(rt.eval('WCCreator.stage()'), 'editor')
         return rt
@@ -537,15 +537,26 @@ class CreatorClientReplayTests(unittest.TestCase):
         self.assertEqual(e('WCState.character.charid'), '42')
         self.assertFalse(e('WCCreator.active()'))
 
-    def test_accept_opens_the_editor_with_the_servers_sex(self):
+    def test_the_servers_locked_sex_wins_over_the_design(self):
+        # the server's sex decides: a grant locked to the man (a half-finished creation) never saves a
+        # woman's design as a man; the sex is asked for at the save, and the man stays pickable
         rt = make_characters(setup=CREATOR_BASE)
         rt.run('press("RETURN")')
         settle(rt)
         rt.run('CallbackResults["w_creators:characters:beginCreate"] = WCResult.ok({ token = "tok-1", sex = "male" })')
         rt.run('press("RIGHT")')
         settle(rt, 0, 3, barrier=False)
-        rt.run('press("RETURN")')
-        settle(rt)
+        self.assertEqual(rt.eval('WCCreator.stage()'), 'editor')
+        rt.run('''r = WCEditor.action({ id = WCEditor.session().id, op = "save", opId = "x",
+            identity = { firstname = "Jane", lastname = "Smith", dob = "1990-05-01" } })''')
+        settle(rt, 0, 5, barrier=False)
+        self.assertFalse(rt.eval('r.ok'))
+        self.assertEqual(rt.eval('callArgs("w_creators:characters:beginCreate", 2)[2]'), 'female')
+        self.assertEqual(rt.eval('called("w_creators:characters:create")'), 0)
+        rt.run('WCEditor.action({ id = WCEditor.session().id, op = "cancel" })')
+        settle(rt, 0, 3, barrier=False)
+        rt.run('press("LEFT")')
+        settle(rt, 0, 3, barrier=False)
         self.assertEqual(rt.eval('WCCreator.stage()'), 'editor')
         self.assertEqual(rt.eval('WCEditor.session().saved.sex'), 'male')
 

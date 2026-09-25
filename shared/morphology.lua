@@ -14,8 +14,10 @@ WCMorph = {}
 
 local FACE, BODY = 'face', 'body'
 
--- Each field: { expressionName, label key }. The label keys are the pre-v3 creator's
+-- Each field: { expressionName, label key[, pose] }. The label keys are the pre-v3 creator's
 -- (data/features.lua), including their direction hints ('· عريض' = the +100 end of the slider).
+-- pose = 'profile': a depth the editor shows from the side (the character turns while it moves,
+-- Config.Creator.profileTurn): a jaw's depth or an ear's angle cannot be judged from the front.
 local TREE = {
     {
         id = 'face', label = 'الوجه', section = FACE,
@@ -24,17 +26,17 @@ local TREE = {
             { id = 'face.shape', label = 'شكل الرأس', fields = {
                 { 'headWidth', 'عرض الرأس' }, { 'faceWidth', 'عرض الوجه' } } },
             { id = 'face.jaw', label = 'الفكّ', fields = {
-                { 'jawWidth', 'الفكّ · عريض' }, { 'jawHeight', 'الارتفاع' }, { 'jawDepth', 'الفكّ · غائر' },
+                { 'jawWidth', 'الفكّ · عريض' }, { 'jawHeight', 'الارتفاع' }, { 'jawDepth', 'الفكّ · غائر', 'profile' },
                 { 'jawY', 'إزاحة الفكّ' } } },
             { id = 'face.chin', label = 'الذقن', fields = {
-                { 'chinWidth', 'العرض' }, { 'chinHeight', 'الارتفاع' }, { 'chinDepth', 'العمق' } } },
+                { 'chinWidth', 'العرض' }, { 'chinHeight', 'الارتفاع' }, { 'chinDepth', 'العمق', 'profile' } } },
             { id = 'face.nose', label = 'الأنف', fields = {
                 { 'noseWidth', 'الأنف · عريض' }, { 'noseHeight', 'الأنف · أسفل' }, { 'noseSize', 'الحجم' },
-                { 'noseAngle', 'الزاوية' }, { 'noseCurvature', 'الانحناء' }, { 'nostrilsDistance', 'فتحة الأنف' } } },
+                { 'noseAngle', 'الزاوية' }, { 'noseCurvature', 'الانحناء', 'profile' }, { 'nostrilsDistance', 'فتحة الأنف' } } },
             { id = 'face.cheeks', label = 'عظام الوجنة', fields = {
-                { 'cheekbonesWidth', 'عظام الوجنة · عريض' }, { 'cheekbonesHeight', 'الارتفاع' }, { 'cheekbonesDepth', 'عظام الوجنة · غائر' } } },
+                { 'cheekbonesWidth', 'عظام الوجنة · عريض' }, { 'cheekbonesHeight', 'الارتفاع' }, { 'cheekbonesDepth', 'عظام الوجنة · غائر', 'profile' } } },
             { id = 'face.mouth', label = 'الفم', fields = {
-                { 'mouthWidth', 'العرض' }, { 'mouthDepth', 'العمق' }, { 'mouthX', 'الموضع الأفقي' },
+                { 'mouthWidth', 'العرض' }, { 'mouthDepth', 'العمق', 'profile' }, { 'mouthX', 'الموضع الأفقي' },
                 { 'mouthY', 'الموضع العمودي' } },
               children = {
                 { id = 'face.mouth.left', label = 'زاوية الفم اليسرى', fields = {
@@ -50,35 +52,35 @@ local TREE = {
               } },
             { id = 'face.lips', label = 'الشفاه', children = {
                 { id = 'face.lips.upper', label = 'الشفة العليا', fields = {
-                    { 'upperLipWidth', 'العرض' }, { 'upperLipHeight', 'الارتفاع' }, { 'upperLipDepth', 'العمق' } } },
+                    { 'upperLipWidth', 'العرض' }, { 'upperLipHeight', 'الارتفاع' }, { 'upperLipDepth', 'العمق', 'profile' } } },
                 { id = 'face.lips.lower', label = 'الشفة السفلى', fields = {
-                    { 'lowerLipWidth', 'العرض' }, { 'lowerLipHeight', 'الارتفاع' }, { 'lowerLipDepth', 'العمق' } } },
+                    { 'lowerLipWidth', 'العرض' }, { 'lowerLipHeight', 'الارتفاع' }, { 'lowerLipDepth', 'العمق', 'profile' } } },
             } },
             { id = 'face.ears', label = 'الأذنان', fields = {
-                { 'earsWidth', 'العرض' }, { 'earsHeight', 'الارتفاع' }, { 'earsAngle', 'الزاوية' },
-                { 'earsDepth', 'عمق الأذنين' }, { 'earlobes', 'الحجم' } } },
+                { 'earsWidth', 'العرض' }, { 'earsHeight', 'الارتفاع' }, { 'earsAngle', 'الزاوية', 'profile' },
+                { 'earsDepth', 'عمق الأذنين', 'profile' }, { 'earlobes', 'الحجم', 'profile' } } },
             { id = 'face.eyes', label = 'العينان', extras = { 'eyes.color' }, fields = {
                 { 'eyesDistance', 'موضع العين · متباعد' }, { 'eyesHeight', 'موضع العين · أسفل' },
-                { 'eyesAngle', 'محجر العين · ميلٌ للخارج' }, { 'eyesDepth', 'محجر العين · ضحل' }, { 'eyelidWidth', 'عرض الجفن' }, { 'eyelidHeight', 'ارتفاع الجفن' },
+                { 'eyesAngle', 'محجر العين · ميلٌ للخارج' }, { 'eyesDepth', 'محجر العين · ضحل', 'profile' }, { 'eyelidWidth', 'عرض الجفن' }, { 'eyelidHeight', 'ارتفاع الجفن' },
                 { 'eyelidLeft', 'الجفن الأيسر' }, { 'eyelidRight', 'الجفن الأيمن' } } },
             { id = 'face.eyebrows', label = 'الحاجبان', extras = { 'overlay.eyebrows' }, fields = {
-                { 'eyebrowWidth', 'العرض' }, { 'eyebrowHeight', 'الارتفاع' }, { 'eyebrowDepth', 'العمق' } } },
+                { 'eyebrowWidth', 'العرض' }, { 'eyebrowHeight', 'الارتفاع' }, { 'eyebrowDepth', 'العمق', 'profile' } } },
             { id = 'face.teeth', label = 'الأسنان', extras = { 'face.teeth' } },
         },
     },
     {
         id = 'body', label = 'الجسد', section = BODY,
         children = {
-            { id = 'body.build', label = 'البنية', extras = { 'body.type', 'body.height', 'body.weight' } },
+            { id = 'body.build', label = 'البنية', extras = { 'body.type', 'body.shape', 'body.height', 'body.weight' } },
             { id = 'body.upper', label = 'الجزء العلوي', fields = {
-                { 'shoulders', 'الكتفان' }, { 'shoulderThickness', 'سماكة الكتف' },
-                { 'shoulderBlades', 'لوحا الكتف' }, { 'chest', 'الصدر' }, { 'arms', 'الذراعان' } } },
+                { 'shoulders', 'الكتفان' }, { 'shoulderThickness', 'سماكة الكتف', 'profile' },
+                { 'shoulderBlades', 'لوحا الكتف', 'profile' }, { 'chest', 'الصدر', 'profile' }, { 'arms', 'الذراعان' } } },
             { id = 'body.torso', label = 'الجذع', fields = {
                 { 'waist', 'البطن' }, { 'hip', 'المؤخّرة' } } },
             { id = 'body.legs', label = 'الرجلان', fields = {
                 { 'thighs', 'الفخذان' }, { 'calves', 'الساقان' } } },
             { id = 'body.neck', label = 'الرقبة', fields = {
-                { 'neckWidth', 'عرض الرقبة' }, { 'neckDepth', 'عمق الرقبة' } } },
+                { 'neckWidth', 'عرض الرقبة' }, { 'neckDepth', 'عمق الرقبة', 'profile' } } },
         },
     },
 }
@@ -105,7 +107,7 @@ function WCMorph.build()
             local expression = tonumber(ids[name])
             if expression then
                 local field = { id = name, expression = expression, group = src.id, label = label,
-                                min = -1, max = 1, section = out.section }
+                                min = -1, max = 1, section = out.section, pose = def[3] }
                 fields[#fields + 1] = field
                 byId[name] = field
                 byExpression[expression] = field

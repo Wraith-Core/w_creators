@@ -181,8 +181,15 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(self.e('Config.Characters.defaultSlots'), 3)
         self.assertEqual(self.e('Config.Characters.deletion.holdTime'), 5000)
         self.assertEqual(self.e('Config.Characters.selection.keys.delete'), 'DELETE')
-        self.assertEqual(self.e('Config.Scene.imaps[2]'), -1699673416)
+        # the creator scene is the Saint Denis theatre stage: a world interior, no maps to load
+        self.assertEqual(self.e('#Config.Scene.imaps'), 0)
+        self.assertTrue(self.e('Config.Scene.interior'))
+        self.assertAlmostEqual(self.e('Config.Scene.anchor[1]'), 2542.655)
+        self.assertAlmostEqual(self.e('Config.Scene.peds.male[1]'), 2547.0)
+        self.assertAlmostEqual(self.e('Config.Scene.peds.female[1]'), 2545.0)
+        self.assertIsNone(self.e('Config.Scene.editingPed'))
         self.assertEqual(self.e('Config.Scene.cleanupRadius'), 25.0)
+        self.assertEqual(self.e('Config.Spawn.sceneExclusionRadius'), 12.0)
         self.assertEqual(self.e('#Config.Spawn.points'), 9)
         self.assertEqual(self.e('Config.Spawn.points[9].id'), 'annesburg')
         self.assertEqual(self.e('Config.Spawn.points[9].order'), 9)
@@ -212,10 +219,12 @@ class ConfigTests(unittest.TestCase):
     def test_starting_outfits_resolve_in_the_real_catalog(self):
         rt = Runtime(catalog='real').load_shared()
         for sex in ('male', 'female'):
-            for preset in rt.py(rt.eval('Config.StartingOutfits.%s' % sex)).values():
-                for item in preset['items'].values():
-                    h = rt.eval('WCCatalog.resolve("%s", "%s", {%d, %d})' % (sex, item['category'], item['model'], item['variant']))
-                    self.assertIsNotNone(h, (sex, preset['id'], item))
+            for p in range(1, int(rt.eval('#Config.StartingOutfits.%s' % sex)) + 1):
+                preset = 'Config.StartingOutfits.%s[%d]' % (sex, p)
+                for i in range(1, int(rt.eval('#%s.items' % preset)) + 1):
+                    # by catalogue position { model, variant } or by the game's asset name { item }
+                    h = rt.eval('WCCatalog.presetHash("%s", %s.items[%d])' % (sex, preset, i))
+                    self.assertIsNotNone(h, (sex, rt.eval(preset + '.id'), rt.py(rt.eval('%s.items[%d]' % (preset, i)))))
 
 
 if __name__ == '__main__':

@@ -1,9 +1,14 @@
 -- =====================================================================
 --  server/wardrobe/outfits.lua  —  WCOutfits (ARCHITECTURE.md §3.3, §5.6, §16.4)
 --  Saved outfits: w_creators_outfits(id, charid, name, data, created_at, updated_at) with
---  data = { equipped = { [category] = hash }, states = { [groupId] = value } } — references to owned
---  hashes only (tints come from ownership). Limit Config.Wardrobe.maxSavedOutfits per character.
---  Equipping an outfit happens in the wardrobe editor; the wardrobe commit re-validates ownership.
+--  data = { equipped = { [category] = hash }, states = { [groupId] = value },
+--           tints = { [category] = { palette, tint0..2 } } } — references to owned hashes only, and
+--  each tint one of the colours the character owns of that item (colourways). An outfit without
+--  `tints` (saved before) wears each item in its owned (last worn) colour. Limit
+--  Config.Wardrobe.maxSavedOutfits per character.
+--  Equipping an outfit happens in the wardrobe editor (and in a store, read only); the wardrobe
+--  commit re-validates ownership and colours. A store purchase can save its look as an outfit in
+--  the same transaction (WCOutfits.insertQuery, server/clothing/store.lua).
 --
 --  Data API (charid-scoped; an id of another character is never found):
 --    WCOutfits.list(charid, sex?)                  [{ id, name, data }] | nil, 'DATABASE_ERROR'
@@ -17,8 +22,8 @@
 --    updateOutfit(src, token, id, equipped, states), renameOutfit(src, token, id, name),
 --    deleteOutfit(src, token, id) -> Result.
 --  Callbacks (all need an open wardrobe session token and the savedOutfits service):
---    w_creators:outfits:save(token, name, equipped, states)   -> { outfit, outfits }
---    w_creators:outfits:update(token, id, equipped, states)   -> { outfit, outfits }
+--    w_creators:outfits:save(token, name, equipped, states, tints?)   -> { outfit, outfits }
+--    w_creators:outfits:update(token, id, equipped, states, tints?)   -> { outfit, outfits }
 --    w_creators:outfits:rename(token, id, name)               -> { outfit, outfits }
 --    w_creators:outfits:delete(token, id)                     -> { outfits }
 -- =====================================================================
@@ -95,7 +100,8 @@ function Outfits.validateName(name)
     return cleaned
 end
 
--- A stored data column -> { equipped = { [category] = u32 }, states = { [group] = value } }.
+-- A stored data column -> { equipped = { [category] = u32 }, states = { [group] = value },
+-- tints = { [category] = tint } | nil }.
 local function decodeData(raw, sex)
     local data = WCUtil.decode(raw)
     local equipped, states = {}, {}
@@ -108,7 +114,23 @@ local function decodeData(raw, sex)
     for group, value in pairs(type(data.states) == 'table' and data.states or {}) do
         if WCClothingStates.isValid(group, value) then states[group] = value end
     end
-    return { equipped = equipped, states = states }
+    local out = { equipped = equipped, states = states }
+    -- the colour of each item (colourways): structurally valid stored tints of worn items only;
+    -- `false` keeps an item's original colour
+    if type(data.tints) == 'table' then
+        out.tints = {}
+        for category, tint in pairs(data.tints) do
+            if equipped[category] then
+                if tint == false then
+                    out.tints[category] = false
+                else
+                    local clean = WCOwnership.storedTint(category, tint)
+                    if clean then out.tints[category] = clean end
+                end
+            end
+        end
+    end
+    return out
 end
 
 --- Every outfit of a character, ordered by id: [{ id, name, data = { equipped, states } }].
@@ -148,10 +170,14 @@ function Outfits.get(charid, id, sex)
 end
 
 --- Validate outfit contents for a character: every item a clothing item of the sex that the
---  character owns (or wears in `worn`, the saved equipped map), the rules hold, states valid.
---  Returns data | nil, code, detail.
-function Outfits.validateData(charid, sex, equipped, states, worn, owned)
-    if type(equipped) ~= 'table' or (states ~= nil and type(states) ~= 'table') then return nil, 'INVALID_PAYLOAD' end
+--  character owns (or wears in `worn`, the saved equipped map), the rules hold, states valid, and
+--  each tint (optional) a colour the character owns of that item (the original colour always; an
+--  unowned worn item only its saved colour, `wornTints`). Returns data | nil, code, detail.
+function Outfits.validateData(charid, sex, equipped, states, worn, owned, tints, wornTints)
+    if type(equipped) ~= 'table' or (states ~= nil and type(states) ~= 'table')
+        or (tints ~= nil and type(tints) ~= 'table') then
+        return nil, 'INVALID_PAYLOAD'
+    end
     local resolved, code, detail = WCOwnership.resolveEquipped(sex, equipped)
     if not resolved then return nil, code, detail end
     if not owned then
@@ -176,15 +202,45 @@ function Outfits.validateData(charid, sex, equipped, states, worn, owned)
         -- Only persisting states of items the outfit wears are kept (a state of an item the outfit
         -- does not wear would hide the next item of that category).
         local def = WCClothingStates.byId[group]
-        if def.persist and WCClothingStates.applicable(app, group) then cleanStates[group] = value end
+        if def.persist and WCClothingStates.applicable(app, group, true) then cleanStates[group] = value end
     end
-    return { equipped = resolved, states = cleanStates }
+    local out = { equipped = resolved, states = cleanStates }
+    if tints ~= nil then
+        -- each item's colour: one the character owns of it (colourways); false is the item's
+        -- original colour; an item without a tint wears its owned (last worn) colour
+        out.tints = {}
+        wornTints = type(wornTints) == 'table' and wornTints or {}
+        for category, hash in pairs(resolved) do
+            local tint = tints[category]
+            if tint == false then
+                out.tints[category] = false
+            elseif type(tint) == 'table' and tint.palette then
+                local ownedColor = WCOwnership.entry(owned, hash) and WCOwnership.ownsColor(owned, hash, tint, category)
+                local wornColor = not WCOwnership.entry(owned, hash) and WCOwnership.sameTint(tint, wornTints[category])
+                if not ownedColor and not wornColor then return nil, 'INVALID_TINT', category end
+                local clean = WCOwnership.storedTint(category, tint)
+                if not clean then return nil, 'INVALID_TINT', category end
+                out.tints[category] = clean
+            elseif tint ~= nil then
+                return nil, 'INVALID_TINT', category
+            end
+        end
+    end
+    return out
 end
 
 local function encodeData(data)
-    local encoded = WCUtil.encode({ equipped = data.equipped, states = data.states })
+    local encoded = WCUtil.encode({ equipped = data.equipped, states = data.states, tints = data.tints })
     if not encoded then return nil end
     return encoded
+end
+
+--- The INSERT of a new outfit as a transaction query (a store purchase saved as an outfit: the
+--  outfit and the purchase commit together). nil when the data cannot be encoded.
+function Outfits.insertQuery(charid, name, data)
+    local encoded = encodeData(data)
+    if not encoded then return nil end
+    return { query = INSERT_OUTFIT, values = { tostring(charid), name, encoded } }
 end
 
 --- Insert an outfit. Returns id | nil, code.
@@ -280,16 +336,21 @@ local function run(src, token, fn)
     return result
 end
 
--- The saved equipped map of the session's character (items worn now count as owned).
+-- The saved equipped map of the session's character (items worn now count as owned) and its tints.
 local function wornOf(s)
     local saved = WCAppearanceRepo.load(s.charid)
     saved = saved or s.snapshot
-    return type(saved) == 'table' and type(saved.clothing) == 'table' and saved.clothing.equipped or {}
+    local clothing = type(saved) == 'table' and type(saved.clothing) == 'table' and saved.clothing or {}
+    return type(clothing.equipped) == 'table' and clothing.equipped or {},
+        type(clothing.tints) == 'table' and clothing.tints or {}
 end
 
-local function contents(s, equipped, states)
-    if not WCSecurity.payload({ equipped = equipped, states = states }, MAX_PAYLOAD) then return nil, 'INVALID_PAYLOAD' end
-    return Outfits.validateData(s.charid, s.sex, equipped, states, wornOf(s))
+local function contents(s, equipped, states, tints)
+    if not WCSecurity.payload({ equipped = equipped, states = states, tints = tints }, MAX_PAYLOAD) then
+        return nil, 'INVALID_PAYLOAD'
+    end
+    local worn, wornTints = wornOf(s)
+    return Outfits.validateData(s.charid, s.sex, equipped, states, worn, nil, tints, wornTints)
 end
 
 local function answer(s, id)
@@ -309,12 +370,12 @@ local function logSaved(src, s, id, name)
 end
 
 --- Save the current clothes as a new outfit.
-function Outfits.save(src, token, name, equipped, states)
+function Outfits.save(src, token, name, equipped, states, tints)
     return run(src, token, function(s, list)
         local cleaned = Outfits.validateName(name)
         if not cleaned then return fail('INVALID_OUTFIT_NAME') end
         if #list >= Outfits.max() then return fail('OUTFIT_LIMIT') end
-        local data, code, detail = contents(s, equipped, states)
+        local data, code, detail = contents(s, equipped, states, tints)
         if not data then return fail(code, detail and { category = detail } or nil) end
         local id, createCode = Outfits.create(s.charid, cleaned, data)
         if not id then return fail(createCode) end
@@ -325,11 +386,11 @@ function Outfits.save(src, token, name, equipped, states)
 end
 
 --- Replace an outfit's contents with the current clothes.
-function Outfits.updateOutfit(src, token, id, equipped, states)
+function Outfits.updateOutfit(src, token, id, equipped, states, tints)
     return run(src, token, function(s, list)
         id = outfitId(id)
         if not id or not find(list, id) then return fail('OUTFIT_NOT_FOUND') end
-        local data, code, detail = contents(s, equipped, states)
+        local data, code, detail = contents(s, equipped, states, tints)
         if not data then return fail(code, detail and { category = detail } or nil) end
         local ok, writeCode = Outfits.update(s.charid, id, data)
         if not ok then return fail(writeCode) end
@@ -365,12 +426,12 @@ function Outfits.deleteOutfit(src, token, id)
     end)
 end
 
-w.callback.register('w_creators:outfits:save', function(src, token, name, equipped, states)
-    return Outfits.save(src, token, name, equipped, states)
+w.callback.register('w_creators:outfits:save', function(src, token, name, equipped, states, tints)
+    return Outfits.save(src, token, name, equipped, states, tints)
 end)
 
-w.callback.register('w_creators:outfits:update', function(src, token, id, equipped, states)
-    return Outfits.updateOutfit(src, token, id, equipped, states)
+w.callback.register('w_creators:outfits:update', function(src, token, id, equipped, states, tints)
+    return Outfits.updateOutfit(src, token, id, equipped, states, tints)
 end)
 
 w.callback.register('w_creators:outfits:rename', function(src, token, id, name)

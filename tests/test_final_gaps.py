@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from harness import RESOURCE, Runtime  # noqa: E402
 from test_server_commerce_store import commerce  # noqa: E402
 from test_server_characters_flow import Base as CharsBase  # noqa: E402
-from test_server_characters_world import Base as WorldBase  # noqa: E402
+from test_server_characters_world import Base as WorldBase, load_citizen  # noqa: E402
 from test_server_services_barber import FILES as SERVICE_FILES, SETUP as SERVICE_SETUP, services_server  # noqa: E402
 
 OWNED_DYE = "{ palette = 'metaped_tint_hat', tint0 = 4, tint1 = 5, tint2 = 6 }"
@@ -256,11 +256,16 @@ class DeathOwnerSpawnTests(unittest.TestCase):
 
 
 class DeathOwnerAdminCommandTests(WorldBase):
+    def setUp(self):
+        super().setUp()
+        load_citizen(self.rt)  # wc_respawn names its target by citizen id (player 1 = citizen 7)
+
     def test_wc_respawn_is_refused_while_in_a_bed(self):
         self.activate()
         self.assertTrue(self.call('spawn:choose', 1, 'valentine').ok)
         self.rt.run(AMBULANCE + '; ambulance.bed[1] = true')
-        self.assertEqual(self.e('WCRespawnServer.admin(0, "1").code'), 'BUSY')
+        self.assertEqual(self.e('WCRespawnServer.admin(0, "7").code'), 'BUSY')
+        self.assertEqual(self.e('WCRespawnServer.admin(0, "#1").code'), 'BUSY')
         self.assertEqual(len(self.rt.client_events('w_creators:client:respawn')), 0)
 
     def test_the_ambulance_server_exports_exist(self):

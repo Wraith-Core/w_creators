@@ -416,7 +416,8 @@ function Repo.create(charid, identity, app, extra)
     return true, app
 end
 
---- Delete a character's appearance, owned clothing and outfits in one transaction.
+--- Delete a character's appearance, owned clothing (and its owned colours) and outfits in one
+--  transaction.
 function Repo.delete(charid)
     if charid == nil then return false end
     local id = key(charid)
@@ -425,6 +426,7 @@ function Repo.delete(charid)
     local ok, done = pcall(w.database.transaction.await, {
         { query = 'DELETE FROM characters_appearence WHERE charid = ?', values = { id } },
         { query = 'DELETE FROM w_creators_clothes WHERE charid = ?', values = { id } },
+        { query = 'DELETE FROM w_creators_colorways WHERE charid = ?', values = { id } },
         { query = 'DELETE FROM w_creators_outfits WHERE charid = ?', values = { id } },
     })
     if not ok or done ~= true then
@@ -435,6 +437,38 @@ function Repo.delete(charid)
     degraded[id] = nil
     pendingLegacy[id] = nil
     return true
+end
+
+local COUNT_OWNED = 'SELECT (SELECT COUNT(*) FROM characters_appearence WHERE charid = ?) AS appearance, '
+    .. '(SELECT COUNT(*) FROM w_creators_clothes WHERE charid = ?) AS clothes, '
+    .. '(SELECT COUNT(*) FROM w_creators_outfits WHERE charid = ?) AS outfits, '
+    .. '(SELECT COUNT(*) FROM w_creators_colorways WHERE charid = ?) AS colorways'
+
+--- Purge a deleted character (w_core's PurgeCharacter, through WCCharacters.purge): its rows go in
+--  one transaction (Repo.delete) together with everything the repository remembers about it — the
+--  cache, the degraded flag and the 'legacy' grants a failed upgrade still owed (the next save of
+--  whoever gets the number would otherwise insert them). The rows are counted first for the staff
+--  report. Idempotent: a second run counts nothing and succeeds. The generation is bumped, never
+--  cleared: a load still in flight must not cache the row it read before the delete.
+--  Returns true, { characters_appearence, w_creators_clothes, w_creators_outfits, w_creators_colorways }
+--  (counts) |
+--  false, 'invalid_id' | 'database_not_ready' | 'database'.
+function Repo.purge(charid)
+    if charid == nil then return false, 'invalid_id' end
+    local id = key(charid)
+    if not schemaReady() then return false, 'database_not_ready' end
+    local counted, row = pcall(w.database.single.await, COUNT_OWNED, { id, id, id, id })
+    if not counted or type(row) ~= 'table' then
+        WCDebug.warn('appearance', 'purging %s: counting its rows failed: %s', id, tostring(row))
+        return false, 'database'
+    end
+    if not Repo.delete(charid) then return false, 'database' end
+    return true, {
+        characters_appearence = math.tointeger(tonumber(row.appearance) or 0) or 0,
+        w_creators_clothes = math.tointeger(tonumber(row.clothes) or 0) or 0,
+        w_creators_outfits = math.tointeger(tonumber(row.outfits) or 0) or 0,
+        w_creators_colorways = math.tointeger(tonumber(row.colorways) or 0) or 0,
+    }
 end
 
 --- Upgrade every legacy row, in batches (console command wc_migrate_appearances).

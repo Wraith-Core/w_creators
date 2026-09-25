@@ -55,6 +55,7 @@ Anything else returns `nil` (readers) or `INVALID_PAYLOAD` (writers and openers)
 | `GetActiveCharacter(src)` | `{ charid, sex = 'male'|'female'|nil }` or `nil` (no active character) |
 | `GetCharacterAppearance(src)` | a copy of the active character's v3 appearance (ARCHITECTURE.md §5.1) or `nil` |
 | `GetAppearance(src)` | `{ skin, clothes, appearance }` or `nil`. The w_lib w_core bridge uses it (see below) |
+| `IsBandanaUp(src)` | boolean: the player's bandana is raised over the face (a masked player, for police / wanted resources). The same answer is on the replicated player state bag `Player(src).state.wcBandanaUp` (`Config.ClothingStates.bandanaStateBag`), which other resources can read without calling this one |
 
 `GetAppearance` shapes:
 
@@ -135,7 +136,7 @@ owner again and broadcasts it, keeping runtime clothing states such as a raised 
 | Export | Result | Client event sent |
 |---|---|---|
 | `OpenCosmeticSurgery({ source, clinicId })` or `OpenCosmeticSurgery(src, clinicId)` | `{ locationId }` | `w_creators:client:openSurgery(clinicId)` |
-| `OpenClothingStore(src, locationId)` | `{ locationId }` | `w_creators:client:openStore(locationId)` |
+| `OpenClothingStore(src, locationId)` | `{ locationId }` | `w_creators:client:openStore(locationId)` (an outfit card used at a store also sends a second argument, the card's look `{ equipped, tints }`, tried on when the store opens) |
 | `OpenBarber(src, locationId)` | `{ locationId }` | `w_creators:client:openBarber(locationId)` |
 | `OpenWardrobe(src, locationId?)` | `{ locationId }` (`nil` = remote) | `w_creators:client:openWardrobe(locationId)` |
 
@@ -151,6 +152,8 @@ Checks, in order:
    - It must be a string id of at most 64 characters, of the right `type` (`LOCATION_NOT_FOUND`).
    - It must be `enabled` and inside its `hours` (`LOCATION_DISABLED`).
    - The player must be within `interactionRadius + 3` m of its `coords` or `preview` (`TOO_FAR`).
+   - A location with an `access` rule admits only the jobs (at their grade) or the ACE permission it
+     names (`ACCESS_DENIED`; CLOTHING.md §12).
    - A remote wardrobe (`locationId = nil`) needs `Config.Wardrobe.allowRemote`, else
      `LOCATION_NOT_FOUND`.
    - Surgery also refuses a character whose sex has no allowed section (`SURGERY_DISABLED`).
@@ -191,7 +194,9 @@ w_ambulancejob uses it this way: the station prompt calls its own server, and th
 | `OpenCosmeticSurgery(clinicId)` | boolean | `false` for an id that is not a string of 1..64 characters. Opens only clinics with their own prompt; `prompt = false` clinics need the server export |
 | `OpenClothingActions()` | Result | opens the clothing-actions panel (`ACTIONS_DISABLED`, `NO_CHARACTER`, `BUSY`, `STATE_NOT_APPLICABLE`) |
 | `SetClothingState(group, value)` | Result `{ group, value, changed, states }` | `group` = a `Config.ClothingStates.groups[].id`. Yields (server round trip). On failure it goes back to the saved value |
+| `GetClothingActions()` | `{ status, rows }` | The clothing actions available **right now**, flattened for a menu: one row per state group, `{ group, value, label, item, itemId, icon, control }`, in `WCClothing.available` order. `status` is `'disabled'` (the service or `Config.ClothingStates` is off) or `'no_character'` — both mean *hide the menu entirely*, not *show an empty one* — or `'ok'` / `'empty'`. Only **equipped** categories produce rows (`WCClothingStates.applicable`), so the caller does no filtering of its own. Plain data, safe across the export bridge. Pair it with `SetClothingState` to act on a row |
 | `ToggleHat()`, `ToggleBandana()`, `ToggleSleeves()` | Result | next value of that group (`STATE_NOT_SUPPORTED` when none) |
+| `IsBandanaUp()` | boolean | the local character's bandana is raised (applicable and `up`) |
 | `RemoveClothingCategory(category)`, `RestoreClothingCategory(category)` | Result | `'off'` / `'on'` of the category's visibility group. Only when that category is the one worn (`STATE_NOT_APPLICABLE`, `data.reason = 'category'`); `STATE_NOT_SUPPORTED` without a group |
 | `Resurrect(coords?, heading?, reason?)` | boolean | the only resurrect entry point, see below |
 
@@ -209,6 +214,22 @@ how it is worn.
 
 w_ambulancejob calls it with `reason = 'hospital'` and falls back to the plain native when
 w_creators is not started.
+
+### Store, wardrobe and items callbacks (client → server, token-bound)
+
+Besides `store:open` / `store:commit` / `wardrobe:*` / `outfits:*` (CLOTHING.md §7, §9):
+
+| Callback | Arguments | Result |
+|---|---|---|
+| `w_creators:store:commit` | `token, opId, app, extra?` | `extra = { currency = 'cash' | 'gold', outfitName }`; `{ appearance, charged, currency, purchases, outfit? }` |
+| `w_creators:store:resell` | `token, hash` | `{ refunded, currency, hash, owned }` (CLOTHING.md §14) |
+| `w_creators:outfits:save` / `update` | `token, name / id, equipped, states, tints?` | the item colours of the outfit (colourways) |
+| `w_creators:locations:access` | — | `{ [locationId] = boolean }` for the locations with an `access` rule |
+| `w_creators:wardrobe:wrap` | `token, hash` | `{ owned }`; only with `Config.Clothing.items.enabled` (CLOTHING.md §15) |
+| `w_creators:outfits:share` | `token, id` | `{}`; only with `Config.Clothing.items.enabled` |
+
+No price, amount or currency value is ever read from these payloads: the server works every total
+out itself.
 
 ## Public events
 
@@ -246,6 +267,22 @@ w_lib's w_core bridge (`w_lib/modules/framework-bridge/cores/w_core/server.lua`)
   ignores the Result.
 - `AddEventHandler('w_creators:server:characterCreated', ...)`: it marks the next
   `WCore:Server:PlayerLoaded` as a new character.
+
+w_core calls, when a character is deleted (by staff or from the character selection):
+
+- **`exports.w_creators:PurgeCharacter(citizenid, ctx)`** → `true, { characters_appearence = n,
+  w_creators_clothes = n, w_creators_outfits = n, memory = n? }` or `false, reason`. It is not a
+  Result. It deletes the character's appearance, owned clothing and outfits in one transaction and
+  forgets it in memory: the repository cache, the degraded flag, pending legacy grants, and a
+  pending selection, grant, switch or cleanup that names it. After that its citizen id can be given
+  to another character with nothing left over. `ctx = { by, at, tombstone }`; w_creators keeps no
+  history under the id and moves no money. The purge holds the character's appearance lock and
+  outfit lock while it deletes, so a write already running finishes first. A later write finds no
+  row and creates nothing. Running it twice is safe: the second run counts 0 rows and succeeds.
+  Only w_core may call it: any other caller gets `false, 'forbidden'`.
+  It refuses before changing anything with `invalid_id`, `online` (a connected player still has
+  the character in play or logged in), `busy` (a writer did not finish within
+  `WCCharacters.PURGE_LOCK_WAIT_MS`, 10 s), `database_not_ready` or `database`.
 
 ## Compatibility shims (kept pre-v3 names)
 

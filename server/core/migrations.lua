@@ -72,7 +72,7 @@ function M.run()
                 `id` VARCHAR(64) NOT NULL,
                 `applied_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (`id`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
         ]])
         local seen = {}
         for _, row in ipairs(w.database.query.await('SELECT id FROM w_creators_migrations') or {}) do
@@ -126,7 +126,7 @@ M.register('001_base_tables', function()
             `components` LONGTEXT DEFAULT NULL,
             PRIMARY KEY (`id`),
             KEY `charid` (`charid`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     ]])
     w.database.query.await([[
         CREATE TABLE IF NOT EXISTS `w_creators_clothes` (
@@ -141,7 +141,7 @@ M.register('001_base_tables', function()
             PRIMARY KEY (`id`),
             INDEX `charid_idx` (`charid`),
             UNIQUE KEY `char_item` (`charid`, `hash`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     ]])
 end, function()
     return M.tableExists('characters_appearence') and M.tableExists('w_creators_clothes')
@@ -173,10 +173,49 @@ M.register('004_outfits', function()
             `updated_at` TIMESTAMP NULL,
             PRIMARY KEY (`id`),
             INDEX `charid_idx` (`charid`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     ]])
 end, function()
     return M.tableExists('w_creators_outfits')
+end)
+
+-- What each store purchase actually cost, and in which currency: only a garment bought with a
+-- recorded price can be sold back (Config.Clothing.resell). Rows from before have none (NULL).
+M.register('005_clothes_paid', function()
+    M.addColumn('w_creators_clothes', 'price_paid', 'DECIMAL(10,2) NULL')
+    M.addColumn('w_creators_clothes', 'currency', 'VARCHAR(8) NULL')
+end, function()
+    return M.columnsExist('w_creators_clothes', { 'price_paid', 'currency' })
+end)
+
+-- Colourways: every colour a character owns of each garment (the palette columns of
+-- w_creators_clothes stay the colour it was last worn in). The backfill makes every dye owned so
+-- far an owned colour; INSERT IGNORE on the unique key keeps it idempotent.
+M.register('006_colorways', function()
+    w.database.query.await([[
+        CREATE TABLE IF NOT EXISTS `w_creators_colorways` (
+            `id` INT NOT NULL AUTO_INCREMENT,
+            `charid` VARCHAR(100) NOT NULL,
+            `hash` BIGINT NOT NULL,
+            `palette` VARCHAR(64) NOT NULL,
+            `tint0` INT NOT NULL,
+            `tint1` INT NOT NULL,
+            `tint2` INT NOT NULL,
+            `price_paid` DECIMAL(10,2) NULL,
+            `currency` VARCHAR(8) NULL,
+            `acquired_at` TIMESTAMP NULL,
+            PRIMARY KEY (`id`),
+            INDEX `charid_idx` (`charid`),
+            UNIQUE KEY `char_colorway` (`charid`, `hash`, `palette`, `tint0`, `tint1`, `tint2`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ]])
+    w.database.query.await([[
+        INSERT IGNORE INTO w_creators_colorways (charid, hash, palette, tint0, tint1, tint2, acquired_at)
+        SELECT charid, hash, palette, tint0, tint1, tint2, acquired_at FROM w_creators_clothes
+        WHERE palette IS NOT NULL AND tint0 IS NOT NULL AND tint1 IS NOT NULL AND tint2 IS NOT NULL
+    ]])
+end, function()
+    return M.tableExists('w_creators_colorways')
 end)
 
 w.database.ready(function()

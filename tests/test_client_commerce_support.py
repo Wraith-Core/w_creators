@@ -138,6 +138,7 @@ function playerAt() local c = Peds[MyPed].coords return { c.x, c.y, c.z } end
 
 DOMAINS = (
     'client/editor/tree.lua', 'client/editor/editor.lua', 'client/editor/panel.lua',
+    'client/clothing/catalogue.lua',
     'client/services/locations.lua', 'client/clothing/store.lua', 'client/wardrobe/wardrobe.lua',
 )
 

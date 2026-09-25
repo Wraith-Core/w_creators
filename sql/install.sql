@@ -1,6 +1,6 @@
 -- =====================================================================
 --  w_creators v3 - reference schema (ARCHITECTURE.md §5.7)
---  The resource migrates itself on start (server/core/migrations.lua, ids 001-004, recorded in
+--  The resource migrates itself on start (server/core/migrations.lua, ids 001-006, recorded in
 --  w_creators_migrations). This file is the equivalent end state for a fresh database, for
 --  reference or a manual install. Nothing here touches the framework's own character tables.
 --  Existing databases: let the resource migrate (every step is additive and idempotent).
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS `characters_appearence` (
     `updated_at` TIMESTAMP NULL,
     PRIMARY KEY (`id`),
     KEY `charid` (`charid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- 001_base_tables + 003_clothes_meta
 CREATE TABLE IF NOT EXISTS `w_creators_clothes` (
@@ -37,24 +37,43 @@ CREATE TABLE IF NOT EXISTS `w_creators_clothes` (
     `tint0` INT NULL,
     `tint1` INT NULL,
     `tint2` INT NULL,
-    `source` VARCHAR(16) NULL,                  -- store | starter | legacy | admin
+    `source` VARCHAR(16) NULL,                  -- store | starter | legacy | admin | gift
     `acquired_at` TIMESTAMP NULL,
+    `price_paid` DECIMAL(10,2) NULL,            -- 005_clothes_paid: what the store charged (resell)
+    `currency` VARCHAR(8) NULL,                 -- cash | gold
     PRIMARY KEY (`id`),
     INDEX `charid_idx` (`charid`),
     UNIQUE KEY `char_item` (`charid`, `hash`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- 006_colorways: every colour a character owns of each garment
+CREATE TABLE IF NOT EXISTS `w_creators_colorways` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `charid` VARCHAR(100) NOT NULL,
+    `hash` BIGINT NOT NULL,
+    `palette` VARCHAR(64) NOT NULL,
+    `tint0` INT NOT NULL,
+    `tint1` INT NOT NULL,
+    `tint2` INT NOT NULL,
+    `price_paid` DECIMAL(10,2) NULL,
+    `currency` VARCHAR(8) NULL,
+    `acquired_at` TIMESTAMP NULL,
+    PRIMARY KEY (`id`),
+    INDEX `charid_idx` (`charid`),
+    UNIQUE KEY `char_colorway` (`charid`, `hash`, `palette`, `tint0`, `tint1`, `tint2`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- 004_outfits
 CREATE TABLE IF NOT EXISTS `w_creators_outfits` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `charid` VARCHAR(100) NOT NULL,
     `name` VARCHAR(64) NOT NULL,
-    `data` LONGTEXT NOT NULL,                   -- { equipped = { [category] = hash }, states = {...} }
+    `data` LONGTEXT NOT NULL,                   -- { equipped = { [category] = hash }, states = {...}, tints = {...} }
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP NULL,
     PRIMARY KEY (`id`),
     INDEX `charid_idx` (`charid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- The migration ledger. Left empty on purpose (see the header): the resource records each id
 -- itself after the step has checked the real columns.
@@ -62,4 +81,4 @@ CREATE TABLE IF NOT EXISTS `w_creators_migrations` (
     `id` VARCHAR(64) NOT NULL,
     `applied_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

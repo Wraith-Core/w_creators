@@ -158,8 +158,10 @@ function GetPlayerPed(src)
     if Players[tonumber(src) or -1] then return 1000 + src end
     return 0
 end
+-- BOOL natives answer 1 (not true) on the RedM runtime; the stub does the same.
 function DoesEntityExist(entity)
-    return type(entity) == 'number' and Players[entity - 1000] ~= nil
+    if type(entity) == 'number' and Players[entity - 1000] ~= nil then return 1 end
+    return false
 end
 function GetEntityCoords(entity)
     local p = Players[(tonumber(entity) or 0) - 1000]
@@ -226,6 +228,7 @@ w = {
 function setComponentData(catalog, data)
     w.component.data.expressions = data.expressions
     w.component.data.palettes = data.palettes
+    w.component.data.wearableStates = data.wearableStates
     w.component.getFullPedComponentList = function() return catalog end
 end
 

@@ -440,7 +440,11 @@ class TaxonomyTreeTests(EditorBase):
         self.assertEqual(len(groups), 8)
         self.assertEqual(groups[-1], 'tax.outfits')
         preset = self.rt.g.findNode(clothing, 'starter.preset')
-        self.assertEqual([o.value for o in lua_list(preset.options)], [0, 1, 2])
+        # 'none' then every Config.StartingOutfits preset of the sex (worker, traveler and the game's
+        # matching sets), in config order
+        count = int(self.rt.eval('#Config.StartingOutfits.male'))
+        self.assertGreaterEqual(count, 2)
+        self.assertEqual([o.value for o in lua_list(preset.options)], list(range(count + 1)))
         r = self.action(op='set', control='starter.preset', value=2)
         self.assertTrue(r.ok, r.code)
         self.assertEqual(self.rt.eval("WCEditor.session().working.clothing.equipped.hats"),
@@ -465,7 +469,10 @@ class TaxonomyTreeTests(EditorBase):
         tree = self.payload().tree
         self.assertNotIn('outfits', ids(tree.children))
         items = self.rt.g.findNode(tree, 'items')
-        self.assertEqual(ids(items.children)[-1], 'outfits')
+        # the last group is Outfits; after it only the "take off every garment" action row
+        groups = [c.id for c in lua_list(items.children) if c.kind == 'group']
+        self.assertEqual(groups[-1], 'outfits')
+        self.assertEqual(ids(items.children)[-1], 'clothing.undress')
         self.assertEqual(items.label, 'الملابس')
 
     def test_a_stage_list_without_identity_and_review_gets_them(self):

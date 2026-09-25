@@ -11,8 +11,13 @@
 --        wc_apply <hash>       puts one shop item (decimal, 0x hex or a name) on the player ped
 --        wc_remove <category>  removes one category from the player ped
 --        wc_restore            renders the saved appearance again (Appearance.RestorePlayer)
---      wc_apply / wc_remove change only the local ped (nothing is saved or synced); wc_restore
---      undoes them. All four refuse while an editor, a service visit or the character scene runs.
+--        wc_states [category n] lists the wearable states the game has for every worn item (the
+--                              clothing and the body; names from w_lib's list), or puts state n of
+--                              that list on the worn item of that category: the explorer for new
+--                              clothing states and the body-part fix
+--      wc_apply / wc_remove / wc_states n change only the local ped (nothing is saved or synced);
+--      wc_restore undoes them. All of them refuse while an editor, a service visit or the character
+--      scene runs.
 --    * Config.Admin.spawnProp = true registers the handler of W:ADMIN:SpawnObject(model), sent by the
 --      ACE-restricted server command `spawnprop <model>` (server/dev/tools.lua): a valid model (name
 --      or hash) is created on the ground at the player's position through w.entity.create (the
@@ -47,7 +52,8 @@ local function report(fmt, ...)
 end
 
 local function pedExists(ped)
-    return type(ped) == 'number' and ped ~= 0 and DoesEntityExist(ped) == true
+    -- BOOL natives answer 1 (not true) on this runtime: never compare them with == true
+    return type(ped) == 'number' and ped ~= 0 and not not DoesEntityExist(ped)
 end
 
 --- A u32 hash as the signed int32 the game and w_lib use.
@@ -182,6 +188,69 @@ function Dev.remove(category)
     return true
 end
 
+--- The wearable states of every worn item (the clothing and the two body items) as the game lists
+--  them: { { category, hash, current, states = { { hash, name } } } }. Names come from w_lib's list
+--  (w.component.data.wearableStates); a state it does not know is printed by its hash.
+function Dev.wearableStates(ped)
+    local app = WCState.appearance
+    if type(app) ~= 'table' or not pedExists(ped) then return nil end
+    local names = {}
+    for _, name in ipairs(WCClothingStates.knownWearableStates()) do
+        local h = WCUtil.u32(GetHashKey(name))
+        if h then names[h] = name end
+    end
+    names[WCUtil.u32(GetHashKey('base'))] = 'base'
+    local items = {}
+    local function add(category, hash)
+        local u = WCUtil.u32(hash)
+        if not u or u == 0 then return end
+        -- the natives take the wearer's metaped type (read from the ped), not a sex flag
+        local list = WCNative.clothing.wearableStates(u, ped) or {}
+        local states = {}
+        for _, s in ipairs(list) do states[#states + 1] = { hash = s, name = names[s] } end
+        local okState, current = pcall(w.component.getWearableState, ped, category)
+        items[#items + 1] = { category = category, hash = u, states = states,
+                              current = okState and type(current) == 'string' and current or 'unknown' }
+    end
+    local equipped = type(app.clothing) == 'table' and app.clothing.equipped or {}
+    for _, category in ipairs(WCUtil.sortedKeys(equipped)) do add(category, equipped[category]) end
+    add('BODIES_UPPER', app.body and app.body.upper)
+    add('BODIES_LOWER', app.body and app.body.lower)
+    return items
+end
+
+--- wc_states: print every worn item's wearable states (no argument), or put state number `index`
+--  of that list on the worn item of `category` (the local ped only; wc_restore puts the saved look
+--  back). Returns true | false, code.
+function Dev.states(category, index)
+    local ped = PlayerPedId()
+    local items = Dev.wearableStates(ped)
+    if not items then return false, 'NO_CHARACTER' end
+    if category == nil then
+        report('[w_creators] wc_states: %d worn items', #items)
+        for _, item in ipairs(items) do
+            local list = {}
+            for i, s in ipairs(item.states) do list[#list + 1] = ('%d=%s'):format(i, s.name or ('0x%08X'):format(s.hash)) end
+            report('  %-20s 0x%08X now=%s  %s', item.category, item.hash, item.current,
+                #list > 0 and table.concat(list, ' ') or '(the game lists none)')
+        end
+        notify(REPORTED, 'inform')
+        return 'report'
+    end
+    local n = math.tointeger(tonumber(index))
+    for _, item in ipairs(items) do
+        if item.category == category then
+            local state = n and item.states[n]
+            if not state then return false, 'INVALID_PAYLOAD' end
+            local ok = pcall(w.component.setWearableState, ped, category, item.hash, state.name or state.hash)
+            if not ok then return false, 'STATE_NOT_SUPPORTED' end
+            Appearance.Refresh(ped)
+            return true
+        end
+    end
+    return false, 'STATE_NOT_APPLICABLE'
+end
+
 --- Render the saved appearance again. Returns true | false, code.
 function Dev.restore()
     if type(WCState.appearance) ~= 'table' then return false, 'NO_CHARACTER' end
@@ -218,7 +287,8 @@ function Dev.run(command, action, ...)
         notify(WCResult.messageKey(code or 'INTERNAL_ERROR'))
         return false
     end
-    if command ~= 'wc_inspect' then notify(DONE, 'success') end
+    -- a printed report (wc_inspect, wc_states without arguments) has told the player already
+    if command ~= 'wc_inspect' and done ~= 'report' then notify(DONE, 'success') end
     return true
 end
 
@@ -233,6 +303,7 @@ Dev.COMMANDS = {
     wc_apply = function(args) return Dev.apply(args[1]) end,
     wc_remove = function(args) return Dev.remove(args[1]) end,
     wc_restore = function() return Dev.restore() end,
+    wc_states = function(args) return Dev.states(args[1], args[2]) end,
 }
 
 if devTools() then

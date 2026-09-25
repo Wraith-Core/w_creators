@@ -67,6 +67,7 @@ client_scripts {
     'client/characters/selector.lua',
     'client/creator/creator.lua',
     'client/creator/cutscene.lua',
+    'client/clothing/catalogue.lua', -- the store's catalogue book: used by the service points and flow
     'client/services/locations.lua',
     'client/clothing/store.lua',
     'client/clothing/states.lua',
@@ -104,6 +105,7 @@ server_scripts {
     'server/clothing/states.lua',
     'server/wardrobe/outfits.lua',
     'server/wardrobe/wardrobe.lua',
+    'server/clothing/items.lua',   -- clothing as inventory items (Config.Clothing.items, off by default)
     'server/barber/barber.lua',
     'server/barber/grooming.lua',
     'server/surgery/surgery.lua',
@@ -129,6 +131,10 @@ files {
     'web/build/index.html',
     -- RDR design assets (vite copies public/ as files; undeclared they 404 inside the game).
     'web/build/tex/ui/*.png',
+    'web/build/tex/cloth/*.png',   -- the game's clothing icons (config/clothing.lua `icon`; also read by w_wheel)
+    -- the tint sliders' palette strips (docs/CLOTHING.md §5.2): none ship; the owner exports them
+    -- into web/public/tex/palettes, and undeclared they would 404 in game like any other asset
+    'web/build/tex/palettes/*.png',
     'web/build/fonts/*.woff2',
     'web/build/sounds/*.mp3',
     'web/build/img/*.jpg',
