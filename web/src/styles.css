@@ -368,7 +368,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 }
 .row-value[data-badge=equipped] { background: var(--w-paper); border-color: var(--w-paper); color: var(--w-ink); }
 .row-value[data-badge=locked] { opacity: .55; }
-.row-value[data-badge=new] { box-shadow: inset 0 -.14em 0 var(--w-red); }
+.row-value[data-badge=new] { border-color: var(--w-paper); color: var(--w-paper); } /* "new" is not one of red's uses: a full paper hairline, brighter than owned */
 .menu-row:hover:not(:disabled) .row-value[data-badge], .menu-row:focus-visible .row-value[data-badge] { border-color: rgba(11, 10, 8, .45); color: var(--w-ink); }
 .menu-row:hover:not(:disabled) .row-value[data-badge=equipped], .menu-row:focus-visible .row-value[data-badge=equipped] { background: var(--w-ink); border-color: var(--w-ink); color: var(--w-paper); }
 .menu-list:hover .menu-row:focus-visible:not(:hover) .row-value[data-badge], .component:hover ~ .menu-list .menu-row:focus-visible .row-value[data-badge] { border-color: rgba(237, 230, 214, .35); color: var(--w-paper-dim); }
