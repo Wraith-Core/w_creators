@@ -263,7 +263,7 @@ end
 local function taxonomyIndex()
     local groups, subs = {}, {}
     for gi, g in ipairs((Config.Clothing and Config.Clothing.taxonomy) or {}) do
-        groups[g.id] = { label = g.label, order = g.order or gi, index = gi, icon = g.icon }
+        groups[g.id] = { label = g.label, order = g.order or gi, index = gi }
         for si, sub in ipairs(g.subs or {}) do
             subs[sub.id] = { label = sub.label, order = sub.order or si, index = si, group = g.id, icon = sub.icon }
             if sub.category then subs[sub.category] = subs[sub.category] or subs[sub.id] end
