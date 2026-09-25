@@ -498,6 +498,13 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .range-track { position: relative; display: block; height: 1.1rem; direction: ltr; --track: rgba(237, 230, 214, .25); --fill: var(--w-paper); }
 .slider-field:hover .range-track, .slider-field:focus-within .range-track { --track: rgba(11, 10, 8, .3); --fill: var(--w-ink); }
 .slider-field[data-off=true]:hover .range-track { --track: rgba(237, 230, 214, .25); --fill: var(--w-paper); }
+/* one cursor (as the menu rows): while the mouse is over the controls, only the row under it carries
+   the band; the row that kept focus from an earlier click or key goes back to rest */
+.component:hover .choice:focus-within:not(:hover), .component:hover .slider-field:focus-within:not(:hover) { color: var(--w-paper); border-bottom-color: var(--w-rule); }
+.component:hover .choice:focus-within:not(:hover)::before, .component:hover .slider-field:focus-within:not(:hover)::before { opacity: 0; }
+.component:hover .choice:focus-within:not(:hover) .choice-control > button { color: var(--w-paper-dim); }
+.component:hover .choice:focus-within:not(:hover) .choice-value { border-color: rgba(237, 230, 214, .35); }
+.component:hover .slider-field:focus-within:not(:hover) .range-track { --track: rgba(237, 230, 214, .25); --fill: var(--w-paper); }
 .range-track::before { content: ''; position: absolute; left: 0; right: 0; top: calc(50% - .5px); height: 1px; background: var(--track); pointer-events: none; }
 .range-track::after { content: ''; position: absolute; left: 0; top: calc(50% - 1px); width: var(--range-fill); height: 2px; background: var(--fill); pointer-events: none; }
 input[type=range] {
