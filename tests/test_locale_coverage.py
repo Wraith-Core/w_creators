@@ -41,7 +41,7 @@ def used_keys():
     """{key: ['file:line', ...]} of every Arabic literal and every literal locale()/L() argument."""
     out = {}
     for path in lua_files():
-        rel = str(path.relative_to(RESOURCE))
+        rel = path.relative_to(RESOURCE).as_posix()   # LOG_FILES is written with '/'
         src = read(path)
         blanked = code_only(src)
         for kind, value, line, start in tokens(src):

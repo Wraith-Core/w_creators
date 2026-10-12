@@ -12,9 +12,13 @@ Config = {}
 --  Debug output (WCDebug.log). Silent unless enabled.
 --  domains: { appearance = true, sessions = true, ... } limits the output to those domains;
 --  an empty table means every domain.
+--
+--  Off by default, as the line above says. With domains = {} an enabled switch means EVERY
+--  domain speaks, which on a live server is console noise on every boot, and debug lines carry
+--  player identifiers. Turn it on while working on the resource.
 -- ---------------------------------------------------------------------
 Config.Debug = {
-    enabled = true,
+    enabled = false,
     domains = {},
 }
 

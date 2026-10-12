@@ -74,7 +74,7 @@ def web_code(text):
 
 
 def lines_of(path, code):
-    rel = str(path.relative_to(RESOURCE))
+    rel = path.relative_to(RESOURCE).as_posix()   # SERVER_PRINTS is written with '/'
     for i, line in enumerate(code.split('\n'), 1):
         yield rel, i, line
 
@@ -159,8 +159,7 @@ class NativeTests(unittest.TestCase):
     def test_raw_invokes_only_in_client_natives(self):
         found = []
         for path in lua_files():
-            rel = str(path.relative_to(RESOURCE))
-            if rel.startswith('client/natives/'):
+            if path.relative_to(RESOURCE).as_posix().startswith('client/natives/'):
                 continue
             for rel, i, line in lines_of(path, code_only(read(path))):
                 if re.search(r'\bInvokeNative\b|\bN_0x[0-9a-fA-F]+', line):
@@ -211,7 +210,9 @@ class ManifestTests(unittest.TestCase):
         listed = set()
         for side in ('shared', 'client', 'server'):
             listed |= set(manifest_scripts(side))
-        on_disk = {str(p.relative_to(RESOURCE)) for p in lua_files()}
+        # pathlib renders Windows separators, the manifest writes '/': compare like with like, or the
+        # whole tree reads as "not loaded" on a Windows dev box
+        on_disk = {str(p.relative_to(RESOURCE)).replace('\\', '/') for p in lua_files()}
         on_disk |= {p.name for p in RESOURCE.glob('*.lua')} - {'fxmanifest.lua'}
         self.assertEqual(sorted(on_disk - listed), [], 'Lua files the manifest does not load')
         for legacy in ('config.lua', 'data', 'bridge', 'modules', 'creator', 'multichar', 'spawnselect',
