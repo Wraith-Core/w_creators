@@ -322,6 +322,16 @@ local function isDead(src)
     return deathOwnerSaysDead(src) or frameworkSaysDead(src)
 end
 
+-- ★ Held by the law: cuffed or serving time (the core's flags, kept by w_policejob on the
+--   server). Re-selecting the same character loaded it afresh, which cleared the cuffs, and the spawn
+--   selector then placed him anywhere -- a free escape from an arrest.
+local function isRestrained(src)
+    local done, char = pcall(function() return exports.w_lib:FwGetCharacter(src) end)
+    if not done or type(char) ~= 'table' then return false end
+    local meta = type(char.metadata) == 'table' and char.metadata or char
+    return meta.ishandcuffed == true or (tonumber(meta.injail) or 0) > 0
+end
+
 --- Can the player leave his active character now (§9.1)? ok | false, code.
 local function canSwitch(src)
     local current = active[src]
@@ -331,6 +341,7 @@ local function canSwitch(src)
     local recovered = current.recoveredUntil ~= nil and current.recoveredUntil > now()
     if Config.Characters.allowSwitch ~= true and not recovered then return false, 'SERVICE_DISABLED' end
     if isDead(src) then return false, 'BUSY' end
+    if isRestrained(src) then return false, 'BUSY' end
     if WCSessions.current(src) then return false, 'BUSY' end
     if CreatorAppearanceLocks[current.charid] then return false, 'BUSY' end
     return true
