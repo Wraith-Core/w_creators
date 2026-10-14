@@ -8,7 +8,7 @@ messages. The only Arabic literals that are not keys are the server's log texts 
 the logging resource, never translated): see LOG_ONLY below. Every locale(...) / L(...) call with a
 literal argument must name a key whatever its script.
 
-w_ambulancejob (when the repository is next to this one): every dotted key its Lua passes to
+w_medic (when the repository is next to this one): every dotted key its Lua passes to
 locale(...) or keeps in a key table exists in both of its dictionaries.
 """
 import json
@@ -106,7 +106,7 @@ class LocaleCoverageTests(unittest.TestCase):
                                         '%s:%d' % (path.relative_to(RESOURCE), line))
 
 
-AMBULANCE = RESOURCE.parent / 'w_ambulancejob'
+AMBULANCE = RESOURCE.parent / 'w_medic'
 DOTTED = re.compile(r"""['"]((?:info|error|success|text|prompt|menu|damage|body|states|progress|mail|label|"""
                     r"""blip|target|command|notify)\.[a-z_0-9.]+)['"]""")
 
@@ -121,7 +121,7 @@ def flatten(d, prefix=''):
     return out
 
 
-@unittest.skipUnless((AMBULANCE / 'locales' / 'en.json').exists(), 'w_ambulancejob not checked out')
+@unittest.skipUnless((AMBULANCE / 'locales' / 'en.json').exists(), 'w_medic not checked out')
 class AmbulanceLocaleTests(unittest.TestCase):
     def test_dotted_keys_exist_in_both_dictionaries(self):
         en = flatten(json.loads(read(AMBULANCE / 'locales' / 'en.json')))
@@ -135,7 +135,9 @@ class AmbulanceLocaleTests(unittest.TestCase):
             for m in DOTTED.finditer(src):
                 used.setdefault(m.group(1), str(path.relative_to(AMBULANCE)))
         self.assertGreater(len(used), 50)
-        missing = sorted('%s (%s)' % (k, f) for k, f in used.items() if k not in en or k not in ar)
+        # a key ending in '_' is the prefix of one built in code ('jobs.err_' .. reason), not a key
+        missing = sorted('%s (%s)' % (k, f) for k, f in used.items()
+                         if not k.endswith('_') and (k not in en or k not in ar))
         self.assertEqual(missing, [])
 
     def test_cosmetic_surgery_keys(self):

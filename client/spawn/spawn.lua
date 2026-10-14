@@ -53,7 +53,8 @@ Sp.REVIVE_TIMEOUT = 30000      -- ms for that revive to finish (resurrect + appe
 -- state is cleared (nil = always WCRespawn.resurrect).
 --  inBed / endBed: the export that reports a hospital bed stay and the one that ends it (bed,
 --  camera, lying animation, invincibility, pending AI heal): a world respawn ends the stay first.
-Sp.DEATH_OWNER = { resource = 'w_ambulancejob', revive = 'hospital:client:Revive', isDead = 'IsDead',
+-- (w_medic since 2026-10-14: it replaced w_ambulancejob, with the same events and exports)
+Sp.DEATH_OWNER = { resource = 'w_medic', revive = 'hospital:client:Revive', isDead = 'IsDead',
                    inBed = 'InHospitalBed', endBed = 'EndBedStay' }
 
 local LOGIN_KINDS = { initial = true, login = true, switch = true }

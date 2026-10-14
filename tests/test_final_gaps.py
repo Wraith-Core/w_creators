@@ -6,9 +6,9 @@
 2. the 8 overlay layers w_lib draws without a palette are not tintable (shared list, tint = false)
    and sanitize stores their colour as 1: a colour-only change is NO_CHANGES (client finding 20);
 3. a repeated characters:loaded replays the last answer instead of NO_CHARACTER (client finding 6);
-4. OpenSpawnSelector / an admin respawn answer BUSY while w_ambulancejob holds the player (dead,
+4. OpenSpawnSelector / an admin respawn answer BUSY while w_medic holds the player (dead,
    downed or in a hospital bed) (client finding 4);
-5. GlobalState['w_creators:clinics'] publishes the usable clinics for w_ambulancejob.
+5. GlobalState['w_creators:clinics'] publishes the usable clinics for w_medic.
 """
 import os
 import sys
@@ -209,13 +209,13 @@ class LoadedReplayTests(CharsBase):
 AMBULANCE = r'''
 ambulance = { dead = {}, bed = {} }
 -- the CitizenFX export proxy shape: every member is function(self, ...) (the receiver is dropped)
-rawset(exports, 'w_ambulancejob', {
+rawset(exports, 'w_medic', {
     IsDead = function(self, src) return ambulance.dead[src] == true or ambulance.bed[src] == true end,
     InHospitalBed = function(self, src) return ambulance.bed[src] == true end,
 })
 ambulanceState = 'started'
 local baseState = GetResourceState
-GetResourceState = function(name) if name == 'w_ambulancejob' then return ambulanceState end return baseState(name) end
+GetResourceState = function(name) if name == 'w_medic' then return ambulanceState end return baseState(name) end
 '''
 
 
@@ -233,7 +233,7 @@ class DeathOwnerSpawnTests(unittest.TestCase):
         self.rt.run('ambulance.dead[1] = false; ambulance.bed[1] = true')
         self.assertEqual(self.e('WCApi.OpenSpawnSelector(1).code'), 'BUSY')
         # only the bed export (an IsDead that does not count beds) still refuses
-        self.rt.run("exports.w_ambulancejob.IsDead = function() return false end")
+        self.rt.run("exports.w_medic.IsDead = function() return false end")
         self.assertEqual(self.e('WCApi.OpenSpawnSelector(1).code'), 'BUSY')
         self.rt.run('ambulance.bed[1] = false')
         self.assertTrue(self.e('WCApi.OpenSpawnSelector(1).ok'))
@@ -242,7 +242,7 @@ class DeathOwnerSpawnTests(unittest.TestCase):
         self.rt.run("ambulance.dead[1] = true; ambulanceState = 'stopped'")
         self.assertTrue(self.e('WCApi.OpenSpawnSelector(1).ok'))
         self.rt.run("WCSpawnServer.cancel(1); ambulanceState = 'started'"
-                    "; rawset(exports, 'w_ambulancejob', { IsDead = function() error('boom') end })")
+                    "; rawset(exports, 'w_medic', { IsDead = function() error('boom') end })")
         self.assertTrue(self.e('WCApi.OpenSpawnSelector(1).ok'))
 
     def test_an_admin_respawn_is_busy_but_a_death_respawn_is_not(self):
@@ -269,9 +269,9 @@ class DeathOwnerAdminCommandTests(WorldBase):
         self.assertEqual(len(self.rt.client_events('w_creators:client:respawn')), 0)
 
     def test_the_ambulance_server_exports_exist(self):
-        amb = RESOURCE.parent / 'w_ambulancejob' / 'server' / 'main.lua'
+        amb = RESOURCE.parent / 'w_medic' / 'server' / 'main.lua'
         if not amb.exists():
-            self.skipTest('w_ambulancejob not available')
+            self.skipTest('w_medic not available')
         src = amb.read_text(encoding='utf-8')
         self.assertIn("exports('IsDead'", src)
         self.assertIn("exports('InHospitalBed'", src)
@@ -312,7 +312,7 @@ class ClinicPublicationTests(unittest.TestCase):
     def test_published_at_start_with_the_shape_the_ambulance_job_reads(self):
         self.assertEqual(self.published(), CLINICS)
         self.assertEqual(self.e('WCSurgeryService.CLINICS_KEY'), KEY)
-        job = RESOURCE.parent / 'w_ambulancejob' / 'client' / 'job.lua'
+        job = RESOURCE.parent / 'w_medic' / 'client' / 'job.lua'
         if job.exists():
             src = job.read_text(encoding='utf-8')
             self.assertIn("CLINICS_KEY = '%s'" % KEY, src)

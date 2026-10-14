@@ -3,7 +3,7 @@
   * the in-world spawn selector re-displays its prompt group when another group displaced it, has
     a cancel key for the in-world kind, and is refused while the death system holds the player
     (the character selector and the creator re-display their groups too)          (finding 4)
-  * a world respawn ends a w_ambulancejob hospital bed stay before the revive / move (5)
+  * a world respawn ends a w_medic hospital bed stay before the revive / move (5)
   * an uncertain characters:loaded answer is settled by the spawn hand-off, not a reopen (6)
   * the preview environment only gives back the HUD / radar it hid                 (8)
   * an owned dye the live config no longer offers is kept when the item is put on (9)
@@ -35,7 +35,7 @@ def read(path):
     return read_path(RESOURCE / path)
 
 
-AMBULANCE_MAIN = RESOURCE.parent / 'w_ambulancejob' / 'client' / 'main.lua'
+AMBULANCE_MAIN = RESOURCE.parent / 'w_medic' / 'client' / 'main.lua'
 
 
 def ids(tbl):
@@ -104,8 +104,8 @@ class SpawnSelectorPromptTests(unittest.TestCase):
         self.assertEqual(count(self.rt, 'TriggerServerEvent:w_creators:server:spawnCancel'), 0)
 
     def test_refused_while_the_death_system_holds_the_player(self):
-        self.run("ResourceStates['w_ambulancejob'] = 'started'"
-                 "; exports.w_ambulancejob = { IsDead = function() return true end }")
+        self.run("ResourceStates['w_medic'] = 'started'"
+                 "; exports.w_medic = { IsDead = function() return true end }")
         self.run("fireEvent('w_creators:client:selectSpawn', nil, %s)" % (SELECT % 'admin'))
         self.assertFalse(self.e('WCSpawnSelector.active()'))
         self.assertFalse(self.e('WCSpawnSelector.holding()'))
@@ -115,8 +115,8 @@ class SpawnSelectorPromptTests(unittest.TestCase):
         self.assertEqual(count(self.rt, 'CreateCam'), 0)
 
     def test_a_login_selector_ignores_the_death_owner(self):
-        self.run("ResourceStates['w_ambulancejob'] = 'started'"
-                 "; exports.w_ambulancejob = { IsDead = function() return true end }")
+        self.run("ResourceStates['w_medic'] = 'started'"
+                 "; exports.w_medic = { IsDead = function() return true end }")
         self.open('login')
         self.assertTrue(self.e('WCSpawnSelector.active()'))
 
@@ -152,8 +152,8 @@ class BedStayRespawnTests(unittest.TestCase):
         self.run('''
             WCRespawn.reset(); clearLog()
             InBed, Ended, ReviveEvents = true, 0, 0
-            ResourceStates['w_ambulancejob'] = 'started'
-            exports.w_ambulancejob = {
+            ResourceStates['w_medic'] = 'started'
+            exports.w_medic = {
                 InHospitalBed = function() return InBed end,
                 EndBedStay = function() Log[#Log + 1] = { op = 'EndBedStay', args = table.pack() }; Ended = Ended + 1; local was = InBed; InBed = false; return was end,
                 IsDead = function() return InBed end,
@@ -187,13 +187,13 @@ class BedStayRespawnTests(unittest.TestCase):
         self.assertEqual(self.e('Ended'), 0)
 
     def test_stopped_death_system_is_not_called(self):
-        self.run("ResourceStates['w_ambulancejob'] = 'stopped'")
+        self.run("ResourceStates['w_medic'] = 'stopped'")
         self.respawn('admin')
         self.assertEqual(self.e('Ended'), 0)
 
-    def test_w_ambulancejob_exports_the_bed_end(self):
+    def test_w_medic_exports_the_bed_end(self):
         if not AMBULANCE_MAIN.exists():
-            self.skipTest('w_ambulancejob not checked out')
+            self.skipTest('w_medic not checked out')
         src = AMBULANCE_MAIN.read_text(encoding='utf-8')
         m = re.search(r"exports\('EndBedStay', function\(\)(.*?)\nend\)", src, re.S)
         self.assertIsNotNone(m)

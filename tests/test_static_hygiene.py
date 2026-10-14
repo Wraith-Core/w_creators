@@ -37,8 +37,8 @@ EXTERNAL = {
     # server -> other resources
     'w_creators:server:characterCreated': "consumed by w_lib's w_core bridge (framework-bridge/cores/w_core/server.lua)",
     # client -> other resources (local events)
-    'w_creators:client:resurrected': 'fired for death systems (w_ambulancejob clears its downed state)',
-    'hospital:client:Revive': "w_ambulancejob's revive, triggered by the spawn module for a downed player",
+    'w_creators:client:resurrected': 'fired for death systems (w_medic clears its downed state)',
+    'hospital:client:Revive': "w_medic's revive, triggered by the spawn module for a downed player",
     'hud:client:showui': 'HUD resources (client/core/ui.lua SetCustomHudVisible)',
     'hud:client:Hideui': 'HUD resources (client/core/ui.lua SetCustomHudVisible)',
     'hud:client:showUiWithHoutStement': 'HUD resources (client/core/ui.lua SetPlayerHudVisible)',

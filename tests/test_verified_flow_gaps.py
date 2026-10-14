@@ -81,9 +81,9 @@ class CreationSexLockTests(CharsBase):
 DEATH_OWNER_STARTED = r'''
 ambulanceDead = {}
 -- the CitizenFX export proxy shape: every member is function(self, ...) (the receiver is dropped)
-rawset(exports, 'w_ambulancejob', { IsDead = function(self, src) return ambulanceDead[src or 0] == true end })
+rawset(exports, 'w_medic', { IsDead = function(self, src) return ambulanceDead[src or 0] == true end })
 local baseState = GetResourceState
-GetResourceState = function(name) if name == 'w_ambulancejob' then return 'started' end return baseState(name) end
+GetResourceState = function(name) if name == 'w_medic' then return 'started' end return baseState(name) end
 '''
 
 
@@ -102,7 +102,7 @@ class DeadSwitchServerTests(CharsBase):
 
     def test_a_throwing_or_stopped_death_system_does_not_block(self):
         self.select_and_load(1, 'vorp:1')
-        self.rt.run("rawset(exports, 'w_ambulancejob', { IsDead = function() error('boom') end })"
+        self.rt.run("rawset(exports, 'w_medic', { IsDead = function() error('boom') end })"
                     "; GetResourceState = function() return 'started' end")
         self.assertTrue(self.call('scene:prepare', 1).ok)
 
@@ -113,7 +113,7 @@ class DeadSwitchClientTests(unittest.TestCase):
                                                'listResult({ card("1", "male") }, 3) }')
         rt.run('Peds[MyPed].visible = true; WCState.setCharacter("9", "male")')
         rt.run(DEATH_OWNER_STARTED)
-        rt.run("WCSpawn = { busy = function() return false end, DEATH_OWNER = { resource = 'w_ambulancejob', "
+        rt.run("WCSpawn = { busy = function() return false end, DEATH_OWNER = { resource = 'w_medic', "
                "revive = 'hospital:client:Revive', isDead = 'IsDead' } }; "
                "WCSpawnSelector = { active = function() return false end }")
         self.assertTrue(rt.eval('(WCSelector.canSwitch())'))
@@ -124,7 +124,7 @@ class DeadSwitchClientTests(unittest.TestCase):
         from harness import RESOURCE
         src = (RESOURCE / 'client' / 'spawn' / 'spawn.lua').read_text(encoding='utf-8')
         self.assertIn("isDead = 'IsDead'", src)
-        amb = RESOURCE.parent / 'w_ambulancejob' / 'client' / 'main.lua'
+        amb = RESOURCE.parent / 'w_medic' / 'client' / 'main.lua'
         if amb.exists():
             self.assertIn("exports('IsDead'", amb.read_text(encoding='utf-8'))
 

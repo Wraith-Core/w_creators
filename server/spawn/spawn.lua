@@ -68,7 +68,7 @@ end
 
 --- The death system (w_ambulancejob): its server IsDead(playerId) answers dead, last stand or in a
 --  hospital bed; InHospitalBed(playerId) the bed alone. Either export may be missing.
-Spawn.DEATH_OWNER = { resource = 'w_ambulancejob', exports = { 'IsDead', 'InHospitalBed' } }
+Spawn.DEATH_OWNER = { resource = 'w_medic', exports = { 'IsDead', 'InHospitalBed' } } -- w_ambulancejob before 2026-10-14
 
 --- Is the player down or in a hospital bed for the death system (only while it is started)? An
 --  in-world spawn selector or admin respawn then answers BUSY: the death system owns the player.

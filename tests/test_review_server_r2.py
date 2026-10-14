@@ -84,9 +84,9 @@ class SwitchSceneTests(Flow):
         self.assertTrue(self.call('characters:list', 1).ok)
         self.rt.run('''
             local base = GetResourceState
-            GetResourceState = function(n) if n == 'w_ambulancejob' then return 'started' end return base(n) end
+            GetResourceState = function(n) if n == 'w_medic' then return 'started' end return base(n) end
             exports = setmetatable({}, { __index = function(_, res) return setmetatable({}, { __index = function(_, name)
-                return function(self, id) return res == 'w_ambulancejob' and name == 'IsDead' and id == 1 end
+                return function(self, id) return res == 'w_medic' and name == 'IsDead' and id == 1 end
             end }) end })
         ''')
         self.later()

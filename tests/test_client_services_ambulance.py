@@ -1,4 +1,4 @@
-"""w_ambulancejob's cosmetic surgery entry (sibling resource, loaded here over small fakes of w_core and
+"""w_medic's cosmetic surgery entry (sibling resource, loaded here over small fakes of w_core and
 w_lib): the clinic ids match the w_creators surgery locations, the station prompt only asks its own
 server, and the server validates, rate-limits and calls exports.w_creators:OpenCosmeticSurgery
 (the one-use grant path), answering failures with its own dictionary key."""
@@ -8,7 +8,7 @@ import unittest
 
 from harness import RESOURCE, Runtime, read
 
-AMBULANCE = RESOURCE.parent / 'w_ambulancejob'
+AMBULANCE = RESOURCE.parent / 'w_medic'
 
 WCORE_STUBS = r'''
 SrvCallbacks, CommandsAdded, Usables = {}, {}, {}
@@ -74,14 +74,14 @@ end
 
 
 def ambulance_source(rel):
-    """A w_ambulancejob file as plain Lua 5.4: its CitizenFX backtick hashes (the weapon table of
+    """A w_medic file as plain Lua 5.4: its CitizenFX backtick hashes (the weapon table of
     config.lua) become GetHashKey calls, which the harness implements like the game."""
     return re.sub(r'`([^`]+)`', lambda m: 'GetHashKey("%s")' % m.group(1), read(AMBULANCE / rel))
 
 
 def load_ambulance(rt, *paths):
     for rel in paths:
-        rt.lua.execute(ambulance_source(rel), name='@w_ambulancejob/' + rel)
+        rt.lua.execute(ambulance_source(rel), name='@w_medic/' + rel)
 
 
 def ambulance_server():
@@ -275,7 +275,7 @@ class ClientTests(unittest.TestCase):
 
 
 class ResurrectedListenerTests(unittest.TestCase):
-    """w_ambulancejob clears its downed state when w_creators resurrects the player for another
+    """w_medic clears its downed state when w_creators resurrects the player for another
     reason (w_creators:client:resurrected), and ignores its own 'hospital' resurrects."""
 
     def setUp(self):

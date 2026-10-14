@@ -288,7 +288,7 @@ end
 -- The death system (mirrors the client WCSpawn.DEATH_OWNER): it keeps its own dead / last-stand
 -- state while the ped is alive (the hospital bed heal timer, a dead character logging in), so its
 -- answer counts as dead too. Its IsDead(src) export answers metadata isdead or inlaststand.
-Chars.DEATH_OWNER = { resource = 'w_ambulancejob', export = 'IsDead' }
+Chars.DEATH_OWNER = { resource = 'w_medic', export = 'IsDead' } -- w_ambulancejob before 2026-10-14
 
 local function deathOwnerSaysDead(src)
     local owner = Chars.DEATH_OWNER

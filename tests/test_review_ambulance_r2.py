@@ -9,7 +9,7 @@ respawn) belongs to the character in it.
   of it reaches the next character (no god mode, no suppressed respawn prompt).
 - The server tracks bed occupancy per player and frees it on LeaveBed, logout and drop.
 
-The real w_ambulancejob files are loaded over the harness stubs (see test_review_ambulance_r1).
+The real w_medic files are loaded over the harness stubs (see test_review_ambulance_r1).
 """
 import unittest
 
@@ -62,7 +62,7 @@ def client_runtime():
     rt.run(NATIVES)
     rt.run(CAPTURE)
     for rel in ('config.lua', 'client/main.lua', 'client/laststand.lua', 'client/dead.lua'):
-        rt.lua.execute(ambulance_source(rel), name='@w_ambulancejob/' + rel)
+        rt.lua.execute(ambulance_source(rel), name='@w_medic/' + rel)
     return rt
 
 
@@ -71,7 +71,7 @@ def server_runtime():
     rt.run(WCORE_STUBS)
     rt.run('Exported = {}; getmetatable(exports).__call = function(_, name, fn) Exported[name] = fn end')
     for rel in ('config.lua', 'server/main.lua'):
-        rt.lua.execute(ambulance_source(rel), name='@w_ambulancejob/' + rel)
+        rt.lua.execute(ambulance_source(rel), name='@w_medic/' + rel)
     rt.run('player(5); player(6)')
     return rt
 
@@ -194,7 +194,7 @@ class BedOccupancyServerTests(unittest.TestCase):
                  'return p and p.coords or vector3(0, 0, 0) end' % (src, src, src, src))
 
     def send_to_bed(self, src, bed):
-        # the server now refuses a check-in from away from the bed (w_ambulancejob atHospital):
+        # the server now refuses a check-in from away from the bed (w_medic atHospital):
         # stand the player at the bed first, as the real check-in does
         self.place(src, 'local b = Config.Locations["beds"][%d]; if b then local c = b.coords; '
                         'return vector3(c.x, c.y, c.z) end' % bed)
@@ -214,20 +214,24 @@ class BedOccupancyServerTests(unittest.TestCase):
         self.assertEqual(self.set_bed(), [(2, True), (2, False)])
 
     def test_respawn_at_hospital_counts(self):
-        self.run('fireEvent("hospital:server:RespawnAtHospital", 5, 4)')
+        # w_medic wakes a dead man at the nearest Config.RespawnPoints; only Valentine has beds
+        valentine = 'local c = Config.RespawnPoints[1].coords; return vector3(c.x, c.y, c.z)'
+        self.place(5, valentine)
+        self.place(6, valentine)
+        self.run('fireEvent("hospital:server:RespawnAtHospital", 5, 2)')
         self.assertTrue(self.eval('Exported.IsDead(5)'))
         self.run('fireEvent("hospital:server:RespawnAtHospital", 6, nil)')   # no bed near: bed 1
         self.assertTrue(self.eval('Exported.IsDead(6)'))
-        self.assertEqual(self.set_bed(), [(4, True), (1, True)])
+        self.assertEqual(self.set_bed(), [(2, True), (1, True)])
 
     def test_logout_and_drop_free_the_bed(self):
         self.send_to_bed(5, 2)
-        self.send_to_bed(6, 3)
+        self.send_to_bed(6, 1)
         self.run('fireEvent("WCore:Server:OnPlayerUnload", nil, 5)')
         self.run('fireEvent("playerDropped", 6)')
         self.assertFalse(self.eval('Exported.IsDead(5)'))
         self.assertFalse(self.eval('Exported.IsDead(6)'))
-        self.assertEqual(self.set_bed(), [(2, True), (3, True), (2, False), (3, False)])
+        self.assertEqual(self.set_bed(), [(2, True), (1, True), (2, False), (1, False)])
 
     def test_a_late_leave_bed_does_not_free_a_bed_someone_else_took(self):
         self.send_to_bed(5, 2)
@@ -250,12 +254,13 @@ class BedOccupancyServerTests(unittest.TestCase):
         self.assertEqual(self.set_bed(), [])
         self.assertFalse(self.eval('Exported.IsDead(5)'))
 
-    def test_moving_to_another_bed_frees_the_first(self):
+    def test_a_second_check_in_from_a_bed_is_refused(self):
+        # w_medic: a patient already in a bed is not checked in again (a second bill, a spam)
         self.send_to_bed(5, 2)
-        self.send_to_bed(5, 3)
-        self.assertEqual(self.set_bed(), [(2, True), (2, False), (3, True)])
-        self.run('fireEvent("hospital:server:LeaveBed", 5, 3)')
-        self.assertEqual(self.set_bed()[-1], (3, False))
+        self.send_to_bed(5, 1)
+        self.assertEqual(self.set_bed(), [(2, True)])
+        self.run('fireEvent("hospital:server:LeaveBed", 5, 2)')
+        self.assertEqual(self.set_bed()[-1], (2, False))
         self.assertFalse(self.eval('Exported.IsDead(5)'))
 
 

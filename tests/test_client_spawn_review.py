@@ -4,7 +4,7 @@ client/spawn/selector.lua, client/respawn/respawn.lua):
   - an admin respawn during a barber seat visit waits for the seat to put the player back first
     (the seat's own thread would otherwise undo the move); a flow that never ends aborts the
     respawn without moving the player; a flow still opening is aborted through WCServiceFlow;
-  - a respawn of a dead player revives through the death system when it runs (w_ambulancejob's
+  - a respawn of a dead player revives through the death system when it runs (w_medic's
     hospital:client:Revive, which clears its own dead state), with a fallback to WCRespawn when that
     revive does not start; a successful resurrect fires w_creators:client:resurrected;
   - an admin respawn during the first-spawn wagon ride stops the cutscene.
@@ -135,7 +135,7 @@ class DeathOwnerReviveTests(unittest.TestCase):
             AmbulanceDead = true
             Resurrected = {}
             AddEventHandler('w_creators:client:resurrected', function(reason) Resurrected[#Resurrected + 1] = reason end)
-            -- w_ambulancejob's revive: resurrects through the export only when it knows the player is down
+            -- w_medic's revive: resurrects through the export only when it knows the player is down
             AddEventHandler('hospital:client:Revive', function()
                 ReviveEvents = ReviveEvents + 1
                 if AmbulanceDead then
@@ -155,7 +155,7 @@ class DeathOwnerReviveTests(unittest.TestCase):
         spin(self.rt, ms, 100)
 
     def test_dead_player_is_revived_by_the_running_death_system(self):
-        self.rt.run("ResourceStates['w_ambulancejob'] = 'started'")
+        self.rt.run("ResourceStates['w_medic'] = 'started'")
         self.kill()
         self.respawn()
         self.assertEqual(self.rt.eval('ReviveEvents'), 1)
@@ -168,7 +168,7 @@ class DeathOwnerReviveTests(unittest.TestCase):
         self.assertEqual(self.rt.eval('WCRespawn.state()'), 'ALIVE')
 
     def test_a_revive_that_does_not_start_falls_back_to_the_service(self):
-        self.rt.run("ResourceStates['w_ambulancejob'] = 'started'; AmbulanceDead = false")
+        self.rt.run("ResourceStates['w_medic'] = 'started'; AmbulanceDead = false")
         self.kill()
         self.respawn()
         self.assertEqual(self.rt.eval('ReviveEvents'), 1)
@@ -187,13 +187,13 @@ class DeathOwnerReviveTests(unittest.TestCase):
 
     def test_death_kind_revives_a_living_player_through_the_death_system(self):
         # last stand is alive for the natives: kind 'death' still clears the death system's state
-        self.rt.run("ResourceStates['w_ambulancejob'] = 'started'")
+        self.rt.run("ResourceStates['w_medic'] = 'started'")
         self.respawn(kind='death', ms=2000)
         self.assertEqual(self.rt.eval('ReviveEvents'), 1)
         self.assertEqual(coords(self.rt)[:2], (5.0, 6.0))
 
     def test_admin_respawn_of_a_living_player_does_not_revive(self):
-        self.rt.run("ResourceStates['w_ambulancejob'] = 'started'")
+        self.rt.run("ResourceStates['w_medic'] = 'started'")
         self.respawn(ms=2000)
         self.assertEqual(self.rt.eval('ReviveEvents'), 0)
         self.assertEqual(count(self.rt, 'NetworkResurrectLocalPlayer'), 0)

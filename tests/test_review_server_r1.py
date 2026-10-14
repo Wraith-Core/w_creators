@@ -29,7 +29,7 @@ from test_server_core import server as core_server  # noqa: E402
 # The real CitizenFX export proxy: every member is function(self, ...) and the receiver is dropped.
 CFX_EXPORTS = r'''
 ambulanceDead = {}
-local real = { w_ambulancejob = { IsDead = function(playerId) return ambulanceDead[playerId or 0] == true end } }
+local real = { w_medic = { IsDead = function(playerId) return ambulanceDead[playerId or 0] == true end } }
 exports = setmetatable({}, { __index = function(_, resource)
     return setmetatable({}, { __index = function(_, name)
         local fn = real[resource] and real[resource][name]
@@ -37,7 +37,7 @@ exports = setmetatable({}, { __index = function(_, resource)
     end })
 end })
 local baseState = GetResourceState
-GetResourceState = function(name) if name == 'w_ambulancejob' then return 'started' end return baseState(name) end
+GetResourceState = function(name) if name == 'w_medic' then return 'started' end return baseState(name) end
 '''
 
 
@@ -236,7 +236,7 @@ class DeathOwnerProxyTests(Flow):
         self.activate()
         self.rt.run(CFX_EXPORTS)
         self.rt.run('ambulanceDead[1] = true')           # last stand / heal timer: the ped is alive
-        self.assertTrue(self.e('exports.w_ambulancejob:IsDead(1)'))
+        self.assertTrue(self.e('exports.w_medic:IsDead(1)'))
         self.later()
         self.assertEqual(self.call('scene:prepare', 1).code, 'BUSY')
         self.assertEqual(self.e('WCCharacters.active(1).charid'), 'vorp:1')

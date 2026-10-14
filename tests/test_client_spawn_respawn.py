@@ -246,13 +246,13 @@ class DeathClosesEditorsTests(unittest.TestCase):
 
 
 class AmbulanceRoutingTests(unittest.TestCase):
-    """w_ambulancejob/client/main.lua routes its resurrects through exports.w_creators:Resurrect."""
+    """w_medic/client/main.lua routes its resurrects through exports.w_creators:Resurrect."""
 
     def source(self):
         from harness import RESOURCE, read
-        path = RESOURCE.parent / 'w_ambulancejob' / 'client' / 'main.lua'
+        path = RESOURCE.parent / 'w_medic' / 'client' / 'main.lua'
         if not path.exists():
-            self.skipTest('w_ambulancejob not checked out')
+            self.skipTest('w_medic not checked out')
         return read(path)
 
     def helper(self, started, export_fails=False):
@@ -272,6 +272,7 @@ class AmbulanceRoutingTests(unittest.TestCase):
             function GetGameTimer() return 0 end
             function GetResourceState(name) return STATE end
             function NetworkResurrectLocalPlayer(x, y, z, h, a, b) Calls[#Calls + 1] = { 'native', x, y, z, h } end
+            function reloadAppearance() end -- w_medic re-applies the look after the plain native
             exports = { w_creators = setmetatable({}, { __index = function(_, name)
                 if FAIL then error('No such export') end
                 return function(self, pos, heading, reason) Calls[#Calls + 1] = { name, pos.x, heading, reason } return true end

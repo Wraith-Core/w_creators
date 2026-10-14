@@ -29,7 +29,7 @@ class BuildTests(LocationsTestCase):
     def test_default_config_builds_every_prompted_location(self):
         self.assertEqual(self.eval('#WCServicePoints.points()'), 14)
         self.assertEqual(self.eval('#liveWalkups()'), 14)
-        # surgery clinics have prompt = false (w_ambulancejob provides the interaction) and no blip
+        # surgery clinics have prompt = false (w_medic provides the interaction) and no blip
         for loc in ('valentine_surgery', 'saintdenis_surgery', 'armadillo_surgery'):
             self.assertIsNone(self.point(loc))
 

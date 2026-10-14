@@ -1,4 +1,4 @@
-"""Review round 1, area "ambulance": w_ambulancejob's integration hooks, loaded for real
+"""Review round 1, area "ambulance": w_medic's integration hooks, loaded for real
 (config.lua, client/main.lua, client/laststand.lua, client/dead.lua, client/job.lua) over the
 harness stubs plus a catch-all for the game natives.
 
@@ -102,7 +102,7 @@ def ambulance_runtime():
     rt.run(WCORE_STUBS)
     rt.run(NATIVES)
     for rel in ('config.lua', 'client/main.lua', 'client/laststand.lua', 'client/dead.lua'):
-        rt.lua.execute(ambulance_source(rel), name='@w_ambulancejob/' + rel)
+        rt.lua.execute(ambulance_source(rel), name='@w_medic/' + rel)
     return rt
 
 
@@ -219,7 +219,8 @@ class ReviveKeepsThePromptOffTests(unittest.TestCase):
         self.assertEqual(self.eval('RespawnRequests'), 0)
 
     def test_the_last_stand_does_not_bleed_out_during_a_revive(self):
-        self.run('LaststandTime = 3; PedDead = true')
+        # w_medic starts the countdown full (Laststand.ReviveInterval), so the test shortens that
+        self.run('Laststand.ReviveInterval = 3; PedDead = true')
         self.run('CreateThread(function() SetLaststand(true) end)')
         advance(self.rt, 1000)                         # SetLaststand's own 1 s wait
         self.assertTrue(self.eval('InLaststand'))
@@ -253,7 +254,7 @@ class SurgeryPromptAvailabilityTests(unittest.TestCase):
         rt.run(WCORE_STUBS)
         rt.run(CLIENT_STUBS)
         for rel in ('config.lua', 'client/job.lua'):
-            rt.lua.execute(ambulance_source(rel), name='@w_ambulancejob/' + rel)
+            rt.lua.execute(ambulance_source(rel), name='@w_medic/' + rel)
         rt.run('Label = locale("prompt.cosmetic_surgery"); createAmbuPrompts()')
 
     def can(self, clinic_id):

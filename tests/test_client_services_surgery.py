@@ -57,7 +57,7 @@ class OpenPathTests(SurgeryTestCase):
         self.assert_left()
 
     def test_the_grant_event_refused_by_another_flow_tells_the_player(self):
-        # w_ambulancejob saw the export succeed: the client refusal is the only feedback
+        # w_medic saw the export succeed: the client refusal is the only feedback
         for lock in ('clothingAction', 'respawn'):
             self.run('Notes = {}; WCState.busy(%r, true)' % lock)
             self.run('fireEvent("w_creators:client:openSurgery", nil, %r)' % CLINIC)

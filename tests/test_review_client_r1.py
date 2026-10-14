@@ -95,7 +95,7 @@ class RestartRefusalTests(unittest.TestCase):
 
 
 class ResurrectLivingPlayerTests(unittest.TestCase):
-    """respawn.lua: Resurrect is idempotent for a living player (w_ambulancejob's AI heal in bed)."""
+    """respawn.lua: Resurrect is idempotent for a living player (w_medic's AI heal in bed)."""
 
     def setUp(self):
         from test_client_spawn_support import make_spawn_client
