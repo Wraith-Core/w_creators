@@ -17,6 +17,8 @@
 
 ## الخياط والخزانة والحلاق
 
+مفتاح التفاعل عند المتاجر والخزائن والحلاق والعيادة صار J بدل E (لأن E يمسك اللاعب القريب).
+
 نفس محرر React والكاميرا في كل الأوضاع. تظهر برومبتات `w_lib` عند الأماكن المحددة في `config/locations.lua`، وتستخدم البلبات جسر المكتبة للخريطة.
 
 الواجهة تتبع ثيم الهود والحقيبة والكرافتنج: أبيض وأسود، إطارات `crafting_highlight` وتكسشرات الأزرار والفواصل الأصلية، وصور الملابس ومنتجات الشعر من الحقيبة. الأصول محلية داخل `web/public/tex/ui` وتُضمّن في البناء؛ لا يحتاج المحرر إلى تشغيل الحقيبة أو الكرافتنج لعرضها. الحفظ والكاميرا وبطاقة اختيار الشخصية تستخدم نفس التصميم، واللغة من `w_lib`.
@@ -149,7 +151,7 @@ files and the database. No price or coordinate is ever read from the client.
 
 | Command / key | Where | Condition |
 |---|---|---|
-| `Config.Keys.interact` (`E`) | service locations | location `prompt = true` |
+| `Config.Keys.interact` (`J`) | service locations | location `prompt = true` |
 | `Config.Characters.selection.keys` (`RETURN`, `DELETE` held `deletion.holdTime` ms, `LEFT`, `RIGHT`) | selection screen | — |
 | `Config.Characters.genderPrompt` (`LEFT` = the man, `RIGHT` = the woman: opens the editor at once; `BACK`) | creator gender scene | the editor's root Back ("change the sex") returns to it and keeps both drafts |
 | `Config.Spawn.selector.keys` (`RETURN`, `LEFT`, `RIGHT`; `cancel`, default `BACK`) | spawn selector | `cancel` only for an in-world selector (kinds `admin` / `death`) |

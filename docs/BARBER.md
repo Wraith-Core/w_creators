@@ -143,7 +143,7 @@ Optional per-location fields: `enabled = false` (hidden, server answers `LOCATIO
 `preview`: the visit happens where the player stands. With a `preview`, `WCServiceSeat` fades out,
 moves the player to the chair, and puts him back when the visit ends (requires live verification).
 
-The prompt key is `Config.Keys.interact` (`'E'`). The server must see the player within
+The prompt key is `Config.Keys.interact` (`'J'`). The server must see the player within
 `interactionRadius + 3` m of `coords` (or of `preview`) at open **and** at commit (`TOO_FAR`).
 Global switch: `Config.Services.barbers = false` removes prompts/blips and every barber callback
 answers `BARBER_DISABLED`. Another resource can open a barber with the server export
@@ -152,7 +152,7 @@ answers `BARBER_DISABLED`. Another resource can open a barber with the server ex
 ## 5. Transaction flow
 
 ```
-prompt (E) ─► WCBarber.open(locationId) ─► WCServiceFlow
+prompt (J) ─► WCBarber.open(locationId) ─► WCServiceFlow
   ─► callback w_creators:barber:open(locationId)
        WCSessions.open: service on, active character, no other session, location type/enabled/hours,
        distance, no appearance lock ─► snapshot of the saved appearance, token (session TTL 30 min)

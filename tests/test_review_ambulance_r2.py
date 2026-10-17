@@ -96,7 +96,7 @@ class BedGatesTheSwitchClientTests(unittest.TestCase):
         advance(self.rt, self.heal_ms + 1000)          # the AI heal: may leave now, still in bed
         self.assertTrue(self.eval('Exported.IsDead()'))
         self.assertTrue(self.eval('bedPromptShown()'))
-        self.run('for _, g in ipairs(shownGroups()) do fireEvent("w_lib:promptCompleted", nil, g.id, "E") end')
+        self.run('for _, g in ipairs(shownGroups()) do fireEvent("w_lib:promptCompleted", nil, g.id, "J") end')
         advance(self.rt, 5000)
         self.assertFalse(self.eval('isInHospitalBed'))
         self.assertFalse(self.eval('Exported.IsDead()'))
@@ -133,8 +133,8 @@ class BedGatesTheSwitchClientTests(unittest.TestCase):
         self.run('isDead = true; deathTime = 0; PedDead = true')
         advance(self.rt, 1000)
         self.assertFalse(self.eval('bedPromptShown()'))
-        self.assertTrue(self.eval('deathGroup().shown and deathGroup().enabled.E'))
-        self.run('fireEvent("w_lib:promptCompleted", nil, deathGroup().id, "E")')
+        self.assertTrue(self.eval('deathGroup().shown and deathGroup().enabled.J'))
+        self.run('fireEvent("w_lib:promptCompleted", nil, deathGroup().id, "J")')
         self.assertEqual(self.eval('RespawnRequests'), 1)
 
     def test_a_selection_camera_is_left_alone(self):
@@ -148,7 +148,7 @@ class BedGatesTheSwitchClientTests(unittest.TestCase):
     def test_logout_during_the_get_up_does_not_free_the_bed_twice(self):
         self.check_in()
         advance(self.rt, self.heal_ms + 1000)
-        self.run('for _, g in ipairs(shownGroups()) do fireEvent("w_lib:promptCompleted", nil, g.id, "E") end')
+        self.run('for _, g in ipairs(shownGroups()) do fireEvent("w_lib:promptCompleted", nil, g.id, "J") end')
         advance(self.rt, 1000)                         # in the 4 s get-up animation
         self.run('spawnEvent("WCore:Client:OnPlayerUnload")')
         advance(self.rt, 5000)

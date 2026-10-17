@@ -139,7 +139,7 @@ file holds shared stubs for one group and contains no tests of its own.
 
 Procedure for each category below, for male and female where offered:
 
-1. At a clothing store (e.g. `valentine_clothing`), press `E`.
+1. At a clothing store (e.g. `valentine_clothing`), press `J`.
 2. Choose the category. Browse at least the first, a middle and the last model, and two variants.
 3. Tint it where the category has palettes. Buy it, then reconnect.
 
@@ -223,7 +223,7 @@ Expected:
 
 | # | Steps | Expected | Status |
 |---|---|---|---|
-| L5.1 | At `valentine_barber`, `E`. Male: change the hair, then the beard, then the eyebrows. | Editor sections `hair`, `facialHair` and `eyebrows` (makeup only if `services.details.makeup`). The camera frames the hair. | NOT EXECUTED — requires a live RedM server |
+| L5.1 | At `valentine_barber`, `J`. Male: change the hair, then the beard, then the eyebrows. | Editor sections `hair`, `facialHair` and `eyebrows` (makeup only if `services.details.makeup`). The camera frames the hair. | NOT EXECUTED — requires a live RedM server |
 | L5.2 | Confirm a visit that changes hair and beard with the default prices. | Charged 10 (`hair` 10 + `facialHair` 10, capped by `prices.visitCap = 10`). Look saved. | NOT EXECUTED — requires a live RedM server |
 | L5.3 | Cancel a visit. | Previous hair and beard restored. Nothing charged. | NOT EXECUTED — requires a live RedM server |
 | L5.4 | Female character. | No facialHair section. The hair styles are the female list. | NOT EXECUTED — requires a live RedM server |

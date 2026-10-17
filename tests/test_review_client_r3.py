@@ -538,7 +538,7 @@ class ClosedLocationTests(unittest.TestCase):
 
     def test_the_prompt_stays_disabled_with_a_closed_title(self):
         self.assertTrue(self.e('P.prompt.opts.canInteract()'))
-        self.assertFalse(self.e('P.prompt.enabled.E'))
+        self.assertFalse(self.e('P.prompt.enabled.J'))
         self.assertEqual(self.e('P.prompt.title'), 'متجر الملابس · فالنتاين · مغلق · يفتح الساعة 06:00')
         # the action itself still refuses
         self.run('Opened = {}; WCStore.open = function(id) Opened[#Opened + 1] = id end; P.prompt.opts.prompts[1].onComplete()')
@@ -546,7 +546,7 @@ class ClosedLocationTests(unittest.TestCase):
 
     def test_it_opens_again_with_the_hour(self):
         self.run('GlobalState[WCServicePoints.HOUR_KEY] = 8; P.prompt.opts.canInteract()')
-        self.assertTrue(self.e('P.prompt.enabled.E'))
+        self.assertTrue(self.e('P.prompt.enabled.J'))
         self.assertEqual(self.e('P.prompt.title'), 'متجر الملابس · فالنتاين')
 
     def test_the_closed_title_is_translated(self):

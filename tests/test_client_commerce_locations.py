@@ -38,7 +38,7 @@ class BuildTests(LocationsTestCase):
         self.assertIsNotNone(p)
         self.run('O = P.prompt.opts')
         self.assertEqual(self.eval('O.distance'), 2.0)
-        self.assertEqual(self.eval('O.prompts[1].key'), 'E')
+        self.assertEqual(self.eval('O.prompts[1].key'), 'J')
         self.assertEqual(self.eval('O.prompts[1].label'), 'فتح')
         self.assertEqual(self.eval('O.prompts[1].hold'), False)
         self.assertEqual(self.eval('O.title'), 'متجر الملابس · فالنتاين')
@@ -166,7 +166,7 @@ class HoursTests(LocationsTestCase):
 
     def open_now(self):
         """The prompt shows (no flow blocks it) and its action is enabled."""
-        return self.eval('P.prompt.opts.canInteract() and P.prompt.enabled.E ~= false and WCServicePoints.canInteract(P.loc)')
+        return self.eval('P.prompt.opts.canInteract() and P.prompt.enabled.J ~= false and WCServicePoints.canInteract(P.loc)')
 
     def test_the_prompt_follows_the_hour_the_server_publishes(self):
         self.rebuild(self.HOURS + 'GlobalState = { [WCServicePoints.HOUR_KEY] = 3 }')
@@ -174,7 +174,7 @@ class HoursTests(LocationsTestCase):
         self.assertIsNotNone(self.eval('P.prompt'))  # built while closed: shown, action disabled
         self.assertFalse(self.open_now())
         self.assertTrue(self.eval('P.prompt.opts.canInteract()'))
-        self.assertFalse(self.eval('P.prompt.enabled.E'))
+        self.assertFalse(self.eval('P.prompt.enabled.J'))
         self.run('GlobalState[WCServicePoints.HOUR_KEY] = 10')
         self.assertTrue(self.open_now())
         self.run('GlobalState[WCServicePoints.HOUR_KEY] = 23')
@@ -228,7 +228,7 @@ class LifecycleTests(LocationsTestCase):
         self.run('fireEvent("w_lib:setLocale", nil, "en")')
         self.point('valentine_clothing')
         self.assertEqual(self.eval('P.prompt.title'), 'EN:متجر الملابس · EN:فالنتاين')
-        self.assertEqual(self.eval('P.prompt.labels.E'), 'EN:فتح')
+        self.assertEqual(self.eval('P.prompt.labels.J'), 'EN:فتح')
         self.assertEqual(self.eval('BlipsMade[1].name'), 'EN:متجر الملابس')
 
     def test_resource_stop_removes_everything(self):

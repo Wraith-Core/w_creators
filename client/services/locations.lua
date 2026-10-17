@@ -710,7 +710,7 @@ local points = {}   -- { loc, prompt, blip, npc }
 
 local function interactKey()
     local key = Config.Keys and Config.Keys.interact
-    return (type(key) == 'string' and key ~= '') and key or 'E'
+    return (type(key) == 'string' and key ~= '') and key or 'J'
 end
 
 local function labelOf(loc)

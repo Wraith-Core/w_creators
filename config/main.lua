@@ -287,7 +287,7 @@ Config.Experimental = {
 --  Keys shared by the service prompts
 -- ---------------------------------------------------------------------
 Config.Keys = {
-    interact = 'E', -- opens a shop / barber / wardrobe
+    interact = 'J', -- opens a shop / barber / wardrobe (not E: E grabs the player next to you)
     -- The default key of the clothing actions keybind (wc_clothing_actions; players can rebind it in
     -- the game settings). A key name such as 'K'; nil = unbound (the /clothing command still works).
     clothingActions = nil,

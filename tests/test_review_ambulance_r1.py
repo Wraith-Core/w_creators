@@ -207,12 +207,12 @@ class ReviveKeepsThePromptOffTests(unittest.TestCase):
     def test_the_respawn_key_is_off_and_ignored_during_a_revive(self):
         self.run('isDead = true; deathTime = 0; PedDead = true')
         advance(self.rt, 1000)
-        self.assertTrue(self.eval('deathGroup().enabled.E'))
+        self.assertTrue(self.eval('deathGroup().enabled.J'))
         self.run('spawnEvent("hospital:client:Revive")')
         advance(self.rt, 500)
         self.assertTrue(self.eval('isDead'))           # still resurrecting
-        self.assertFalse(self.eval('deathGroup().enabled.E'))
-        self.run('fireEvent("w_lib:promptCompleted", nil, deathGroup().id, "E")')
+        self.assertFalse(self.eval('deathGroup().enabled.J'))
+        self.run('fireEvent("w_lib:promptCompleted", nil, deathGroup().id, "J")')
         self.assertEqual(self.eval('RespawnRequests'), 0)
         advance(self.rt, 3000)
         self.assertFalse(self.eval('isDead'))
@@ -238,12 +238,12 @@ class ReviveKeepsThePromptOffTests(unittest.TestCase):
     def test_the_key_comes_back_when_the_revive_ends(self):
         self.run('isDead = true; deathTime = 0; PedDead = true')
         advance(self.rt, 1000)
-        self.assertTrue(self.eval('deathGroup().enabled.E'))
+        self.assertTrue(self.eval('deathGroup().enabled.J'))
         self.run('CreateThread(function() isReviving = true; Wait(600); isReviving = false end)')
         advance(self.rt, 300)
-        self.assertFalse(self.eval('deathGroup().enabled.E'))
+        self.assertFalse(self.eval('deathGroup().enabled.J'))
         advance(self.rt, 600)
-        self.assertTrue(self.eval('deathGroup().enabled.E'))
+        self.assertTrue(self.eval('deathGroup().enabled.J'))
 
 
 class SurgeryPromptAvailabilityTests(unittest.TestCase):
