@@ -306,9 +306,20 @@ class AppearanceFieldTests(unittest.TestCase):
         self.run('a = AppearanceSchema.default("female"); a.voice = 3; b = AppearanceSchema.fromLegacy(AppearanceSchema.toLegacy(a))')
         self.assertEqual(self.e('b.voice'), 3)
 
-    def test_services_keep_the_saved_voice(self):
+    def test_the_surgeon_changes_the_voice_and_others_keep_it(self):
         self.run('a = AppearanceSchema.default("male"); a.voice = 2; c = WCUtil.copy(a); c.voice = 3')
-        self.assertEqual(self.e('AppearanceSchema.mergeSections(a, c, { "body" }).voice'), 2)
+        self.assertEqual(self.e('AppearanceSchema.mergeSections(a, c, { "body" }).voice'), 3)   # surgery: body
+        self.assertEqual(self.e('AppearanceSchema.mergeSections(a, c, { "hair" }).voice'), 2)   # barber
+        self.run('d = WCUtil.copy(a); d.voice = nil')                                             # SetSkin, no voice
+        self.assertEqual(self.e('AppearanceSchema.mergeSections(a, d, { "body" }).voice'), 2)
+        self.assertTrue(self.e('AppearanceSchema.changedSections(a, c).body'))
+        self.assertIsNone(self.e('AppearanceSchema.changedSections(a, WCUtil.copy(a)).body'))
+
+    def test_speaking_voice_follows_the_sex_and_tone(self):
+        self.assertEqual(self.e('AppearanceSchema.speechVoice("female", nil)'), '0537_A_F_M_CIV_WHITE_06')
+        self.assertEqual(self.e('AppearanceSchema.speechVoice("female", 2)'), '0859_A_F_M_CIV_POOR_WHITE_AGGRESSIVE_01')
+        self.assertEqual(self.e('AppearanceSchema.speechVoice("male", 3)'), '0294_A_M_M_NBXUPPERCLASS_01_WHITE_02')
+        self.assertEqual(self.e('AppearanceSchema.speechVoice("male", 7)'), '0583_A_M_M_CIV_WHITE_07')
 
     def test_eyebrow_styles_keep_their_texture_set(self):
         # style 1 is mp_u_faov_eyebrow_m_012 on either sex; style 6 is the f set's 004

@@ -21,6 +21,7 @@ shared_scripts {
     'config/wardrobe.lua',
     'config/spawn.lua',
     'config/outfits.lua',
+    'config/voice.lua',
     -- shared modules
     'shared/util.lua',
     'shared/result.lua',
@@ -54,6 +55,8 @@ client_scripts {
     'client/appearance/pipeline.lua',
     'client/appearance/overlays.lua',
     'client/appearance/sync.lua',
+    -- the speaking voice: greet / antagonize
+    'client/voice/speak.lua',
     -- camera
     'client/camera/camera.lua',
     -- scene
@@ -95,6 +98,7 @@ server_scripts {
     -- appearance
     'server/appearance/repository.lua',
     'server/appearance/sync.lua',
+    'server/voice/speak.lua',
     -- characters
     'server/characters/characters.lua',
     -- scene

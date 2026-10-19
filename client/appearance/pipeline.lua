@@ -527,6 +527,8 @@ end
 --- this client, so it runs wherever a look is drawn: the player, the preview peds and other players' peds.
 function A.ApplyVoice(ped, app)
     if type(app) ~= 'table' then return false end
+    -- the speaking voice too: mp_male / mp_female have none, so the game spoke for every character as JOHN
+    WCNative.ped.setSpeechVoice(ped, AppearanceSchema.speechVoice(app.sex, app.voice))
     return WCNative.ped.setVoice(ped, AppearanceSchema.vofxName(app.sex, app.voice))
 end
 

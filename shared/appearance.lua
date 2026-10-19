@@ -43,10 +43,23 @@ S.BODY_BUILDS = { -1241887289, 61606861, -369348190, -20262001, 32611963 }
 -- `voice` (1..VOICE_TONES) picks the tone; the male or female set follows `sex`, so they never disagree.
 -- No `voice` = tone 1 of the character's sex (a woman made before this sounds like a woman now).
 S.VOICE_TONES = 3
-function S.vofxName(sex, voice)
+local function voiceTone(voice)
     local tone = tonumber(voice)
-    if not tone or tone < 1 or tone > S.VOICE_TONES or tone ~= math.floor(tone) then tone = 1 end
-    return ('VOFX_PLAYER_%s%02d'):format(sex == 'female' and 'FEMALE' or 'MALE', tone)
+    if not tone or tone < 1 or tone > S.VOICE_TONES or tone ~= math.floor(tone) then return 1 end
+    return tone
+end
+function S.vofxName(sex, voice)
+    return ('VOFX_PLAYER_%s%02d'):format(sex == 'female' and 'FEMALE' or 'MALE', voiceTone(voice))
+end
+-- The SPEAKING voice: mp_male / mp_female have no voice group of their own (metapeds.ymt), so the game speaks
+-- for them in JOHN's voice. These are game voices that carry the greet / insult lines (femga audio_banks,
+-- aaron1a12/wild line coverage); tone 1 normal, 2 rough, 3 refined.
+S.SPEECH_VOICES = {
+    female = { '0537_A_F_M_CIV_WHITE_06', '0859_A_F_M_CIV_POOR_WHITE_AGGRESSIVE_01', '0056_A_F_M_BLWUPPERCLASS_01_WHITE_01' },
+    male = { '0583_A_M_M_CIV_WHITE_07', '0657_A_M_M_CIV_POOR_WHITE_AGGRESSIVE_18', '0294_A_M_M_NBXUPPERCLASS_01_WHITE_02' },
+}
+function S.speechVoice(sex, voice)
+    return S.SPEECH_VOICES[sex == 'female' and 'female' or 'male'][voiceTone(voice)]
 end
 
 --- The palette of a custom eye tint (head.eyesTint) and the highest tint index it takes.
@@ -651,7 +664,7 @@ end
 local function project(app, section)
     if section == 'body' then
         return { modelOf(app.sex, 'BODIES_UPPER', app.body.upper), modelOf(app.sex, 'BODIES_LOWER', app.body.lower),
-                 app.body.height, app.body.weight, morphOf(app, 'body'), app.body.build or 0 }
+                 app.body.height, app.body.weight, morphOf(app, 'body'), app.body.build or 0, app.voice or 1 }
     elseif section == 'face' then
         return { modelOf(app.sex, 'heads', app.head.head), app.head.teeth, morphOf(app, 'face') }
     elseif section == 'skin' then
@@ -721,6 +734,9 @@ function S.mergeSections(saved, submitted, allowed, opts)
     if allowed.body then
         out.body = WCUtil.copy(sub.body)
         takeMorph('body')
+        -- the voice belongs to the body (the surgeon may change it); a submission without one (SetSkin, a
+        -- repair) keeps the saved voice
+        if sub.voice ~= nil then out.voice = sub.voice end
     end
     if allowed.face then
         out.head.head = sub.head.head

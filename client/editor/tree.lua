@@ -84,7 +84,7 @@ local K = {
     reviewHint = 'راجع اختياراتك ثم اضغط إنهاء الشخصية.', surgeryHint = 'راجع التعديلات ثم أكّد العملية.',
     owned = 'مملوكة', equipped = 'مرتداة',
     build = 'بنية الجسم', buildDefault = 'البنية الافتراضية',
-    voice = 'الصوت', voiceTones = { 'النبرة الأولى', 'النبرة الثانية', 'النبرة الثالثة' },
+    voice = 'الصوت', voiceTones = { 'صوت عادي', 'صوت خشن', 'صوت راقٍ' },
     voicePlay = 'استمع إلى الصوت',
     builds = { 'بنية نحيلة', 'بنية رياضية', 'بنية متوسطة', 'بنية ممتلئة', 'بنية ضخمة' },
     color2 = 'اللون الثاني', color3 = 'اللون الثالث',
@@ -353,8 +353,13 @@ local function voicePlay(reg, s)
     return action(reg, 'body.voice.play', L(K.voicePlay), {
         call = function(session)
             local look = session.working or {}
-            WCNative.ped.setVoice(session.ped, AppearanceSchema.vofxName(look.sex, look.voice))
-            WCNative.ped.playPain(session.ped, 9)
+            Appearance.ApplyVoice(session.ped, look)
+            -- a greeting in the chosen speaking voice; a voice that lacks it falls back to a pain sound
+            local voice = AppearanceSchema.speechVoice(look.sex, look.voice)
+            if not WCNative.ped.speak(session.ped, 'GREET_GENERAL_STRANGER', voice)
+                and not WCNative.ped.speak(session.ped, 'HOWS_IT_GOING', voice) then
+                WCNative.ped.playPain(session.ped, 9)
+            end
             return WCResult.ok()
         end,
     })
@@ -743,9 +748,10 @@ local function extraControls(reg, s, extra)
     if sec.body then
         if extra == 'body.type' then return { bodyType(reg, s) } end
         if extra == 'body.shape' then return { bodyShape(reg, s) } end
-        -- only while creating: the barber / surgeon / wardrobe keep the saved voice (mergeSections)
+        -- while creating, and at the surgeon (the body section takes the voice: mergeSections); the barber,
+        -- wardrobe and store keep the saved one
         if extra == 'body.voice' then
-            if s.mode ~= 'creator' then return {} end
+            if s.mode ~= 'creator' and s.mode ~= 'surgery' then return {} end
             return { voiceChoice(reg, s), voicePlay(reg, s) }
         end
         if extra == 'body.height' then

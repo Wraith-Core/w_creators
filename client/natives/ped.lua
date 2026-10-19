@@ -140,3 +140,70 @@ function WCNative.ped.playPain(ped, painId)
     local ok = H.invoke(0xBC9AE166038A5CEC, ped, math.max(0, math.min(12, id)), 1.0, false, false)
     return ok
 end
+
+--- SET_AMBIENT_VOICE_NAME (SetAmbientVoiceName)
+-- hash: 0x6C8065A3B780185B · confidence: Likely (aaron1a12/wild sets it on mp_male / mp_female, which have no voice
+--   group of their own in metapeds.ymt: without it the game speaks for them in JOHN's voice)
+-- params: ped (entity), name (string: a full voice bank name, AppearanceSchema.speechVoice)
+-- returns: nothing · limitations: local to this client (the appearance render sets it on every ped it draws);
+--   a new ped (SetPlayerModel) resets it; the game's own player-only lines (antagonize) are not in these banks
+-- tested models: mp_male, mp_female (in-game check pending) · MP safe: yes · OneSync tested here: no
+function WCNative.ped.setSpeechVoice(ped, name)
+    if not H.ped(ped) then return H.fail('setSpeechVoice', 'invalid ped %s', tostring(ped)) or false end
+    if type(name) ~= 'string' or name == '' then return H.fail('setSpeechVoice', 'invalid voice %s', tostring(name)) or false end
+    local ok = H.invoke(0x6C8065A3B780185B, ped, name)
+    return ok
+end
+
+--- PLAY_PED_AMBIENT_SPEECH_NATIVE (PlayPedAmbientSpeechNative)
+-- hash: 0x8E04FEDD28D42462 · confidence: Verified (w_store client/speech.lua: the same 0x40 params struct, the line
+--   and the voice as var-string pointers)
+-- params: ped (entity), line (string), voice (string | nil = the ped's own), paramsName (string, default
+--   SPEECH_PARAMS_FORCE)
+-- returns: true when the line started · limitations: played locally (syncOverNetwork 0): every client plays it on
+--   the speaker's ped itself (server/voice/speak.lua relays); a voice that lacks the line returns false
+-- tested models: mp_male, mp_female, ambient peds (in-game check pending) · MP safe: yes · OneSync tested here: no
+function WCNative.ped.speak(ped, line, voice, paramsName)
+    if not H.ped(ped) then return H.fail('speak', 'invalid ped %s', tostring(ped)) or false end
+    if type(DataView) ~= 'table' or type(DataView.ArrayBuffer) ~= 'function' then return false end
+    local linePtr = tonumber(WCNative.ui.varString(line))
+    if not linePtr or linePtr == 0 then return false end
+    local voicePtr = 0
+    if voice then
+        voicePtr = tonumber(WCNative.ui.varString(voice))
+        if not voicePtr or voicePtr == 0 then return false end
+    end
+    local p = DataView.ArrayBuffer(0x40)
+    p:SetInt64(0, linePtr)                                      -- const char* speechName
+    p:SetInt64(8, voicePtr)                                     -- const char* voiceName (0 = the ped's own)
+    p:SetInt32(16, 0)                                           -- variation (0 = any)
+    p:SetInt32(24, GetHashKey(paramsName or 'SPEECH_PARAMS_FORCE'))
+    p:SetInt32(32, 0)                                           -- listener ped
+    p:SetInt32(40, 0)                                           -- syncOverNetwork: every client plays it itself
+    p:SetInt32(48, 1)
+    p:SetInt32(56, 1)
+    local ok, started = H.invoke(0x8E04FEDD28D42462, ped, p:Buffer(), Citizen.ResultAsInteger())
+    return ok ~= false and started ~= nil and started ~= 0 and started ~= false
+end
+
+--- _SET_PLAYER_GREET_DISABLED_FOR_PED (SetPlayerGreetDisabledForPed)
+-- hash: 0x19173C3F15367B54 · confidence: Likely (rdr3 native db; the game's own player greet uses JOHN's lines)
+-- params: ped (entity: the focused target), player (PlayerId()), duration (int ms)
+-- returns: nothing · limitations: called each frame while a target is focused; our own greet prompt replaces it
+-- tested models: ambient peds (in-game check pending) · MP safe: yes · OneSync tested here: no
+function WCNative.ped.muteGreet(ped, duration)
+    if not H.ped(ped) then return false end
+    local ok = H.invoke(0x19173C3F15367B54, ped, PlayerId(), math.tointeger(tonumber(duration) or 500) or 500)
+    return ok
+end
+
+--- _SET_PLAYER_ANTAGONIZE_DISABLED_FOR_PED (SetPlayerAntagonizeDisabledForPed)
+-- hash: 0x5708EDD71B50C008 · confidence: Likely (rdr3 native db; the game's antagonize lines are player-only)
+-- params: ped (entity: the focused target), player (PlayerId()), duration (int ms)
+-- returns: nothing · limitations: called each frame while a target is focused; our own antagonize prompt replaces it
+-- tested models: ambient peds (in-game check pending) · MP safe: yes · OneSync tested here: no
+function WCNative.ped.muteAntagonize(ped, duration)
+    if not H.ped(ped) then return false end
+    local ok = H.invoke(0x5708EDD71B50C008, ped, PlayerId(), math.tointeger(tonumber(duration) or 500) or 500)
+    return ok
+end

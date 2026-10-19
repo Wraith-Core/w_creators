@@ -99,6 +99,8 @@ function GetGamePool() local out = {} for h in pairs(Peds) do out[#out + 1] = h 
 local triggerEvent = TriggerEvent
 function TriggerEvent(name, ...) rec('TriggerEvent:' .. name, ...) triggerEvent(name, ...) end
 function TriggerServerEvent(name, ...) rec('TriggerServerEvent:' .. name, ...) end
+-- client/voice/speak.lua polls the focus every frame: never focused here, and never logged
+function IsPlayerFreeFocusing() return false end
 function SetPedScale(ped, value)
     assert(math.type(value) == 'float', 'native scale requires float')
     rec('SetPedScale', ped, value)
@@ -125,6 +127,7 @@ NATIVE_NAMES = {
     [0x9587913B9E772D29] = 'placeOnGround', [0x5E3BDDBCB83F3D84] = 'giveWeapon',
     [0x524B54361229154F] = 'startScenario', [0x513F8AA5BF2F17CF] = 'loadSphere',
     [0x2703EFB583F0949A] = 'setVoice', [0xBC9AE166038A5CEC] = 'playPain',
+    [0x6C8065A3B780185B] = 'setSpeechVoice',
 }
 Citizen.InvokeNative = function(hash, ...)
     if hash == 0xA0BC8FAED8CFEB3C then local p = Peds[(...)] return p ~= nil and p.ready end
