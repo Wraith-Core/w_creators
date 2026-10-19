@@ -288,6 +288,28 @@ class AppearanceFieldTests(unittest.TestCase):
         self.assertEqual(self.e('AppearanceSchema.mergeSections(a, c, { "eyes" }).head.eyesTint.tint0'), 1)
         self.assertIsNone(self.e('AppearanceSchema.mergeSections(a, c, { "hair" }).head.eyesTint'))
 
+    # 2026-10-19: the voice (1..3), the sex's vocal set
+    def test_voice_is_validated(self):
+        self.assertEqual(self.sanitize('app.voice = 2'), [])
+        self.assertEqual(self.e('out.voice'), 2)
+        self.assertIn('voice', self.sanitize('app.voice = 7'))
+        self.assertIsNone(self.e('out.voice'))
+        self.assertIn('voice', self.sanitize('app.voice = 1.5'))
+
+    def test_voice_name_follows_the_sex(self):
+        self.assertEqual(self.e('AppearanceSchema.vofxName("female", 3)'), 'VOFX_PLAYER_FEMALE03')
+        self.assertEqual(self.e('AppearanceSchema.vofxName("male", nil)'), 'VOFX_PLAYER_MALE01')
+        self.assertEqual(self.e('AppearanceSchema.vofxName("female", nil)'), 'VOFX_PLAYER_FEMALE01')
+        self.assertEqual(self.e('AppearanceSchema.vofxName("female", 9)'), 'VOFX_PLAYER_FEMALE01')
+
+    def test_the_legacy_projection_carries_the_voice(self):
+        self.run('a = AppearanceSchema.default("female"); a.voice = 3; b = AppearanceSchema.fromLegacy(AppearanceSchema.toLegacy(a))')
+        self.assertEqual(self.e('b.voice'), 3)
+
+    def test_services_keep_the_saved_voice(self):
+        self.run('a = AppearanceSchema.default("male"); a.voice = 2; c = WCUtil.copy(a); c.voice = 3')
+        self.assertEqual(self.e('AppearanceSchema.mergeSections(a, c, { "body" }).voice'), 2)
+
     def test_eyebrow_styles_keep_their_texture_set(self):
         # style 1 is mp_u_faov_eyebrow_m_012 on either sex; style 6 is the f set's 004
         self.assertEqual(self.rt.py(self.e('{ WCOverlays.texture("eyebrows", 1) }')), {1: 12, 3: 'm'})

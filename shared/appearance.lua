@@ -39,6 +39,15 @@ S.WAIST_TYPES = {
 --  character had before builds existed, so a stored character renders unchanged). Equipped before
 --  the waist outfit (Appearance.SetBuild); the server API exposes it as the bridge's bodyType.
 S.BODY_BUILDS = { -1241887289, 61606861, -369348190, -20262001, 32611963 }
+-- 2026-10-19 (owner): the voice -- the game's player vocal sets (pain, breath, effort): three tones per sex.
+-- `voice` (1..VOICE_TONES) picks the tone; the male or female set follows `sex`, so they never disagree.
+-- No `voice` = tone 1 of the character's sex (a woman made before this sounds like a woman now).
+S.VOICE_TONES = 3
+function S.vofxName(sex, voice)
+    local tone = tonumber(voice)
+    if not tone or tone < 1 or tone > S.VOICE_TONES or tone ~= math.floor(tone) then tone = 1 end
+    return ('VOFX_PLAYER_%s%02d'):format(sex == 'female' and 'FEMALE' or 'MALE', tone)
+end
 
 --- The palette of a custom eye tint (head.eyesTint) and the highest tint index it takes.
 S.EYE_PALETTE = 'metaped_tint_eye'
@@ -326,6 +335,10 @@ function S.sanitize(app, opts)
         local tint = S.eyeTint(head.eyesTint)
         if tint then out.head.eyesTint = tint else violate('eyes.tint', 'invalid') end
     end
+    if src.voice ~= nil then
+        local voice = WCUtil.int(src.voice, 1, S.VOICE_TONES, nil)
+        if voice and voice == tonumber(src.voice) then out.voice = voice else violate('voice', 'invalid') end
+    end
 
     -- Skin tone repair: the bodies adopt the head's tone.
     local tone = toneOf(sex, 'heads', out.head.head)
@@ -494,6 +507,7 @@ function S.fromLegacy(row)
         weight = WCUtil.int(comps.__waist, 1, 21, DEFAULT_WEIGHT),
         build = comps.__build,
     }
+    app.voice = comps.__voice
 
     local hair = comps.hair == nil and d.hair or (part('hair') or 0)
     app.hair = { style = hair, facial = sex == 'male' and (part('mustache') or 0) or 0 }
@@ -580,6 +594,7 @@ function S.toLegacy(app)
     -- the newer optional fields ride along (the previous release ignores them; a later upgrade of
     -- this row gets them back through fromLegacy)
     comps.__build = app.body.build
+    comps.__voice = app.voice
     comps.__eyesTint = app.head.eyesTint and WCUtil.copy(app.head.eyesTint) or nil
     comps.__expressions = {}
     comps.__grooming = WCUtil.copy(app.grooming)

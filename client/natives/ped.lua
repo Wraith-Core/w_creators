@@ -114,3 +114,29 @@ function WCNative.ped.giveWeapon(ped, weapon, ammo, forceInHand, forceInHolster)
         forceInHand == true, forceInHolster == true)
     return ok
 end
+
+--- _SET_VOFX_PED_VOICE (SetVofxPedVoice)
+-- hash: 0x2703EFB583F0949A · confidence: Likely (RedM's native table lists VOFX_PLAYER_MALE01..03 and
+--   VOFX_PLAYER_FEMALE01..03; not used on this server before 2026-10-19)
+-- params: ped (entity), voice (string name, hashed here: AppearanceSchema.vofxName)
+-- returns: nothing · limitations: the vocal set only (pain, breath, effort), local to this client: every client sets
+--   it on the peds it draws (the appearance render does, for remote players too); a new ped (SetPlayerModel) resets it
+-- tested models: mp_male, mp_female (in-game check pending) · MP safe: yes · OneSync tested here: no
+function WCNative.ped.setVoice(ped, voice)
+    if not H.ped(ped) then return H.fail('setVoice', 'invalid ped %s', tostring(ped)) or false end
+    if type(voice) ~= 'string' or voice == '' then return H.fail('setVoice', 'invalid voice %s', tostring(voice)) or false end
+    local ok = H.invoke(0x2703EFB583F0949A, ped, GetHashKey(voice))
+    return ok
+end
+
+--- PLAY_PAIN (PlayPain)
+-- hash: 0xBC9AE166038A5CEC · confidence: Verified (w_hud client/thread.lua: PlayPain(ped, 9, 1, true, true))
+-- params: ped (entity), painId (int 0..12), p2 (float 1.0), p3 (false), isNetwork (false: a local sample)
+-- returns: nothing · limitations: plays in the ped's current vocal set; used as the voice sample in the creator
+-- tested models: mp_male, mp_female (in-game check pending) · MP safe: yes · OneSync tested here: no
+function WCNative.ped.playPain(ped, painId)
+    if not H.ped(ped) then return H.fail('playPain', 'invalid ped %s', tostring(ped)) or false end
+    local id = math.tointeger(tonumber(painId)) or 9
+    local ok = H.invoke(0xBC9AE166038A5CEC, ped, math.max(0, math.min(12, id)), 1.0, false, false)
+    return ok
+end

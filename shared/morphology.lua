@@ -71,7 +71,7 @@ local TREE = {
     {
         id = 'body', label = 'الجسد', section = BODY,
         children = {
-            { id = 'body.build', label = 'البنية', extras = { 'body.type', 'body.shape', 'body.height', 'body.weight' } },
+            { id = 'body.build', label = 'البنية', extras = { 'body.type', 'body.shape', 'body.height', 'body.weight', 'body.voice' } },
             { id = 'body.upper', label = 'الجزء العلوي', fields = {
                 { 'shoulders', 'الكتفان' }, { 'shoulderThickness', 'سماكة الكتف', 'profile' },
                 { 'shoulderBlades', 'لوحا الكتف', 'profile' }, { 'chest', 'الصدر', 'profile' }, { 'arms', 'الذراعان' } } },

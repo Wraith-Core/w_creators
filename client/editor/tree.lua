@@ -84,6 +84,8 @@ local K = {
     reviewHint = 'راجع اختياراتك ثم اضغط إنهاء الشخصية.', surgeryHint = 'راجع التعديلات ثم أكّد العملية.',
     owned = 'مملوكة', equipped = 'مرتداة',
     build = 'بنية الجسم', buildDefault = 'البنية الافتراضية',
+    voice = 'الصوت', voiceTones = { 'النبرة الأولى', 'النبرة الثانية', 'النبرة الثالثة' },
+    voicePlay = 'استمع إلى الصوت',
     builds = { 'بنية نحيلة', 'بنية رياضية', 'بنية متوسطة', 'بنية ممتلئة', 'بنية ضخمة' },
     color2 = 'اللون الثاني', color3 = 'اللون الثالث',
     browColor = 'لون الحاجبين', followHair = 'مثل لون الشعر', ownColor = 'لون مختار',
@@ -335,6 +337,27 @@ local function bodyShape(reg, s)
     return choice(reg, 'body.shape', L(K.build), s.working.body.build or 0, options, function(app, value)
         app.body.build = value ~= 0 and value or nil
     end)
+end
+
+--- The voice (2026-10-19): one of the sex's three vocal tones (AppearanceSchema.vofxName), and a button that plays
+--  a sample in it on the preview ped (the choice itself reaches the ped through ApplyDiff -> ApplyVoice).
+local function voiceChoice(reg, s)
+    local options = {}
+    for i = 1, AppearanceSchema.VOICE_TONES do options[i] = { value = i, label = L(K.voiceTones[i] or pad2(i)) } end
+    return choice(reg, 'body.voice', L(K.voice), s.working.voice or 1, options, function(app, value)
+        app.voice = value
+    end)
+end
+
+local function voicePlay(reg, s)
+    return action(reg, 'body.voice.play', L(K.voicePlay), {
+        call = function(session)
+            local look = session.working or {}
+            WCNative.ped.setVoice(session.ped, AppearanceSchema.vofxName(look.sex, look.voice))
+            WCNative.ped.playPain(session.ped, 9)
+            return WCResult.ok()
+        end,
+    })
 end
 
 --- The height slider's readout (Config.Creator.heightUnit = 'm' | 'ft'): the character's standing
@@ -720,6 +743,11 @@ local function extraControls(reg, s, extra)
     if sec.body then
         if extra == 'body.type' then return { bodyType(reg, s) } end
         if extra == 'body.shape' then return { bodyShape(reg, s) } end
+        -- only while creating: the barber / surgeon / wardrobe keep the saved voice (mergeSections)
+        if extra == 'body.voice' then
+            if s.mode ~= 'creator' then return {} end
+            return { voiceChoice(reg, s), voicePlay(reg, s) }
+        end
         if extra == 'body.height' then
             return { slider(reg, 'body.height', L(K.height), s.working.body.height, 0.9, 1.1, 0.005,
                 heightDisplay(s), function(app, value) app.body.height = value + 0.0 end) }
@@ -1491,6 +1519,7 @@ local function creatorReview(s)
     if info then items[#items + 1] = { label = L(K.bodyType), value = WCCatalog.styleLabel('BODIES_UPPER', info.model) } end
     if app.body.build then items[#items + 1] = { label = L(K.build), value = L(K.builds[app.body.build] or K.buildDefault) } end
     items[#items + 1] = { label = L(K.height), value = heightText(s, app.body.height) }
+    items[#items + 1] = { label = L(K.voice), value = L(K.voiceTones[app.voice or 1] or K.voiceTones[1]) }
     local heads = catalog(s, 'heads')
     local head = heads and heads.hashes[app.head.head]
     if head then items[#items + 1] = { label = L(K.head), value = WCCatalog.styleLabel('heads', head.model) } end

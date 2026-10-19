@@ -518,7 +518,16 @@ local function render(ped, app, opts)
     -- 10. overlays on the committed head: w.pedTexture builds the face texture on the albedo of the
     --     head the ped carries now, and commits it itself (refreshNow)
     if not opts.skipOverlays and applyOverlays(ped, app) then A.WaitReady(ped) end
+    -- 11. the voice (2026-10-19): the sex's vocal set in the chosen tone
+    A.ApplyVoice(ped, app)
     return true, nil, failed
+end
+
+--- The voice of an appearance on a ped: VOFX_PLAYER_<MALE|FEMALE>0<tone> (AppearanceSchema.vofxName). Local to
+--- this client, so it runs wherever a look is drawn: the player, the preview peds and other players' peds.
+function A.ApplyVoice(ped, app)
+    if type(app) ~= 'table' then return false end
+    return WCNative.ped.setVoice(ped, AppearanceSchema.vofxName(app.sex, app.voice))
 end
 
 --- Render a v3 appearance on a ped (the one pipeline).
@@ -724,6 +733,8 @@ function A.ApplyDiff(ped, before, after)
         WCDebug.warn('appearance', 'incremental apply on ped %s failed: %s', tostring(ped), tostring(result))
         return false, {}, 'INTERNAL_ERROR'
     end
+    -- a voice change is not a visual diff: set it when it changed (a full render always sets it)
+    if result and (not before or before.voice ~= after.voice) then A.ApplyVoice(ped, after) end
     return result, failed or {}, code
 end
 

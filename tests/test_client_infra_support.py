@@ -124,6 +124,7 @@ NATIVE_NAMES = {
     [0xCC8CA3E88256E58F] = 'updateVariation', [0x5653AB26C82938CF] = 'setExpression',
     [0x9587913B9E772D29] = 'placeOnGround', [0x5E3BDDBCB83F3D84] = 'giveWeapon',
     [0x524B54361229154F] = 'startScenario', [0x513F8AA5BF2F17CF] = 'loadSphere',
+    [0x2703EFB583F0949A] = 'setVoice', [0xBC9AE166038A5CEC] = 'playPain',
 }
 Citizen.InvokeNative = function(hash, ...)
     if hash == 0xA0BC8FAED8CFEB3C then local p = Peds[(...)] return p ~= nil and p.ready end

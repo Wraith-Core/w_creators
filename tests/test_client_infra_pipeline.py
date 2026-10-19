@@ -316,6 +316,16 @@ class ApplyDiffTests(unittest.TestCase):
         self.assertTrue(self.diff(''))
         self.assertEqual(self.e('#Log'), 0)
 
+    def test_a_voice_change_sets_the_voice_only(self):  # 2026-10-19
+        self.assertTrue(self.diff('after.voice = 2'))
+        self.assertEqual(self.e('count("setVoice")'), 1)
+        self.assertEqual(self.e('count("preset")'), 0)
+
+    def test_a_full_restore_sets_the_voice(self):
+        self.run('female = makePed("mp_female"); clearLog(); ok = Appearance.RestoreCharacter(female, AppearanceSchema.default("female"))')
+        self.assertEqual(self.e('count("setVoice")'), 1)
+        self.assertEqual(self.e('lastIndex("setVoice")'), self.e('#Log'))
+
     def test_clothing_removal_state_and_tint_changes(self):
         self.assertTrue(self.diff('''after.clothing.equipped.vests = nil
             after.clothing.states.hat = 'off'

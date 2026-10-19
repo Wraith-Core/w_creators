@@ -36,7 +36,7 @@ class MorphOverlayTests(unittest.TestCase):
         self.assertEqual([c.id for c in mouth.children.values()], ['face.mouth.left', 'face.mouth.right'])
         build = groups[2].children[1]
         # body.shape: the body build outfit (skinny ... brawny), next to the body model
-        self.assertEqual(list(build.extras.values()), ['body.type', 'body.shape', 'body.height', 'body.weight'])
+        self.assertEqual(list(build.extras.values()), ['body.type', 'body.shape', 'body.height', 'body.weight', 'body.voice'])
 
     def test_overlays(self):
         layers = self.rt.py(self.e('WCOverlays.layers'))
