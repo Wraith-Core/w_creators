@@ -103,6 +103,7 @@ Every wrapper in `client/natives/*.lua` (`camera`, `clothing`, `metaped`, `ped`,
 | `0xFA233F8FE190514C` | `_UILOG_SET_CACHED_OBJECTIVE` | `WCNative.ui.setObjective(str)` | Verified | `clearObjective`, `blankObjective` (creator) | MP safe: yes · OneSync tested here: no | `0` clears. |
 | `0xE9990552DEC71600` | `_UILOG_PRINT_CACHED_OBJECTIVE` | `WCNative.ui.printObjective()` | Verified | `clearObjective`, `blankObjective` (creator) | MP safe: yes · OneSync tested here: no | — |
 | — | clear / blank objective | `WCNative.ui.clearObjective()`, `WCNative.ui.blankObjective()` | Verified | creator | built on the two above · MP safe: yes · OneSync tested here: no | The two pre-v3 idioms (`0`, and a literal space). |
+| `0x2A32FAA57B937173` | `DRAW_MARKER` | `WCNative.ui.drawMarker(kind, x, y, z, size, r, g, b, a)` | Verified | services/board (the chair picker: box on the object under the crosshair, dot at the hit) | one frame, local to this client · MP safe: yes · OneSync tested here: no | w_doorlock's door picker draws the same box (`0x6EB7D3BB`) and sphere (`0x50638AB9`). |
 
 `WCNative._` holds the shared validation helpers (`entity`, `ped`, `mpPed`, `invoke`, `bool`,
 `float`, `fail`); it is internal to `client/natives/`.
@@ -128,6 +129,7 @@ inside `pcall`, "existence-guarded" = the global is checked before use, "direct"
 | `CreateCam` | by name | — | Verified | camera/camera, spawn/selector | direct · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob |
 | `DestroyCam` | by name | — | Verified | camera/camera, spawn/selector | direct · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob |
 | `DisableAllControlActions` | by name | — | Verified | characters/selector, creator/creator, creator/cutscene, scene/environment, spawn/selector | direct · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob |
+| `DisablePlayerFiring` | by name | — | Verified | services/board | direct (chair picker, every frame) · OneSync tested here: no | w_doorlock |
 | `DisplayHud` | by name | — | Verified | characters/selector, core/ui, scene/environment, spawn/selector, spawn/spawn | pcall (characters/selector); direct elsewhere · OneSync tested here: no | pre-v3, w_lib |
 | `DisplayRadar` | by name | — | Verified | core/ui | direct · OneSync tested here: no | pre-v3, w_lib, w_core |
 | `DoScreenFadeIn` | by name | — | Verified | characters/selector, core/ui, spawn/selector | pcall (core/ui); direct elsewhere · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob, w_core |
@@ -137,6 +139,7 @@ inside `pcall`, "existence-guarded" = the global is checked before use, "direct"
 | `DrawLightWithRange` | by name | — | Verified | scene/scene, scene/environment (the fitting-room light) | direct · OneSync tested here: no | pre-v3, w_lib |
 | `EquipMetaPedOutfit` | by name | — | Verified | appearance/pipeline | existence-guarded: falls back to `w.component.setWaistType` · OneSync tested here: no | w_lib |
 | `FreezeEntityPosition` | by name | — | Verified | barber/barber, characters/selector, creator/creator, scene/environment, scene/scene, services/locations, spawn/selector, spawn/spawn | pcall (barber/barber, services/locations); direct elsewhere · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob, w_core |
+| `GetClosestObjectOfType` | by name | — | Likely | services/board | direct (chair picker: a barber chair of the game near the crosshair) · OneSync tested here: no | none (w_farming uses it for props) |
 | `GetEntityCoords` | by name | — | Verified | appearance/pipeline, barber/barber, camera/camera, characters/selector, creator/cutscene, dev/tools, respawn/respawn, scene/environment, scene/scene, services/locations, spawn/spawn | direct · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob, w_core |
 | `GetEntityHeading` | by name | — | Verified | barber/barber, camera/camera, natives/scene, respawn/respawn, scene/environment, scene/scene, services/locations, spawn/spawn | direct · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob, w_core |
 | `GetEntityModel` | by name | — | Verified | appearance/pipeline, creator/cutscene, natives/metaped, respawn/respawn | direct · OneSync tested here: no | pre-v3, w_lib, w_core |
@@ -144,6 +147,7 @@ inside `pcall`, "existence-guarded" = the global is checked before use, "direct"
 | `GetEntityBoneIndexByName` | by name | — | Likely | camera/camera (`handLeft` / `handRight`: `SKEL_L_Hand`, `SKEL_R_Hand`) | existence-guarded + pcall: an unreadable bone falls back to the `hands` framing · OneSync tested here: no | none |
 | `GetGroundZAndNormalFor_3dCoord` | by name | — | Verified | dev/tools, spawn/spawn | pcall (spawn/spawn); direct elsewhere · OneSync tested here: no | pre-v3, w_core |
 | `GetInteriorAtCoords` | by name | — | Likely | scene/scene | existence-guarded + pcall (scene/scene: `Config.Scene.interior`) · OneSync tested here: no | none |
+| `GetModelDimensions` | by name | — | Verified | services/board | direct · OneSync tested here: no | w_doorlock |
 | `GetOffsetFromEntityInWorldCoords` | by name | — | Verified | scene/environment (the fitting-room light, `Config.Clothing.fittingLight`) | pcall · OneSync tested here: no | pre-v3, w_lib |
 | `GetPedBoneCoords` | by name | — | Verified | appearance/pipeline, camera/camera | direct · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob, w_core |
 | `GetRegisteredCommands` | by name | — | Verified | clothing/states (a toggle command another resource registered is skipped) | existence-guarded + pcall · OneSync tested here: no | CitizenFX runtime function |
@@ -173,6 +177,7 @@ inside `pcall`, "existence-guarded" = the global is checked before use, "direct"
 | `IsPedInVehicle` | by name | — | Likely | creator/cutscene | direct · OneSync tested here: no | none |
 | `IsPedOnMount` | by name | — | Verified | clothing/states | by-name lookup + pcall (clothing/states) · OneSync tested here: no | w_lib |
 | `IsPedRagdoll` | by name | — | Verified | clothing/states | by-name lookup + pcall (clothing/states) · OneSync tested here: no | w_lib, w_ambulancejob |
+| `IsPedUsingAnyScenario` | by name | — | Verified | barber/barber | direct (barber chair: did the scenario take) · OneSync tested here: no | w_baloot |
 | `IsPlayerTeleportActive` | by name | — | Verified | scene/scene | direct · OneSync tested here: no | pre-v3 |
 | `IsRadarHidden` | by name | — | Likely | core/ui | pcall (core/ui); existence-guarded (core/ui) · OneSync tested here: no | none |
 | `IsScreenFadedOut` | by name | — | Verified | characters/selector, core/ui, creator/cutscene, spawn/selector, spawn/spawn | direct · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob, w_core |
@@ -208,12 +213,14 @@ inside `pcall`, "existence-guarded" = the global is checked before use, "direct"
 | `SetEntityCanBeDamaged` | by name | — | Verified | creator/cutscene | direct · OneSync tested here: no | pre-v3, w_lib |
 | `SetEntityCollision` | by name | — | Verified | creator/creator, scene/scene | direct · OneSync tested here: no | pre-v3 |
 | `SetEntityCoords` | by name | — | Verified | barber/barber, creator/cutscene, respawn/respawn, scene/environment, scene/scene, services/locations, spawn/spawn | pcall (services/locations); direct elsewhere · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob, w_core |
+| `SetEntityCoordsNoOffset` | by name | — | Verified | barber/barber | direct (barber chair: no scenario took him) · OneSync tested here: no | w_baloot |
 | `SetEntityHeading` | by name | — | Verified | barber/barber, camera/camera, creator/cutscene, respawn/respawn, scene/environment, scene/scene, services/locations, spawn/spawn | pcall (services/locations); direct elsewhere · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob, w_core |
 | `SetEntityInvincible` | by name | — | Verified | characters/selector, creator/creator, creator/cutscene, scene/environment, scene/scene, spawn/selector, spawn/spawn | direct · OneSync tested here: no | pre-v3, w_lib, w_ambulancejob |
 | `SetEntityNoCollisionEntity` | by name | — | Verified | creator/cutscene | direct · OneSync tested here: no | pre-v3 |
 | `SetEntityVisible` | by name | — | Verified | characters/selector, creator/creator, scene/environment, scene/scene, spawn/selector, spawn/spawn | direct · OneSync tested here: no | pre-v3 |
 | `SetFocusPosAndVel` | by name | — | Verified | camera/camera, scene/scene, spawn/selector | direct · OneSync tested here: no | pre-v3 |
 | `SetModelAsNoLongerNeeded` | by name | — | Verified | appearance/pipeline | direct · OneSync tested here: no | pre-v3, w_lib, w_core |
+| `SetNuiFocus` | by name | — | Verified | services/board, editor/editor, editor/panel, creator/creator, scene/environment | existence-guarded (board, editor, panel); pcall elsewhere · OneSync tested here: no | pre-v3, w_lib |
 | `SetPedAsGroupMember` | by name | — | Verified | creator/cutscene | direct · OneSync tested here: no | pre-v3 |
 | `SetPedCanBeTargetted` | by name | — | Verified | scene/scene | direct · OneSync tested here: no | pre-v3 |
 | `SetPedIntoVehicle` | by name | — | Verified | creator/cutscene | direct · OneSync tested here: no | pre-v3 |
@@ -228,6 +235,7 @@ inside `pcall`, "existence-guarded" = the global is checked before use, "direct"
 | `TaskLeaveVehicle` | by name | — | Verified | creator/cutscene | direct · OneSync tested here: no | pre-v3 |
 | `TaskPlayAnim` | by name | — | Verified | editor/editor (the teeth view: `Config.Creator.teethAnimation`) | existence-guarded + pcall · OneSync tested here: no | w_lib |
 | `TaskStandStill` | by name | — | Verified | scene/scene | direct · OneSync tested here: no | pre-v3 |
+| `TaskStartScenarioAtPosition` | by name | — | Likely | barber/barber | direct (barber chair: Config.Barber.chair.scenarios, args (ped, hash, x, y, z, heading, -1, false, true)) · OneSync tested here: no | w_baloot (PROP_PLAYER_BARBER_SEAT itself is untested in game) |
 | `TaskVehicleDriveToCoord` | by name | — | Verified | creator/cutscene | direct · OneSync tested here: no | pre-v3 |
 | `TriggerMusicEvent` | by name | — | Verified | creator/cutscene | pcall (creator/cutscene) · OneSync tested here: no | pre-v3 |
 

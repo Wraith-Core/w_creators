@@ -506,7 +506,8 @@ class InstallSqlTests(unittest.TestCase):
         sql = read(RESOURCE / 'sql' / 'install.sql')
         schema = rt.py(rt.eval('FakeDB.schema'))
         self.assertEqual(set(schema), {'characters_appearence', 'w_creators_clothes', 'w_creators_outfits',
-                                       'w_creators_colorways', 'w_creators_migrations'})
+                                       'w_creators_colorways', 'w_creators_migrations',
+                                       'w_creators_locations'})
         for table, cols in schema.items():
             block = re.search(r'CREATE TABLE IF NOT EXISTS `%s` \((.*?)\) ENGINE' % table, sql, re.S)
             self.assertIsNotNone(block, table)

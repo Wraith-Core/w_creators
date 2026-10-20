@@ -488,6 +488,8 @@ end
 --- Rotate the actor by `deg` degrees; the camera keeps its viewing direction.
 function Cam.rotate(deg)
     if not st.open or not pedExists(st.ped) then return false end
+    -- a player sitting in a barber chair stays as the chair holds him
+    if type(WCServiceSeat) == 'table' and WCServiceSeat.onChair() then return false end
     local delta = WCUtil.number(deg, -180, 180, 0)
     local h = ((GetEntityHeading(st.ped) + delta) % 360) + 0.0
     SetEntityHeading(st.ped, h)

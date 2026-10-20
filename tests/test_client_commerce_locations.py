@@ -77,23 +77,26 @@ class BuildTests(LocationsTestCase):
         self.assertIsNotNone(self.point('saintdenis_clothing'))
         self.assertFalse(any(b['name'] == 'الحلاق' for b in self.eval('BlipsMade').values()))
 
-    def test_prompt_false_skips_the_whole_location(self):
-        # §17: another resource owns a prompt = false location (no prompt, blip or NPC here)
+    def test_prompt_false_gets_no_prompt(self):
+        # §17: another resource owns a prompt = false location's interaction: no prompt here. Its blip,
+        # NPC and book (what the board gave it) are still drawn (2026-10-19, /servicesadmin).
         self.rebuild('Config.Locations[1].prompt = false')
-        self.assertIsNone(self.point('valentine_clothing'))
+        self.assertIsNotNone(self.point('valentine_clothing'))
+        self.assertIsNone(self.eval('P.prompt'))
+        self.assertIsNotNone(self.eval('P.npc'))
         self.assertEqual(self.eval('#liveWalkups()'), 13)
-        coords = [(b['coords']['x'], b['coords']['y']) for b in self.rt.py(self.eval('BlipsMade')).values()]
-        self.assertNotIn((-326.17, self.eval('Config.Locations[1].coords.y')), coords)
 
-    def test_a_prompt_false_location_with_blip_and_npc_gets_neither(self):
+    def test_a_prompt_false_location_with_blip_and_npc_gets_both_without_a_prompt(self):
+        # a clinic's NPC set on the board stands there; w_medic keeps the prompt
         self.rebuild('for _, l in ipairs(Config.Locations) do if l.id == "valentine_surgery" then'
                      ' l.blip = { sprite = "blip_shop_doctor" };'
                      ' l.npc = { model = "S_M_M_Tailor_01", coords = { x = 1.0, y = 2.0, z = 3.0, w = 0.0 } } end end;'
                      ' EntitiesBefore = count("entity.create")')
-        self.assertIsNone(self.point('valentine_surgery'))
-        self.assertFalse(any(b['sprite'] == 'blip_shop_doctor' for b in self.rt.py(self.eval('BlipsMade')).values()))
-        # the rebuild made the 3 tailors and the 4 catalogue books again, and nothing for the clinic
-        self.assertEqual(self.eval('count("entity.create") - EntitiesBefore'), 3 + 4)
+        self.assertIsNotNone(self.point('valentine_surgery'))
+        self.assertIsNone(self.eval('P.prompt'))
+        self.assertTrue(any(b['sprite'] == 'blip_shop_doctor' for b in self.rt.py(self.eval('BlipsMade')).values()))
+        # the rebuild made the 3 tailors, the 4 catalogue books and the clinic's NPC
+        self.assertEqual(self.eval('count("entity.create") - EntitiesBefore'), 3 + 4 + 1)
 
     def test_a_surgery_clinic_with_a_prompt_dispatches_to_the_surgery_client(self):
         self.rebuild('for _, l in ipairs(Config.Locations) do if l.id == "valentine_surgery" then l.prompt = true end end')

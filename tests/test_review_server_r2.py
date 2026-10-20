@@ -509,7 +509,7 @@ class MigrationVerifyTests(unittest.TestCase):
         for col in ('appearance', 'appearance_version', 'updated_at'):
             self.assertTrue(self.e('WCMigrations.columnExists("characters_appearence", "%s")' % col))
         self.assertTrue(self.e('WCMigrations.tableExists("w_creators_outfits")'))
-        self.assertEqual(len(self.e('FakeDB.migrations')), 6, 'the ledger is not duplicated')
+        self.assertEqual(len(self.e('FakeDB.migrations')), 7, 'the ledger is not duplicated')
         self.assertTrue(self.e('WCMigrations.waitReady(10)'))
 
     def test_a_healthy_schema_is_left_alone(self):

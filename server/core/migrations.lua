@@ -218,6 +218,33 @@ end, function()
     return M.tableExists('w_creators_colorways')
 end)
 
+-- 2026-10-19: the service locations become editable in game (server/locations/store.lua, /servicesadmin): one row
+-- per place, its fields as JSON (WCLocations.encode). The step also copies Config.Locations in, once: the ledger
+-- keeps it from running again, so a place the staff deleted never comes back.
+M.register('007_locations', function()
+    w.database.query.await([[
+        CREATE TABLE IF NOT EXISTS `w_creators_locations` (
+            `id` VARCHAR(64) NOT NULL,
+            `type` VARCHAR(16) NOT NULL,
+            `data` LONGTEXT NOT NULL,
+            `position` INT NOT NULL DEFAULT 0,
+            `updated_by` VARCHAR(100) NULL,
+            `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ]])
+    for index, loc in ipairs((Config and Config.Locations) or {}) do
+        local data = type(loc) == 'table' and type(loc.id) == 'string' and WCLocations.encode(loc) or nil
+        local encoded = data and WCUtil.encode(data)
+        if encoded then
+            w.database.query.await('INSERT IGNORE INTO `w_creators_locations` (`id`, `type`, `data`, `position`) VALUES (?, ?, ?, ?)',
+                { loc.id, tostring(loc.type), encoded, index })
+        end
+    end
+end, function()
+    return M.tableExists('w_creators_locations')
+end)
+
 w.database.ready(function()
     M.run()
 end)

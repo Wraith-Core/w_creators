@@ -304,5 +304,42 @@ class ServerOpenedTests(BarberTestCase):
         self.assertEqual(self.eval('called("w_creators:barber:open")'), 0)
 
 
+class ChairTests(BarberTestCase):
+    """A barber place with a chair (the services board, 2026-10-19): the player sits in it with the game's
+    player barber-chair scenario, facing away from the chair's front, and gets up when the visit ends."""
+    setup = ('TaskStartScenarioAtPosition = function(ped, hash, x, y, z, h, d, sitting, teleport)'
+             ' Log[#Log + 1] = { op = "TaskStartScenarioAtPosition", args = table.pack(ped, hash, x, y, z, h) }; Scenario = hash end;'
+             ' IsPedUsingAnyScenario = function() return Scenario ~= nil end;'
+             ' for _, loc in ipairs(Config.Locations) do if loc.id == "valentine_barber" then'
+             ' loc.preview = vector4(1.0, 2.0, 3.0, 0.0);'
+             ' loc.chair = { kind = "prop", model = "p_barberchair01x", coords = vector4(10.0, 20.0, 30.0, 90.0) } end end;'
+             ' WCLocations.reload()')
+
+    def test_the_player_sits_in_the_chair_and_gets_up_after(self):
+        ok, _ = self.open()
+        self.assertTrue(ok)
+        self.assertEqual(self.eval('count("TaskStartScenarioAtPosition")'), 1)
+        self.assertEqual(self.eval('Scenario'), self.eval('joaat("PROP_PLAYER_BARBER_SEAT")'))
+        # the chair before the preview spot; heading 90 turns the offset (-0.01, 0.15) to (-0.15, -0.01)
+        x, y, z = self.at()
+        self.assertAlmostEqual(x, 9.85, places=3)
+        self.assertAlmostEqual(y, 19.99, places=3)
+        self.assertAlmostEqual(z, 30.74, places=3)
+        self.assertEqual(self.eval('Peds[MyPed].heading'), 270.0)
+        self.assertTrue(self.eval('WCServiceSeat.onChair()'))
+        self.assertFalse(self.eval('Peds[MyPed].frozen == true'))   # the scenario holds him, not a freeze
+        self.run('cancel()')
+        settle(self.rt)
+        self.assert_left()
+        self.assertFalse(self.eval('WCServiceSeat.onChair()'))
+        self.assertGreaterEqual(self.eval('count("ClearPedTasksImmediately")'), 1)
+
+    def test_the_chair_spot_follows_the_config_offset(self):
+        self.run('Config.Barber.chair.offset = { x = 0.0, y = 0.0, z = 1.04 }')
+        self.run('X, Y, Z, H = WCServiceSeat.chairSpot({ coords = vector4(5.0, 6.0, 7.0, 350.0) })')
+        self.assertEqual((self.eval('X'), self.eval('Y'), self.eval('H')), (5.0, 6.0, 170.0))
+        self.assertAlmostEqual(self.eval('Z'), 8.04, places=3)
+
+
 if __name__ == '__main__':
     unittest.main()

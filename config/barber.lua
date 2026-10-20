@@ -16,6 +16,16 @@ Config.Barber = {
     prices = {
         visitCap = 10, -- the most one visit can cost (nil = no cap)
     },
+    -- The barber chair (2026-10-19): a barber place with a chair (/servicesadmin) seats the player in it.
+    -- scenarios: tried in order; PROP_PLAYER_BARBER_SEAT is the game's own player scenario for a barber
+    -- chair (mech.meta), PROP_HUMAN_SEAT_CHAIR the plain chair sit. offset: where the seated player goes in
+    -- the chair's own frame (x right, y towards the back, z up), measured on the game's barber clips; if he
+    -- sits too low in game (the scenario lowers him 0.3 m) set z = 1.04.
+    chair = {
+        scenarios = { 'PROP_PLAYER_BARBER_SEAT', 'PROP_HUMAN_SEAT_CHAIR' },
+        offset = { x = -0.01, y = 0.15, z = 0.74 },
+        verifyMs = 600, -- how long a scenario may take to start before the next one is tried
+    },
 }
 
 -- ---------------------------------------------------------------------

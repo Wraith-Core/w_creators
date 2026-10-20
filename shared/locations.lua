@@ -4,11 +4,17 @@
 --  a location with a missing/duplicate id, an unknown type or missing coords is skipped with a
 --  warning. Opening hours (hours = { open, close }, whole hours 0..24) are evaluated in the
 --  server's local time (WCLocations.hour); invalid hours are ignored with a warning.
+--
+--  The places are edited in game since 2026-10-19 (/servicesadmin): the server keeps them in the table
+--  w_creators_locations (server/locations/store.lua) and hands the list to WCLocations.setList on both
+--  sides; Config.Locations is only the first seed and the list used until the server has answered.
+--  WCLocations.encode / decode turn a place into plain numbers (database JSON, network) and back.
 -- =====================================================================
 
 WCLocations = {}
 
 local resolved, byId, byType
+local list = nil -- the places from the server (WCLocations.setList); nil = Config.Locations
 
 local TYPES = { clothing = true, barber = true, surgery = true, wardrobe = true }
 
@@ -19,6 +25,7 @@ local function merge(defaults, loc)
     -- into a plain table and lose its heading field names
     out.coords, out.preview, out.book = loc.coords, loc.preview, loc.book
     if loc.npc ~= nil then out.npc = loc.npc end
+    if loc.chair ~= nil then out.chair = loc.chair end
     return out
 end
 
@@ -27,7 +34,7 @@ local function resolve()
     resolved, byId, byType = {}, {}, {}
     for t in pairs(TYPES) do byType[t] = {} end
     local defaults = (Config and Config.LocationDefaults) or {}
-    for index, loc in ipairs((Config and Config.Locations) or {}) do
+    for index, loc in ipairs(list or (Config and Config.Locations) or {}) do
         local id = type(loc) == 'table' and loc.id
         if type(id) ~= 'string' or id == '' then
             WCDebug.warn('locations', 'location #%d has no id - skipped', index)
@@ -158,4 +165,100 @@ end
 --- Forget the resolved set (config reload / tests).
 function WCLocations.reload()
     resolved, byId, byType = nil, nil, nil
+end
+
+--- Use these places instead of Config.Locations (decoded: the Config.Locations shape, vectors);
+--  nil goes back to Config.Locations.
+function WCLocations.setList(places)
+    list = type(places) == 'table' and places or nil
+    WCLocations.reload()
+end
+
+-- ---------------------------------------------------------------------
+--  Plain form (database JSON, network): every spot is { x, y, z[, h] } with two decimals,
+--  npc = { model, x, y, z, h } | false, chair = { kind = 'world' | 'prop', model, x, y, z, h }.
+-- ---------------------------------------------------------------------
+local SPOTS = { coords = false, preview = true, book = true }
+
+local function round(n) return math.floor(n * 100 + 0.5) / 100 end
+
+local function headingOf(v)
+    local ok, h = pcall(function()
+        if type(v) == 'table' and v.x == nil then return v[4] end
+        if type(v) == 'table' and v.h ~= nil then return v.h end
+        return v.w
+    end)
+    h = ok and tonumber(h) or nil
+    if not h or not WCUtil.isFinite(h) then return 0.0 end
+    return round(h % 360)
+end
+
+local function plainSpot(v, withHeading)
+    local x, y, z = WCUtil.xyz(v)
+    if not x then return nil end
+    local out = { x = round(x), y = round(y), z = round(z) }
+    if withHeading then out.h = headingOf(v) end
+    return out
+end
+
+local function vectorOf(v, withHeading)
+    local x, y, z = WCUtil.xyz(v)
+    if not x then return nil end
+    if withHeading then return vector4(x, y, z, headingOf(v)) end
+    return vector3(x, y, z)
+end
+
+--- A place (Config.Locations shape) in plain form.
+function WCLocations.encode(loc)
+    if type(loc) ~= 'table' then return nil end
+    local out = {}
+    for k, v in pairs(loc) do
+        if SPOTS[k] == nil and k ~= 'npc' and k ~= 'chair' then out[k] = WCUtil.copy(v) end
+    end
+    for k, withHeading in pairs(SPOTS) do out[k] = plainSpot(loc[k], withHeading) end
+    if type(loc.npc) == 'table' then
+        local spot = plainSpot(loc.npc.coords, true)
+        if spot and type(loc.npc.model) == 'string' and loc.npc.model ~= '' then
+            spot.model = loc.npc.model
+            out.npc = spot
+        else
+            out.npc = false
+        end
+    elseif loc.npc == false then
+        out.npc = false
+    end
+    if type(loc.chair) == 'table' then
+        local spot = plainSpot(loc.chair.coords, true)
+        if spot then
+            spot.kind = loc.chair.kind == 'world' and 'world' or 'prop'
+            spot.model = loc.chair.model
+            out.chair = spot
+        end
+    end
+    return out
+end
+
+--- A plain place back in the Config.Locations shape (vectors).
+function WCLocations.decode(data)
+    if type(data) ~= 'table' then return nil end
+    local out = {}
+    for k, v in pairs(data) do
+        if SPOTS[k] == nil and k ~= 'npc' and k ~= 'chair' then out[k] = WCUtil.copy(v) end
+    end
+    for k, withHeading in pairs(SPOTS) do out[k] = vectorOf(data[k], withHeading) end
+    if type(data.npc) == 'table' then
+        local at = vectorOf(data.npc, true)
+        out.npc = (at and type(data.npc.model) == 'string' and data.npc.model ~= '')
+            and { model = data.npc.model, coords = at } or false
+    elseif data.npc == false then
+        out.npc = false
+    end
+    if type(data.chair) == 'table' then
+        local at = vectorOf(data.chair, true)
+        if at then
+            out.chair = { kind = data.chair.kind == 'world' and 'world' or 'prop',
+                          model = data.chair.model, coords = at }
+        end
+    end
+    return out
 end

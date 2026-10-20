@@ -37,7 +37,7 @@ class MigrationTests(unittest.TestCase):
         self.assertTrue(self.e('WCMigrations.done and WCMigrations.ok'))
         self.assertEqual(list(self.e('FakeDB.migrations').values()),
                          ['001_base_tables', '002_appearance_v3', '003_clothes_meta', '004_outfits',
-                          '005_clothes_paid', '006_colorways'])
+                          '005_clothes_paid', '006_colorways', '007_locations'])
         schema = self.rt.py(self.e('FakeDB.schema'))
         for col in ('charid', 'isMale', 'components', 'appearance', 'appearance_version', 'updated_at'):
             self.assertIn(col, schema['characters_appearence'])
@@ -79,7 +79,8 @@ class MigrationTests(unittest.TestCase):
         self.assertNotIn('004_outfits', list(self.e('FakeDB.migrations').values()))
         self.rt.run('FakeDB.fail = nil; ok2, applied2 = WCMigrations.run()')
         self.assertTrue(self.e('ok2'))
-        self.assertEqual(list(self.e('applied2').values()), ['004_outfits', '005_clothes_paid', '006_colorways'])
+        self.assertEqual(list(self.e('applied2').values()), ['004_outfits', '005_clothes_paid', '006_colorways',
+                                                           '007_locations'])
 
 
 class EconomyTests(unittest.TestCase):

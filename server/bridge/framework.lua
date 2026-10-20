@@ -193,6 +193,17 @@ local function registerLogTypes()
             description = 'خدمة عند الحلاق (شعر، لحية، تفاصيل) ودُفع ثمنها.',
             schema = { charid = { type = 'string', required = true }, price = 'any', sections = 'any', barber = 'any' },
         })
+
+        -- The services board (/servicesadmin): a staff member added, edited, moved or removed a place.
+        logger.RegisterLogType({
+            key = 'service_place_changed', label = 'Service Place Changed (/servicesadmin)',
+            channel = 'admin-services', severity = 'warn', class = 'admin.action',
+            description = 'تعديل أماكن الخدمات من لوحة الإدارة: متجر ملابس أو حلاق أو عيادة تجميل أو خزانة.',
+            schema = {
+                adminAction = { type = 'string', required = true },
+                place = 'any', placeType = 'any', detail = 'any',
+            },
+        })
     end)
 end
 

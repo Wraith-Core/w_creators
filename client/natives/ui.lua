@@ -53,3 +53,17 @@ function WCNative.ui.blankObjective()
     local b = WCNative.ui.printObjective()
     return a and b
 end
+
+--- DRAW_MARKER
+-- hash: 0x2A32FAA57B937173 · confidence: Verified (w_doorlock client/board.lua: the door picker's box and dot)
+-- params: kind (marker hash, e.g. 0x6EB7D3BB box, 0x50638AB9 sphere), x, y, z (floats), size (float),
+--   r, g, b, a (0-255) · returns: nothing
+-- limitations: one frame only (call it every frame); local to this client
+-- tested models: n/a · MP safe: yes · OneSync tested here: no
+function WCNative.ui.drawMarker(kind, x, y, z, size, r, g, b, a)
+    x, y, z, size = tonumber(x), tonumber(y), tonumber(z), tonumber(size) or 0.5
+    if not x or not y or not z then return false end
+    local ok = H.invoke(0x2A32FAA57B937173, kind, x + 0.0, y + 0.0, z + 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        size + 0.0, size + 0.0, size + 0.0, r or 255, g or 255, b or 255, a or 160, false, false, 0, false)
+    return ok
+end

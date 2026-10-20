@@ -82,3 +82,5 @@ if (IS_GAME) document.documentElement.classList.add('rsm-ingame');
 createRoot(document.getElementById('app')).render(<App />);
 
 import './responsive';
+// The services board: its own React root on #board, its own scoped styles (src/board/main.tsx)
+import './board/main';

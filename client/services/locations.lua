@@ -4,9 +4,13 @@
 --
 --  WCServicePoints: one w_lib walk-up prompt (w.prompt.at), one blip (w.blip.create) and one NPC
 --  (w.entity.create) per enabled location of an enabled service (clothing, wardrobe, barber,
---  surgery). w_lib owns the distance handling: nothing here scans the locations per frame. A
---  location with prompt = false gets nothing here (another resource provides the interaction, e.g.
---  the surgery clinics of w_ambulancejob through the server export OpenCosmeticSurgery). Opening
+--  surgery), plus a barber's own chair prop. w_lib owns the distance handling: nothing here scans the
+--  locations per frame. A location with prompt = false gets no prompt here (another resource provides
+--  the interaction, e.g. the surgery clinics of w_medic through the server export OpenCosmeticSurgery);
+--  its NPC and blip, when the board gave it any, are still drawn here. The places come from the
+--  server (server/locations/store.lua, edited with /servicesadmin): config/locations.lua is used until
+--  it answers, and every change rebuilds the points, never while a visit runs (WCServicePoints.rebuild).
+--  Opening
 --  hours hide the prompt while the location is closed: the rule of WCLocations.isOpen applied to the
 --  hour the server publishes (GlobalState[WCServicePoints.HOUR_KEY]); the client has no os library
 --  and the game clock is not the server's, so without a published hour the prompt shows and the
@@ -108,6 +112,7 @@ function F.blocked()
     if isDead() then return 'dead' end
     if WCState.inEditor() or ask(WCEditor, 'isOpen') then return 'editor' end
     if ask(WCPanel, 'isOpen') then return 'panel' end
+    if ask(WCBoard, 'isOpen') then return 'board' end -- the staff's services board (client/services/board.lua)
     if ask(WCPreviewEnv, 'active') then return 'preview' end
     if ask(CreatorScene, 'isLoaded') or ask(CreatorScene, 'isIsolated') then return 'scene' end
     for _, lock in ipairs(LOCKS) do
@@ -706,7 +711,7 @@ local ENTRY = {
     surgery = function() return WCSurgery end,
 }
 
-local points = {}   -- { loc, prompt, blip, npc }
+local points = {}   -- { loc, prompt, blip, npc, book, chair }
 
 local function interactKey()
     local key = Config.Keys and Config.Keys.interact
@@ -895,42 +900,103 @@ local function createNpc(loc)
     return ped
 end
 
---- Remove every prompt, blip, NPC and catalogue book.
+--- A barber's own chair (the board placed a prop; a chair of the map is already there).
+local function createChair(loc)
+    local chair = loc.chair
+    local x, y, z, h = CreatorScene.coords(chair.coords)
+    if not x or type(chair.model) ~= 'string' or chair.model == '' then return nil end
+    local ok, entity = pcall(w.entity.create, chair.model, vector4(x, y, z, h), false)
+    if not ok or type(entity) ~= 'number' or entity == 0 or not DoesEntityExist(entity) then
+        WCDebug.warn('services', 'chair of %s failed: %s', loc.id, tostring(entity))
+        return nil
+    end
+    pcall(FreezeEntityPosition, entity, true)
+    return entity
+end
+
+--- Remove every prompt, blip, NPC, catalogue book and chair.
 function P.clear()
     for _, point in ipairs(points) do
         if point.prompt then pcall(point.prompt.remove) end
         if point.blip then pcall(w.blip.remove, point.blip) end
         if point.npc then pcall(w.entity.delete, point.npc) end
         if point.book then pcall(WCCatalogue.remove, point.book) end
+        if point.chair then pcall(w.entity.delete, point.chair) end
     end
     points = {}
 end
 
---- (Re)build the prompts, blips and NPCs of every enabled location of every enabled service,
---  except the locations with prompt = false (another resource owns them: no prompt, blip or NPC).
---  Yields (the NPC models stream in). Returns the number of locations with something built.
+--- (Re)build the prompts, blips, NPCs, books and chairs of every enabled location of every enabled
+--  service. A location with prompt = false gets no prompt (another resource owns its interaction).
+--  Yields (the models stream in). Returns the number of locations with something built.
 ---@return integer
 function P.build()
     P.clear()
     for _, locationType in ipairs(P.TYPES) do
         for _, loc in ipairs(WCLocations.byType(locationType)) do
-            local anchor = loc.prompt ~= false and listed(loc) and WCLocations.anchor(loc) or nil
+            local anchor = listed(loc) and WCLocations.anchor(loc) or nil
             if anchor then
                 local point = { loc = loc }
-                point.prompt = createPrompt(point, anchor)
-                syncHours(point)
+                if loc.prompt ~= false then
+                    point.prompt = createPrompt(point, anchor)
+                    syncHours(point)
+                end
                 if type(loc.blip) == 'table' then point.blip = createBlip(loc, anchor) end
                 if type(loc.npc) == 'table' then point.npc = createNpc(loc) end
                 -- the catalogue book on a clothing store's counter (Config.Clothing.catalogue)
                 if loc.book ~= nil then point.book = WCCatalogue.spawn(loc) end
+                if type(loc.chair) == 'table' and loc.chair.kind == 'prop' then point.chair = createChair(loc) end
                 if WCLocations.access(loc) then watchAccess() end
-                if point.prompt or point.blip or point.npc or point.book then points[#points + 1] = point end
+                if point.prompt or point.blip or point.npc or point.book or point.chair then points[#points + 1] = point end
             end
         end
     end
     WCDebug.log('services', '%d service locations built', #points)
     return #points
 end
+
+-- ---------------------------------------------------------------------
+--  The places from the server (server/locations/store.lua)
+-- ---------------------------------------------------------------------
+local building, wanted = false, false
+
+--- A visit is running (its NPC, book or chair must not vanish under the player).
+local function visiting()
+    if F.busy() then return true end
+    return type(WCServiceSeat) == 'table' and WCServiceSeat.active() or false
+end
+
+--- Rebuild the points: one build at a time, and only once no visit runs.
+function P.rebuild()
+    wanted = true
+    if building then return end
+    building = true
+    CreateThread(function()
+        while wanted do
+            while visiting() do Wait(1000) end
+            wanted = false
+            local ok, err = pcall(P.build)
+            if not ok then WCDebug.warn('services', 'building the service locations failed: %s', tostring(err)) end
+        end
+        building = false
+    end)
+end
+
+--- Use the places the server sent (plain form, WCLocations.encode). Returns true when they were taken.
+function P.setPlaces(list)
+    if type(list) ~= 'table' or list.ok ~= nil then return false end
+    local decoded = {}
+    for _, data in ipairs(list) do
+        local loc = type(data) == 'table' and type(data.id) == 'string' and WCLocations.decode(data) or nil
+        if loc then decoded[#decoded + 1] = loc end
+    end
+    WCLocations.setList(decoded)
+    return true
+end
+
+RegisterNetEvent('w_creators:client:locations', function(list)
+    if P.setPlaces(list) then P.rebuild() end
+end)
 
 --- Re-apply the translated labels (language switch).
 function P.relabel()
@@ -954,8 +1020,10 @@ end
 function P.points() return points end
 
 CreateThread(function()
-    local ok, err = pcall(P.build)
-    if not ok then WCDebug.warn('services', 'building the service locations failed: %s', tostring(err)) end
+    -- the server's places first (nil while it has not loaded them: the broadcast brings them later)
+    local ok, list = pcall(w.callback.await, 'w_creators:locations:list', false)
+    if ok then P.setPlaces(list) end
+    P.rebuild()
 end)
 
 OnLanguageChange(function() P.relabel() end)
@@ -963,6 +1031,7 @@ OnLanguageChange(function() P.relabel() end)
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
     accessWatch = false
+    wanted = false
     local cleared, clearErr = pcall(P.clear)
     if not cleared then WCDebug.warn('services', 'removing the service locations failed: %s', tostring(clearErr)) end
     local ok, err = pcall(stopFlow)

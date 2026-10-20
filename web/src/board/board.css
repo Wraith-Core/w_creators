@@ -1,0 +1,813 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   w_creators · board/board.css - the services board, in the board kit's look
+   (w_centralbank web/src kit.css + board/board.css + app.css, the parts this board uses).
+
+   This page is shared with the character editor (#app), so NOTHING here is global: every rule is
+   scoped under .wcb-root (the board's own root, #board > .wcb-root) and the kit's resets are
+   rewritten for that root only. The kit's tokens are taken from the server's one theme
+   (w_lib/nui/theme, linked by index.html): the --w-* colours, the --w-f-* faces (Lalezar, Amiri,
+   Tajawal, EB Garamond, RDR Lino) and the --w-tex-* art (the torn edge, the grain, the band).
+
+   Ink and paper, one red used only as a mark: the ribbon on the card the cursor is in, the line
+   under the action it is on, an invalid underline.
+   Chromium 87: no :has(), :is(), :where(), container queries or aspect-ratio.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ══════════════════ The root: the kit's tokens, read from the theme ══════════════════ */
+.wcb-root {
+  --ink: var(--w-ink, #0A0A0A);
+  --ink-2: var(--w-ink-2, #111111);
+  --ink-3: var(--w-ink-3, #191919);
+  --ink-4: var(--w-ink-4, #222222);
+  --paper: var(--w-paper, #F2F2F2);
+  --paper-dim: var(--w-paper-dim, #B4B4B4);
+  --paper-faint: var(--w-paper-faint, #7A7A7A);
+  --rule: var(--w-rule, rgba(242, 242, 242, 0.16));
+  --rule-2: var(--w-rule-2, rgba(242, 242, 242, 0.32));
+  --red: var(--w-red, #CB0101);
+  --note: var(--w-note, #E9E9E9);
+  --note-ink: var(--w-note-ink, #111111);
+  --note-dim: var(--w-note-dim, #555555);
+  --note-rule: var(--w-note-rule, rgba(17, 17, 17, 0.18));
+
+  --f-serif: var(--w-f-text, 'EB Garamond', 'Amiri', Georgia, serif);
+  --f-mark: var(--w-f-display, 'RDR Lino', 'Lalezar', Georgia, serif);
+  --f-display: var(--w-f-title, 'EB Garamond', 'Lalezar', Georgia, serif);
+  --f-label: var(--w-f-label, 'EB Garamond', 'Tajawal', Georgia, serif);
+  --f-input: var(--w-f-input, 'EB Garamond', 'Tajawal', Georgia, serif);
+  --f-fig: 'EB Garamond', Georgia, serif;
+
+  --tex-tear: var(--w-tex-tear);
+  --tex-grain: var(--w-tex-grain);
+  --tex-band: var(--w-tex-band);
+  --tex-band-sm: var(--w-tex-band-sm);
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --edge: 1.35rem;
+
+  font-family: var(--f-serif);
+  font-size: 1rem;
+  line-height: normal;
+  color: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  font-synthesis: none;
+}
+
+/* the kit's resets, for the board only (the editor keeps its own) */
+.wcb-root *, .wcb-root *::before, .wcb-root *::after { box-sizing: border-box; }
+.wcb-root * { margin: 0; padding: 0; }
+.wcb-root button {
+  position: static;
+  isolation: auto;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: inherit;
+}
+.wcb-root input { font: inherit; color: inherit; letter-spacing: normal; text-transform: none; border-radius: 0; }
+.wcb-root ul { list-style: none; }
+.wcb-root svg { overflow: visible; }
+
+/* Figures: lining and tabular, left to right inside Arabic */
+.wcb-root .wf-num {
+  font-family: var(--f-fig);
+  font-variant-numeric: lining-nums tabular-nums;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* ══════════════════ The stage ══════════════════ */
+.wcb-root.wf { position: fixed; inset: 0; z-index: 20; }
+.wcb-root.wf.is-hidden { display: none; }
+
+.wcb-root .wf-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    rgba(10, 10, 10, 0.82) 0%, rgba(10, 10, 10, 0.64) 28%, rgba(10, 10, 10, 0.32) 48%,
+    rgba(10, 10, 10, 0.08) 62%, rgba(10, 10, 10, 0) 72%);
+  animation: wcb-fade 220ms var(--ease) both;
+}
+.wcb-root[dir='rtl'] .wf-scrim { transform: scaleX(-1); }
+
+.wcb-root .wf-panel {
+  position: absolute;
+  inset-inline-start: 5.4rem;
+  top: max(2rem, calc((100vh - 50rem) / 2));
+  width: 63rem;
+  height: 50rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  transition: opacity 180ms var(--ease), filter 180ms var(--ease);
+}
+.wcb-root .wf-panel.is-dim > :not(.wf-note) { opacity: 0.32; filter: saturate(0.6); }
+
+/* backwards, not both: a held end frame would keep overriding the opacity the dim (.is-dim) sets under a note */
+.wcb-root .wf-in { animation: wcb-rise 260ms var(--ease) backwards; animation-delay: calc(var(--i, 0) * 34ms); }
+@keyframes wcb-rise {
+  from { opacity: 0; transform: translate3d(0, 0.8rem, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes wcb-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* The thin paper strip at the board's outer edge, a sheet pinned to a board */
+.wcb-root .wf-strip {
+  position: absolute;
+  inset-inline-start: -1.95rem;
+  top: 3rem;
+  height: 58%;
+  width: 0.7rem;
+  background: #CFCFCF var(--tex-grain);
+  background-blend-mode: multiply;
+  -webkit-mask-box-image: var(--tex-tear) 64 fill / 0.26rem round;
+  filter: drop-shadow(0 0.3rem 0.5rem rgba(0, 0, 0, 0.5));
+  animation: wcb-fade 400ms var(--ease) 120ms both;
+}
+
+/* ══════════════════ The masthead ══════════════════ */
+.wcb-root .wf-mast {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  height: 2rem;
+  padding-inline: 0.4rem;
+  color: var(--paper-dim);
+  font: 400 0.95rem/1 var(--f-label);
+  text-shadow: 0 1px 0.4rem rgba(0, 0, 0, 0.6);
+}
+.wcb-root .wf-mark {
+  font: 400 1.45rem/1 var(--f-mark);
+  color: var(--paper);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.wcb-root .wf-mast-rule { flex: 1; height: 1px; background: var(--rule); }
+.wcb-root .wf-mast-item { display: inline-flex; align-items: center; gap: 0.45rem; white-space: nowrap; }
+.wcb-root .wf-mast-item b { color: var(--paper); font-weight: 500; font-size: 1.05rem; }
+.wcb-root:not(.is-rtl) .wf-mast-item { font-variant-caps: all-small-caps; letter-spacing: 0.08em; font-size: 1.05rem; }
+
+/* a short line under the masthead after an answer, gone by itself */
+.wcb-root .wf-flash {
+  position: absolute;
+  top: 2.08rem;
+  inset-inline: 0.4rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  font: 400 0.9rem/1.05rem var(--f-serif);
+  color: var(--paper);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 0.4rem rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  animation: wcb-fade 0.2s var(--ease) both;
+}
+.wcb-root .wf-flash::before { content: ''; flex: none; width: 5px; height: 5px; border: 1px solid var(--paper); transform: translateY(-0.1em); }
+.wcb-root .wf-flash.is-error::before { border: 0; width: 6px; height: 6px; background: var(--red); }
+
+/* ══════════════════ The cards ══════════════════
+   A wrapper carries the shadow (a mask clips its own element's shadow), the card inside is torn by
+   the mask; the lighter band inside the tear is an inset shadow the mask cuts along the tear. */
+.wcb-root .wf-wrap {
+  position: relative;
+  min-height: 0;
+  filter: drop-shadow(0 0.55rem 0.9rem rgba(0, 0, 0, 0.55));
+  transition: transform 160ms var(--ease);
+}
+.wcb-root .wf-card {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--ink-2);
+  background-image: linear-gradient(160deg, rgba(242, 242, 242, 0.035), rgba(242, 242, 242, 0) 55%);
+  box-shadow:
+    inset 0 0 1.25rem rgba(242, 242, 242, 0.11),
+    inset 0 0 0.45rem rgba(242, 242, 242, 0.1);
+  -webkit-mask-box-image: var(--tex-tear) 64 fill / var(--edge) round;
+  transition: background-color 160ms var(--ease), box-shadow 160ms var(--ease);
+}
+.wcb-root .wf-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--tex-grain);
+  background-size: 256px 256px;
+  opacity: 0.1;
+  mix-blend-mode: screen;
+  filter: invert(1);
+}
+.wcb-root .wf-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 0 rgba(242, 242, 242, 0), inset 0 0 0 0 rgba(242, 242, 242, 0);
+  transition: box-shadow 160ms var(--ease);
+}
+.wcb-root .wf-wrap.is-focus .wf-card {
+  background-color: var(--ink-3);
+  box-shadow:
+    inset 0 0 1.4rem rgba(242, 242, 242, 0.17),
+    inset 0 0 0.5rem rgba(242, 242, 242, 0.16);
+}
+.wcb-root .wf-wrap.is-focus .wf-card::before {
+  box-shadow: inset 0 0 0 0.45rem rgba(242, 242, 242, 0.12), inset 0 0 1.7rem rgba(242, 242, 242, 0.24);
+}
+
+/* The red ribbon on the card the cursor is in */
+.wcb-root .wf-tick {
+  position: absolute;
+  inset-inline-start: 0.15rem;
+  top: 1.5rem;
+  width: 0.4rem;
+  height: 3.2rem;
+  background: var(--red);
+  -webkit-mask-box-image: var(--tex-tear) 64 fill / 0.22rem round;
+  opacity: 0;
+  transform: scaleY(0.4);
+  transform-origin: top;
+  transition: opacity 140ms var(--ease), transform 180ms var(--ease);
+  pointer-events: none;
+  z-index: 5;
+}
+.wcb-root .wf-wrap.is-focus > .wf-tick { opacity: 1; transform: none; }
+
+.wcb-root .wf-card-body { position: relative; z-index: 2; height: 100%; display: flex; flex-direction: column; padding: 1.5rem 1.8rem 1.25rem; }
+.wcb-root .wf-card-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.wcb-root .wf-h {
+  font: 600 1.95rem/1.05 var(--f-display);
+  color: var(--paper);
+  letter-spacing: 0.005em;
+  text-shadow: 0 1px 0.6rem rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wcb-root .wf-kicker {
+  margin-bottom: 0.35rem;
+  font: 500 0.95rem/1.2 var(--f-label);
+  color: var(--paper-dim);
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.1em;
+}
+.wcb-root .wf-ico { flex: none; width: 1.6rem; height: 1.6rem; color: var(--paper-dim); transition: color 160ms var(--ease); }
+.wcb-root .is-focus .wf-ico { color: var(--paper); }
+
+.wcb-root .wf-head-wrap { flex: none; height: 6.4rem; }
+.wcb-root .wf-head .wf-card-body { justify-content: center; padding-block: 1.1rem; }
+.wcb-root .wf-head .wf-h { font-size: 1.8rem; }
+.wcb-root .wf-head .wf-ico { width: 2.1rem; height: 2.1rem; }
+.wcb-root .wf-head-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.4rem; }
+.wcb-root .wf-head-tags .wf-tag { margin-inline-start: 0; }
+
+/* ══════════════════ The list of places ══════════════════ */
+.wcb-root .wf-rows { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.wcb-root .wf-rows.is-scroll { overflow-y: auto; padding-inline-end: 0.3rem; }
+.wcb-root .wf-rows.is-scroll::-webkit-scrollbar { width: 3px; }
+.wcb-root .wf-rows.is-scroll::-webkit-scrollbar-thumb { background: var(--rule-2); }
+.wcb-root .wf-row {
+  position: relative;
+  isolation: isolate;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  height: 2.95rem;
+  padding: 0 0.9rem;
+  border-bottom: 1px solid var(--rule);
+  color: var(--paper);
+  cursor: pointer;
+  transition: color 120ms var(--ease), border-color 120ms var(--ease);
+}
+.wcb-root .wf-row::before {
+  content: '';
+  position: absolute;
+  inset: -1px -0.25rem 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--paper);
+  opacity: 0;
+  -webkit-mask: var(--tex-band) center / 100% 100% no-repeat;
+  transition: opacity 120ms var(--ease);
+}
+.wcb-root .wf-row.is-here { color: var(--ink); border-bottom-color: transparent; }
+.wcb-root .wf-row.is-here::before { opacity: 1; }
+/* the selected row while the cursor is elsewhere: framed, darker, and a paper tick at the end - never a second
+ * band (the band is the hover / cursor). A hover never moves this mark; a click, Enter or the arrows do. */
+.wcb-root .wf-row.is-picked { background: var(--ink-3); box-shadow: inset 0 0 0 1px var(--paper-dim); }
+.wcb-root .wf-row.is-picked::after {
+  content: ''; position: absolute;
+  inset-inline-end: 0.15rem; top: 28%; bottom: 28%;
+  width: 2px; background: var(--paper);
+}
+.wcb-root .wf-row-state { flex: none; width: 1.25rem; height: 1.25rem; color: var(--paper-dim); }
+.wcb-root .wf-row.is-here .wf-row-state { color: var(--ink); }
+.wcb-root .wf-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.12rem; }
+.wcb-root .wf-row-name { font: 500 1.14rem/1.15 var(--f-serif); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wcb-root .wf-row-meta {
+  display: flex;
+  gap: 0.5rem;
+  font: 500 0.82rem/1.1 var(--f-label);
+  color: var(--paper-faint);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.wcb-root:not(.is-rtl) .wf-row-meta { font-variant-caps: all-small-caps; letter-spacing: 0.08em; font-size: 0.92rem; }
+.wcb-root .wf-row.is-here .wf-row-meta { color: rgba(17, 17, 17, 0.62); }
+.wcb-root .wf-row-end { flex: none; font: 500 0.85rem/1 var(--f-label); color: var(--paper-dim); white-space: nowrap; }
+.wcb-root .wf-row.is-here .wf-row-end { color: var(--ink); }
+
+/* ══════════════════ Loading / empty / failed ══════════════════ */
+.wcb-root .wf-state {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.6rem;
+  margin-top: 1rem; padding-top: 0.8rem;
+  border-top: 1px solid var(--rule);
+  font: italic 400 1rem/1.4 var(--f-serif);
+  color: var(--paper-faint);
+}
+.wcb-root.is-rtl .wf-state { font-style: normal; }
+.wcb-root .wf-state.is-error { color: var(--paper); font-style: normal; }
+.wcb-root .wf-state.is-error::before { content: ''; width: 6px; height: 6px; background: var(--red); }
+
+/* ══════════════════ The page inside a card ══════════════════ */
+.wcb-root .wf-page { flex: 1; min-height: 0; overflow: hidden; }
+.wcb-root .wf-page.is-scroll { overflow-y: auto; padding-inline-end: 0.3rem; }
+.wcb-root .wf-page::-webkit-scrollbar { width: 3px; }
+.wcb-root .wf-page::-webkit-scrollbar-thumb { background: var(--rule-2); }
+.wcb-root .wf-note-line { margin-bottom: 0.8rem; font: 400 0.98rem/1.4 var(--f-serif); color: var(--paper-faint); }
+.wcb-root .wf-note-line.is-tight { margin: 0.35rem 0 0; font-size: 0.92rem; }
+
+/* ── A section inside a card ── */
+.wcb-root .wf-sec {
+  margin: 1.15rem 0 0.6rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--rule);
+  font: 500 0.88rem/1.1 var(--f-label);
+  color: var(--paper-dim);
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.1em;
+}
+.wcb-root .wf-tag {
+  display: inline-block;
+  margin-inline-start: 0.5rem;
+  padding: 0.06rem 0.45rem 0.12rem;
+  border: 1px solid rgba(242, 242, 242, 0.35);
+  font: 500 0.72rem/1.1 var(--f-label);
+  color: var(--paper-dim);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.wcb-root .wf-row .wf-tag { margin-inline-start: 0; }
+.wcb-root .wf-row.is-here .wf-tag { border-color: rgba(17, 17, 17, 0.5); color: var(--ink); }
+.wcb-root .wf-tag.is-hush { border-style: dashed; color: var(--paper-faint); border-color: rgba(242, 242, 242, 0.28); }
+.wcb-root .wf-tag.is-solid { background: var(--paper); border-color: var(--paper); color: var(--ink); }
+.wcb-root .wf-row.is-here .wf-tag.is-solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+
+/* ── Fields ── */
+.wcb-root .wf-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.85rem 1.1rem; align-items: end; }
+.wcb-root .wf-grid .is-wide { grid-column: 1 / -1; }
+.wcb-root .wf-field { display: flex; flex-direction: column; gap: 0.32rem; min-width: 0; }
+.wcb-root .wf-label {
+  font: 500 0.88rem/1.1 var(--f-label);
+  color: var(--paper-dim);
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wcb-root .wf-input {
+  width: 100%;
+  height: 2.3rem;
+  padding: 0 0.75rem;
+  border: 0;
+  outline: none;
+  background: var(--ink-2);
+  color: var(--paper);
+  box-shadow: inset 0 -1px 0 var(--rule-2);
+  font: 500 1.02rem/1.2 var(--f-input);
+  caret-color: var(--paper);
+  user-select: text;
+  transition: background-color 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+.wcb-root .wf-input::placeholder { color: var(--paper-faint); opacity: 1; }
+.wcb-root .wf-input::selection { background: rgba(242, 242, 242, 0.85); color: var(--ink); }
+.wcb-root .wf-input.is-num { font-family: var(--f-fig); font-variant-numeric: lining-nums tabular-nums; direction: ltr; text-align: start; }
+.wcb-root[dir='rtl'] .wf-input.is-num { text-align: end; }
+.wcb-root .wf-input.is-latin { font-family: var(--f-fig); direction: ltr; }
+.wcb-root[dir='rtl'] .wf-input.is-latin { text-align: end; }
+.wcb-root .wf-input.is-here, .wcb-root .wf-input:focus { background: var(--ink-3); box-shadow: inset 0 -2px 0 var(--paper); }
+.wcb-root .wf-input.is-invalid { box-shadow: inset 0 -2px 0 var(--red); }
+.wcb-root .wf-error {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  margin-top: 0.2rem;
+  font: 400 0.9rem/1.35 var(--f-serif);
+  color: var(--paper);
+}
+.wcb-root .wf-error::before { content: ''; flex: none; width: 6px; height: 6px; background: var(--red); transform: translateY(-0.15em); }
+.wcb-root .wf-warn {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+  margin-top: 0.2rem;
+  font: 400 0.9rem/1.35 var(--f-serif);
+  color: var(--paper-dim);
+}
+.wcb-root .wf-warn::before { content: ''; flex: none; width: 5px; height: 5px; border: 1px solid var(--paper-dim); transform: translateY(-0.15em); }
+
+/* The pause menu's on / off rows */
+.wcb-root .wf-switches { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 1.1rem; margin-top: 1rem; }
+.wcb-root .wf-switch-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.45rem 0.1rem;
+  border-top: 1px solid var(--rule);
+  font: 500 0.98rem/1.2 var(--f-serif);
+  color: var(--paper-dim);
+  text-align: start;
+  transition: color 140ms var(--ease);
+}
+.wcb-root .wf-switch-row > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wcb-root .wf-switch-row.is-here { color: var(--paper); }
+.wcb-root .wf-switch-row.is-locked { opacity: 0.45; cursor: default; }
+.wcb-root .wf-switch {
+  flex: none;
+  min-width: 3.2rem;
+  padding: 0.18rem 0.55rem 0.24rem;
+  border: 1px solid rgba(242, 242, 242, 0.35);
+  text-align: center;
+  font: 500 0.85rem/1.1 var(--f-label);
+  font-variant-caps: all-small-caps;
+  letter-spacing: 0.08em;
+  color: var(--paper-dim);
+}
+.wcb-root .wf-switch[data-on='true'] { background: var(--paper); border-color: var(--paper); color: var(--ink); }
+.wcb-root .wf-switch-row.is-here .wf-switch { border-color: var(--paper); box-shadow: inset 0 -0.14rem 0 var(--red); }
+
+/* A choice among a few (◀ value ▶): the game's own selection arrows */
+.wcb-root .wf-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 2.3rem;
+  padding: 0 0.35rem;
+  background: var(--ink-2);
+  box-shadow: inset 0 -1px 0 var(--rule-2);
+  cursor: pointer;
+  transition: background-color 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+.wcb-root .wf-stepper.is-here { background: var(--ink-3); box-shadow: inset 0 -2px 0 var(--paper); }
+.wcb-root .wf-stepper.is-invalid { box-shadow: inset 0 -2px 0 var(--red); }
+.wcb-root .wf-stepper.is-locked { opacity: 0.5; cursor: default; }
+.wcb-root .wf-stepper-arrow { display: grid; place-items: center; flex: none; width: 1.6rem; height: 1.6rem; color: var(--paper-dim); }
+.wcb-root .wf-stepper-arrow:hover { color: var(--paper); }
+.wcb-root .wf-stepper-arrow .wf-glyph { width: 0.9rem; height: 0.9rem; }
+.wcb-root[dir='rtl'] .wf-stepper-arrow .wf-glyph { transform: scaleX(-1); }
+.wcb-root .wf-stepper-value {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font: 500 1rem/1.2 var(--f-input);
+  color: var(--paper);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* "add" on the band texture */
+.wcb-root .wf-add {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.2rem;
+  padding: 0 1rem;
+  color: var(--paper-dim);
+  white-space: nowrap;
+  font: 500 0.98rem/1 var(--f-label);
+  transition: color 120ms var(--ease);
+}
+.wcb-root:not(.is-rtl) .wf-add { font-variant-caps: all-small-caps; letter-spacing: 0.1em; font-size: 1.08rem; }
+.wcb-root .wf-add::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--ink-3);
+  -webkit-mask: var(--tex-band-sm) center / 100% 100% no-repeat;
+  transition: background-color 120ms var(--ease);
+}
+.wcb-root .wf-add .wf-glyph { width: 0.85rem; height: 0.85rem; }
+.wcb-root .wf-add.is-here, .wcb-root .wf-add:hover { color: var(--ink); }
+.wcb-root .wf-add.is-here::before, .wcb-root .wf-add:hover::before { background: var(--paper); }
+
+/* The small actions on the band (the pause menu's buttons) */
+.wcb-root .wf-btns { display: flex; flex-wrap: wrap; gap: 0.45rem 0.55rem; margin-top: 0.45rem; }
+.wcb-root .wf-btn {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.1rem;
+  padding: 0 0.9rem;
+  color: var(--paper-dim);
+  white-space: nowrap;
+  font: 500 0.95rem/1 var(--f-label);
+  transition: color 120ms var(--ease);
+}
+.wcb-root:not(.is-rtl) .wf-btn { font-variant-caps: all-small-caps; letter-spacing: 0.09em; font-size: 1.05rem; }
+.wcb-root .wf-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--ink-3);
+  -webkit-mask: var(--tex-band-sm) center / 100% 100% no-repeat;
+  transition: background-color 120ms var(--ease);
+}
+.wcb-root .wf-btn .wf-glyph { width: 0.95rem; height: 0.95rem; }
+.wcb-root .wf-btn.is-quiet::before { background: transparent; }
+.wcb-root .wf-btn.is-here, .wcb-root .wf-btn:hover { color: var(--ink); }
+.wcb-root .wf-btn.is-here::before, .wcb-root .wf-btn:hover::before { background: var(--paper); }
+.wcb-root .wf-btn[aria-disabled='true'], .wcb-root .wf-add[aria-disabled='true'] { opacity: 0.4; cursor: default; }
+.wcb-root .wf-btn[aria-disabled='true'].is-here, .wcb-root .wf-add[aria-disabled='true'].is-here { opacity: 0.6; }
+
+/* ══════════════════ The actions strip ══════════════════ */
+.wcb-root .wf-actions-wrap { flex: none; height: 3.7rem; }
+.wcb-root .wf-actions { display: flex; align-items: center; justify-content: space-around; padding: 0 1.2rem; }
+.wcb-root .wf-act {
+  position: relative;
+  padding: 0.45rem 0.55rem 0.55rem;
+  font: 500 1.12rem/1 var(--f-serif);
+  color: var(--paper-dim);
+  white-space: nowrap;
+  transition: color 140ms var(--ease);
+}
+.wcb-root:not(.is-rtl) .wf-act { font-variant-caps: all-small-caps; letter-spacing: 0.09em; font-size: 1.24rem; }
+.wcb-root .wf-act::after {
+  content: '';
+  position: absolute;
+  inset-inline: 18%;
+  bottom: 0.05rem;
+  height: 0.16rem;
+  background: var(--red);
+  opacity: 0;
+  transform: scaleX(0.3);
+  transition: opacity 140ms var(--ease), transform 180ms var(--ease);
+}
+.wcb-root .wf-act.is-here { color: var(--paper); }
+.wcb-root .wf-act.is-here::after { opacity: 1; transform: none; }
+.wcb-root .wf-act.is-primary { color: var(--paper); }
+.wcb-root .wf-act[aria-disabled='true'] { opacity: 0.35; cursor: default; }
+.wcb-root .wf-act[aria-disabled='true'].is-here { opacity: 0.55; }
+
+/* ══════════════════ The paper note: are you sure? ══════════════════
+   The one light sheet: a note on paper, ink on it. */
+.wcb-root .wf-note {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 0.8rem 1.4rem rgba(0, 0, 0, 0.6));
+  animation: wcb-fade 160ms var(--ease) both;
+}
+.wcb-root .wf-note-plate {
+  position: relative;
+  width: 27rem;
+  padding: 2.2rem 2.4rem 1.7rem;
+  background: var(--note);
+  color: var(--note-ink);
+  text-align: center;
+  -webkit-mask-box-image: var(--tex-tear) 64 fill / var(--edge) round;
+  box-shadow: inset 0 0 2.4rem rgba(0, 0, 0, 0.28);
+  animation: wcb-rise 220ms var(--ease) both;
+}
+.wcb-root .wf-note-plate::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: var(--tex-grain);
+  background-size: 256px 256px;
+  opacity: 0.45;
+}
+.wcb-root .wf-note-plate > * { position: relative; }
+.wcb-root .wf-note-q { font: 600 1.7rem/1.25 var(--f-display); color: var(--note-ink); }
+.wcb-root .wf-note-sub { margin-top: 0.45rem; font: 400 1rem/1.4 var(--f-serif); color: var(--note-dim); }
+.wcb-root .wf-note-row { display: flex; justify-content: center; gap: 3.4rem; margin-top: 1.5rem; }
+.wcb-root .wf-choice {
+  position: relative;
+  padding: 0.3rem 0.8rem 0.45rem;
+  font: 600 1.3rem/1 var(--f-serif);
+  color: rgba(17, 17, 17, 0.6);
+}
+.wcb-root:not(.is-rtl) .wf-choice { font-variant-caps: all-small-caps; letter-spacing: 0.1em; font-size: 1.45rem; }
+.wcb-root .wf-choice::after {
+  content: '';
+  position: absolute;
+  inset-inline: 15%;
+  bottom: 0;
+  height: 0.18rem;
+  background: var(--red);
+  opacity: 0;
+  transition: opacity 140ms var(--ease);
+}
+.wcb-root .wf-choice.is-here { color: var(--ink); }
+.wcb-root .wf-choice.is-here::after { opacity: 1; }
+.wcb-root .wf-choice[aria-disabled='true'] { opacity: 0.4; cursor: default; }
+/* the name typed on the paper note */
+.wcb-root .wf-note-input {
+  display: block; width: 100%; height: 2.5rem;
+  margin-top: 1.05rem; padding: 0 0.8rem;
+  border: 0; outline: none;
+  background: rgba(17, 17, 17, 0.06);
+  color: var(--note-ink);
+  box-shadow: inset 0 -1px 0 var(--note-rule);
+  font: 500 1.2rem/1.2 var(--f-input);
+  text-align: center;
+  caret-color: var(--note-ink);
+  user-select: text;
+  transition: box-shadow 0.12s var(--ease);
+}
+.wcb-root .wf-note-input.is-here, .wcb-root .wf-note-input:focus { box-shadow: inset 0 -2px 0 var(--note-ink); }
+.wcb-root .wf-note-input.is-invalid { box-shadow: inset 0 -2px 0 var(--red); }
+.wcb-root .wf-note-input::selection { background: rgba(17, 17, 17, 0.85); color: var(--note); }
+
+/* ══════════════════ The glyphs ══════════════════ */
+.wcb-root .wf-glyph { display: block; flex: none; }
+
+/* ══════════════════ The side rail (the board's sections) ══════════════════ */
+.wcb-root .wf-bd-body { flex: 1; min-height: 0; display: flex; gap: 1.1rem; }
+.wcb-root .wf-bd-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1.1rem; }
+.wcb-root .wf-bd-rail { flex: none; width: 13.2rem; }
+.wcb-root .wf-bd-rail .wf-card-body { display: flex; flex-direction: column; padding: 1.35rem 1rem 1.1rem; }
+.wcb-root .wf-bd-sides { display: flex; flex-direction: column; gap: 0.2rem; margin-top: 0.35rem; }
+.wcb-root .wf-bd-side {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  height: 2.6rem;
+  padding: 0 0.7rem;
+  color: var(--paper-dim);
+  white-space: nowrap;
+  font: 500 1rem/1 var(--f-label);
+  transition: color 120ms var(--ease);
+}
+.wcb-root:not(.is-rtl) .wf-bd-side { font-variant-caps: all-small-caps; letter-spacing: 0.06em; font-size: 1.08rem; }
+.wcb-root .wf-bd-side::before {
+  content: '';
+  position: absolute;
+  inset: 0 -0.2rem;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--paper);
+  opacity: 0;
+  -webkit-mask: var(--tex-band-sm) center / 100% 100% no-repeat;
+  transition: opacity 120ms var(--ease);
+}
+.wcb-root .wf-bd-side::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: -0.35rem;
+  top: 22%;
+  bottom: 22%;
+  width: 2px;
+  background: var(--paper);
+  opacity: 0;
+  transition: opacity 120ms var(--ease);
+}
+.wcb-root .wf-bd-side.is-active { color: var(--paper); }
+.wcb-root .wf-bd-side.is-active::after { opacity: 1; }
+.wcb-root .wf-bd-side.is-here { color: var(--ink); }
+.wcb-root .wf-bd-side.is-here::before { opacity: 1; }
+.wcb-root .wf-bd-side-ico { flex: none; width: 1.2rem; height: 1.2rem; }
+.wcb-root .wf-bd-side-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wcb-root .wf-bd-side-num { flex: none; font-size: 0.92rem; opacity: 0.75; }
+.wcb-root .wf-bd-rail-hint {
+  margin-top: auto;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--rule);
+  font: 400 0.84rem/1.4 var(--f-serif);
+  color: var(--paper-faint);
+}
+
+/* ══════════════════ This board's own parts (wcb-) ══════════════════ */
+/* a section: the list beside the selected place's card */
+.wcb-root .wcb-split { flex: 1; min-height: 0; display: flex; gap: 1.1rem; }
+.wcb-root .wcb-list { flex: none; width: 21rem; }
+.wcb-root .wcb-place { flex: 1; min-width: 0; }
+.wcb-root .wcb-list .wf-card-body, .wcb-root .wcb-place .wf-card-body { padding: 1.3rem 1.4rem 1.1rem; }
+.wcb-root .wcb-head-end { flex: none; display: flex; align-items: center; gap: 0.8rem; }
+
+/* a place in the list: its name, its town, the spots it has */
+.wcb-root .wcb-row { height: auto; min-height: 2.95rem; padding: 0.5rem 0.7rem; gap: 0.65rem; align-items: center; }
+.wcb-root .wcb-row .wf-row-meta { align-items: center; margin-top: 0.1rem; }
+.wcb-root .wcb-town { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wcb-root .wcb-chips { display: flex; flex-wrap: wrap; gap: 0.1rem 0.6rem; margin-top: 0.15rem; }
+.wcb-root .wcb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  font: 500 0.78rem/1.15 var(--f-label);
+  color: var(--paper-faint);
+  white-space: nowrap;
+}
+.wcb-root .wcb-chip .wf-glyph { width: 0.75rem; height: 0.75rem; }
+.wcb-root .wcb-chip.is-on { color: var(--paper-dim); }
+.wcb-root .wf-row.is-here .wcb-chip { color: rgba(17, 17, 17, 0.5); }
+.wcb-root .wf-row.is-here .wcb-chip.is-on { color: var(--ink); }
+
+/* the selected place's card */
+.wcb-root .wcb-title { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.wcb-root .wcb-title-name {
+  min-width: 0;
+  font: 600 1.4rem/1.25 var(--f-display);
+  color: var(--paper);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wcb-root .wcb-title .wf-tag { margin-inline-start: 0; }
+.wcb-root .wcb-id { margin-top: 0.15rem; font: 500 0.8rem/1.2 var(--f-fig); color: var(--paper-faint); direction: ltr; unicode-bidi: isolate; }
+.wcb-root .wcb-place .wf-page { padding-top: 0.2rem; }
+.wcb-root .wcb-place .wf-sec:first-child { margin-top: 0.6rem; }
+
+/* a spot in the world: its name and where it is, then its buttons */
+.wcb-root .wcb-spots { display: flex; flex-direction: column; }
+.wcb-root .wcb-spot { padding: 0.55rem 0 0.65rem; border-top: 1px solid var(--rule); }
+.wcb-root .wcb-spot:first-child { border-top: 0; padding-top: 0.15rem; }
+.wcb-root .wcb-spot-head { display: flex; align-items: baseline; gap: 0.6rem; min-width: 0; }
+.wcb-root .wcb-spot-name { flex: none; font: 600 1rem/1.25 var(--f-label); color: var(--paper); }
+.wcb-root .wcb-spot-at { min-width: 0; font: 400 0.9rem/1.25 var(--f-serif); color: var(--paper-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wcb-root .wcb-spot-at.is-empty { color: var(--paper-faint); font-style: italic; }
+.wcb-root .wcb-spot-model { font: 500 0.82rem/1.2 var(--f-fig); color: var(--paper-faint); direction: ltr; unicode-bidi: isolate; }
+.wcb-root .wcb-spot .wf-btns { margin-top: 0.4rem; }
+.wcb-root .wcb-spot-model.is-words { font-family: var(--f-label); direction: inherit; }
+.wcb-root .wcb-spot-pick { margin-top: 0.45rem; }
+
+/* ══════════════════ Arabic ══════════════════
+   Never letter-spaced, never small caps. Lalezar is a poster face: a little smaller than the
+   Garamond it stands in for; Amiri runs small, a little larger. */
+.wcb-root .wf-ar { letter-spacing: 0; word-spacing: normal; font-variant-caps: normal; text-transform: none; font-style: normal; }
+.wcb-root.is-rtl .wf-label,
+.wcb-root.is-rtl .wf-kicker,
+.wcb-root.is-rtl .wf-switch,
+.wcb-root.is-rtl .wf-row-meta,
+.wcb-root.is-rtl .wf-row-end,
+.wcb-root.is-rtl .wf-mast,
+.wcb-root.is-rtl .wf-sec,
+.wcb-root.is-rtl .wf-tag,
+.wcb-root.is-rtl .wf-btn,
+.wcb-root.is-rtl .wf-add,
+.wcb-root.is-rtl .wf-bd-side { letter-spacing: 0; font-variant-caps: normal; }
+.wcb-root.is-rtl .wf-h { font-weight: 400; font-size: 1.8rem; line-height: 1.3; letter-spacing: 0; }
+.wcb-root.is-rtl .wf-head .wf-h { font-size: 1.7rem; }
+.wcb-root.is-rtl .wf-mark { text-transform: none; letter-spacing: 0; font-size: 1.55rem; }
+.wcb-root.is-rtl .wf-note-q { font-weight: 400; font-size: 1.6rem; line-height: 1.5; }
+.wcb-root.is-rtl .wf-label { font-weight: 700; font-size: 0.82rem; }
+.wcb-root.is-rtl .wf-kicker { font-weight: 700; font-size: 0.86rem; }
+.wcb-root.is-rtl .wf-switch { font-weight: 700; font-size: 0.8rem; }
+.wcb-root.is-rtl .wf-mast { font-size: 0.9rem; font-weight: 700; }
+.wcb-root.is-rtl .wf-act { font-weight: 700; font-size: 1.1rem; }
+.wcb-root.is-rtl .wf-add { font-weight: 700; font-size: 0.95rem; }
+.wcb-root.is-rtl .wf-choice { font-weight: 700; font-size: 1.35rem; }
+.wcb-root.is-rtl .wf-switch-row { font-weight: 700; }
+.wcb-root.is-rtl .wf-row-name { font-size: 1.18rem; line-height: 1.3; }
+.wcb-root.is-rtl .wf-row-meta { font-weight: 700; font-size: 0.8rem; }
+.wcb-root.is-rtl .wf-row-end { font-weight: 700; font-size: 0.85rem; }
+.wcb-root.is-rtl .wf-sec { font-weight: 700; font-size: 0.84rem; }
+.wcb-root.is-rtl .wf-tag { font-weight: 700; }
+.wcb-root.is-rtl .wf-btn { font-weight: 700; font-size: 0.92rem; }
+.wcb-root.is-rtl .wf-bd-side { font-weight: 700; font-size: 0.98rem; }
+.wcb-root.is-rtl .wcb-title-name { font-weight: 400; font-size: 1.35rem; line-height: 1.4; }
+.wcb-root.is-rtl .wcb-chip, .wcb-root.is-rtl .wcb-spot-name { font-weight: 700; }
+.wcb-root.is-rtl .wcb-spot-at.is-empty { font-style: normal; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wcb-root .wf-in, .wcb-root .wf-scrim, .wcb-root .wf-strip, .wcb-root .wf-note, .wcb-root .wf-note-plate, .wcb-root .wf-flash { animation: none; }
+}

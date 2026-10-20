@@ -22,6 +22,7 @@ shared_scripts {
     'config/spawn.lua',
     'config/outfits.lua',
     'config/voice.lua',
+    'config/board.lua',
     -- shared modules
     'shared/util.lua',
     'shared/result.lua',
@@ -77,6 +78,7 @@ client_scripts {
     'client/wardrobe/wardrobe.lua',
     'client/barber/barber.lua',
     'client/surgery/surgery.lua',
+    'client/services/board.lua',  -- the staff's services board (/servicesadmin)
     'client/spawn/selector.lua',
     'client/spawn/spawn.lua',
     'client/respawn/respawn.lua',
@@ -113,6 +115,8 @@ server_scripts {
     'server/barber/barber.lua',
     'server/barber/grooming.lua',
     'server/surgery/surgery.lua',
+    -- the service places edited in game (/servicesadmin)
+    'server/locations/store.lua',
     'server/spawn/spawn.lua',
     'server/respawn/respawn.lua',
     'server/dev/tools.lua',
