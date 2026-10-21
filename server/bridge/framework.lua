@@ -63,6 +63,16 @@ local function registerLogTypes()
             },
         })
 
+        -- 2026-10-21: a name change bought in the server store (server/characters/rename.lua)
+        logger.RegisterLogType({
+            key = 'character_renamed', label = 'Character Renamed',
+            channel = 'character-create', severity = 'info', class = 'system',
+            description = 'لاعب غيّر اسم شخصيته بتذكرة تغيير اسم اشتراها من متجر السيرفر.',
+            schema = {
+                charid = 'any', from = 'any', to = { type = 'string', required = true },
+            },
+        })
+
         logger.RegisterLogType({
             key = 'character_selected', label = 'Character Selected',
             channel = 'character-select', severity = 'info', class = 'system',

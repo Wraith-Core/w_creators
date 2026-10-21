@@ -2,7 +2,7 @@ fx_version "adamant"
 games { "rdr3" }
 rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships.'
 lua54 'yes'
-version '1.0.1' -- released 1.0.0 (store, 2026-10-21); 1.0.1 = the VIP character slot
+version '1.0.2' -- 1.0.1 = the VIP character slot; 1.0.2 (2026-10-21) = store slots + name change
 
 -- =====================================================================
 --  w_creators v3 - the character lifecycle authority: account -> characters -> selection ->
@@ -70,6 +70,7 @@ client_scripts {
     'client/editor/panel.lua',
     -- domains
     'client/characters/selector.lua',
+    'client/characters/rename.lua',   -- 2026-10-21: the store's name change (/changename)
     'client/creator/creator.lua',
     'client/creator/cutscene.lua',
     'client/clothing/catalogue.lua', -- the store's catalogue book: used by the service points and flow
@@ -104,6 +105,7 @@ server_scripts {
     'server/voice/speak.lua',
     -- characters
     'server/characters/characters.lua',
+    'server/characters/rename.lua',   -- 2026-10-21: the store's name change (/changename)
     -- scene
     'server/scene.lua',
     -- domains
