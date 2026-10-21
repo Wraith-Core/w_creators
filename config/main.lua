@@ -50,7 +50,9 @@ Config.Characters = {
     -- Character slots per account.
     defaultSlots = 3,
     -- Extra slots by ACE permission: { ['w_creators.slots.vip'] = 5 }. The highest granted value wins.
-    slotPermissions = {},
+    -- 2026-10-21: every VIP tier (w_vip grants this node to the group vip.bronze, inherited by every higher
+    -- tier) has 4 characters in total (owner: ONE extra slot only). Without w_vip nobody holds the node.
+    slotPermissions = { ['w_creators.slots.vip'] = 4 },
     -- Switching characters mid-game (/characters). Refused while dead, in an editor or in a session.
     allowSwitch = true,
 
