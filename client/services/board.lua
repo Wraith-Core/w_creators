@@ -22,8 +22,6 @@ local open = false      -- on screen, or stepped aside while a world editor runs
 local working = false   -- a world editor / the chair picker runs
 local data = nil        -- the last board data from the server
 
-local MARKER_BOX <const> = 0x6EB7D3BB
-local MARKER_SPHERE <const> = 0x50638AB9
 local PICK_DISTANCE = 25.0
 
 -- The page's words (ids the page asks for; Lua owns the text: locale keys = the Arabic text).
@@ -270,11 +268,9 @@ local function pickChair(place)
         local hit, entity, endCoords = w.raycast.fromCamera(1 | 16, 4, PICK_DISTANCE)
         local object = hit and entity and entity ~= 0 and GetEntityType(entity) == 3 and entity or nil
         if not object and hit and endCoords then object = chairNear(endCoords) end
-        if object then
-            local c = centreOf(object)
-            WCNative.ui.drawMarker(MARKER_BOX, c.x, c.y, c.z, 0.7, 242, 242, 242, 110)
-        end
-        if hit and endCoords then WCNative.ui.drawMarker(MARKER_SPHERE, endCoords.x, endCoords.y, endCoords.z, 0.12, 242, 242, 242, 160) end
+        -- the owner 2026-10-23: the game's glitter instead of DrawMarker (w_lib 4.1.0 w.glow.frame, look 2)
+        if object then w.glow.frame('chair', 'point', centreOf(object), { look = 2, scale = 1.6 }) end
+        if hit and endCoords then w.glow.frame('aim', 'point', endCoords, { look = 2, scale = 0.5 }) end
         if pressed.pick then
             pressed.pick = false
             if object then
