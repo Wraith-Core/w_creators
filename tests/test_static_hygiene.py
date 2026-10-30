@@ -34,6 +34,7 @@ SERVER_PRINTS = (
 
 # Event / callback names used on one side only, on purpose.
 EXTERNAL = {
+    'chat:addSuggestion': 'consumed by w_chat/client/main.lua command suggestions',
     # server -> other resources
     'w_creators:server:characterCreated': "consumed by w_lib's w_core bridge (framework-bridge/cores/w_core/server.lua)",
     # client -> other resources (local events)

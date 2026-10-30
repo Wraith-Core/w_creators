@@ -392,3 +392,16 @@ function w.framework:getUser(src)
     if not state then return nil end
     return setmetatable({ src = src, state = state }, User)
 end
+
+-- Native resource KVP boundary; no filesystem writes in unit tests.
+FakeResourceKvp = {}
+function GetResourceKvpString(key) return FakeResourceKvp[key] end
+function SetResourceKvp(key, value) FakeResourceKvp[key] = value end
+
+-- State-bag registration is needed by the sibling medic client; handlers stay inert unless fired.
+StateBagHandlers = {}
+function AddStateBagChangeHandler(key, bag, handler)
+    StateBagHandlers[#StateBagHandlers + 1] = { key = key, bag = bag, handler = handler }
+    return #StateBagHandlers
+end
+function RemoveStateBagChangeHandler(id) StateBagHandlers[id] = nil end

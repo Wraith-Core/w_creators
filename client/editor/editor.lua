@@ -1203,6 +1203,8 @@ local function respond(s, result, light)
     if not out.ok then
         out.code = result.code
         out.message = L(result.message or WCResult.messageKey(result.code))
+        local receipt = type(result.data) == 'table' and result.data.refundId
+        if type(receipt) == 'string' then out.message = out.message .. ' ' .. L('رقم الإيصال: %s', receipt) end
     end
     if s.closed then
         out.closed = true

@@ -43,18 +43,25 @@ function E.charge(src, amount, reason, currency)
     if value == 0 then return WCResult.ok({ charged = 0, currency = currency or 'cash' }) end
     local u = user(src)
     if not u then return WCResult.fail('NO_CHARACTER') end
+    -- Avoid a debit call when the observed balance already proves insufficiency. Once the
+    -- bridge tries to move money, its boolean false can also mean an unknown ledger commit.
+    local read, balance = pcall(u.getMoney, u, moneyType)
+    if not read or type(balance) ~= 'number' or not WCUtil.isFinite(balance) then
+        return WCResult.fail('ECONOMY_NOT_READY')
+    end
+    if balance < value then return WCResult.fail('INSUFFICIENT_FUNDS') end
     local ok, paid = pcall(u.canBuy, u, value, moneyType, true)
     if not ok then
         WCDebug.warn('economy', 'charge failed for %s: %s', tostring(src), tostring(paid))
-        return WCResult.fail('INTERNAL_ERROR')
+        return WCResult.fail('INTERNAL_ERROR', { paymentUncertain = true })
     end
-    if paid ~= true then return WCResult.fail('INSUFFICIENT_FUNDS') end
+    if paid ~= true then return WCResult.fail('INSUFFICIENT_FUNDS', { paymentUncertain = true }) end
     WCDebug.log('economy', 'charged %s %.2f %s (%s)', tostring(src), value, tostring(currency or 'cash'), tostring(reason))
     return WCResult.ok({ charged = value, currency = currency or 'cash' })
 end
 
 --- Give cash (or `currency`) back. true when refunded (or nothing to refund).
-function E.refund(src, amount, reason, currency)
+function E.refundOutcome(src, amount, reason, currency)
     local value = E.amount(amount)
     if not value then return false end
     local moneyType = E.currencyId(currency)
@@ -63,15 +70,21 @@ function E.refund(src, amount, reason, currency)
     local u = user(src)
     if not u then
         WCDebug.warn('economy', 'refund of %.2f (%s) to %s failed: no user', value, tostring(reason), tostring(src))
-        return false
+        return false, 'offline'
     end
     local ok, result = pcall(u.addMoney, u, value, moneyType)
-    if not ok or result == false then
+    if not ok or result ~= true then
         WCDebug.warn('economy', 'refund of %.2f (%s) to %s failed: %s', value, tostring(reason), tostring(src),
             tostring(ok and result or result))
-        return false
+        return false, 'uncertain'
     end
-    return true
+    return true, 'confirmed'
+end
+
+--- Preserve the public boolean-only API used by resale and other callers.
+function E.refund(src, amount, reason, currency)
+    local refunded = E.refundOutcome(src, amount, reason, currency)
+    return refunded
 end
 
 --- charge -> pcall(persistFn) -> refund on failure. Charges at most once.
@@ -80,31 +93,70 @@ end
 --  as-is, persistence failures as the returned Result or DATABASE_ERROR) with data.refunded.
 --  `currency` ('cash' by default) is charged and refunded alike.
 function E.withCharge(src, amount, reason, persistFn, currency)
-    local charge = E.charge(src, amount, reason, currency)
-    if not charge.ok then return charge end
+    local value = E.amount(amount)
+    if not value then return WCResult.fail('INVALID_PRICE') end
+    if E.currencyId(currency) == nil then return WCResult.fail('CURRENCY_NOT_ACCEPTED') end
+    local receipt
+    if value > 0 then
+        local refusal
+        receipt, refusal = WCRefunds.prepare(src, value, currency, reason)
+        if not receipt then return refusal end
+    end
+    local function run()
+    local charge = E.charge(src, value, reason, currency)
+    if not charge.ok then
+        local uncertain = charge.data and charge.data.paymentUncertain
+        if receipt then WCRefunds.update(receipt, uncertain and 'review' or 'cancelled') end
+        if receipt and uncertain then
+            return WCResult.fail('REFUND_REVIEW', { refundId = receipt.id, amount = value,
+                currency = currency or 'cash', paymentUncertain = true })
+        end
+        return charge
+    end
     local charged = charge.data.charged
+    if receipt then
+        local recorded = WCRefunds.update(receipt, 'charged')
+        if not recorded then
+            local failure = WCResult.fail('REFUND_REVIEW', { refundId = receipt.id, refunded = false })
+            failure.charged, failure.currency = charged, currency or 'cash'
+            return failure
+        end
+        receipt = recorded
+    end
 
     local ok, res, extra = pcall(persistFn)
     local failed = not ok or res == false or (WCResult.is(res) and not res.ok)
     if not failed then
+        if receipt then WCRefunds.update(receipt, 'delivered') end
         local result = WCResult.is(res) and res or WCResult.ok(res)
         result.charged = charged
         result.currency = currency or 'cash'
         return result
     end
 
-    local refunded = E.refund(src, charged, reason, currency)
-    if not refunded then
-        CreatorLogs.Emit('security_violation', {
-            playerSource = tonumber(src), kind = 'refund_failed',
-            detail = ('%.2f %s'):format(charged, tostring(reason)), reason = 'refund_failed',
-        })
-    end
+    local refunded, final = charged == 0, receipt
+    if receipt then refunded, final = WCRefunds.refund(src, receipt, true) end
     WCDebug.warn('economy', 'persist failed after charging %s %.2f (%s): %s', tostring(src), charged,
         tostring(reason), tostring(ok and (WCResult.is(res) and res.code or extra) or res))
     local failure = (ok and WCResult.is(res)) and res or WCResult.fail('DATABASE_ERROR')
+    if not refunded then
+        local pending = final and final.state == 'pending'
+        failure = WCResult.fail(pending and 'REFUND_PENDING' or 'REFUND_REVIEW')
+        CreatorLogs.Emit('security_violation', { playerSource = tonumber(src), kind = 'refund_failed',
+            charid = receipt.charid, detail = receipt.id, reason = 'refund_failed' })
+    end
     failure.data = type(failure.data) == 'table' and failure.data or { detail = failure.data }
-    failure.data.refunded = refunded
-    failure.charged = 0
+    failure.data.refunded, failure.data.refundId = refunded, receipt and receipt.id or nil
+    failure.data.amount, failure.data.currency = charged, currency or 'cash'
+    failure.charged = refunded and 0 or charged
+    failure.currency = currency or 'cash'
     return failure
+    end
+    if not receipt then return run() end
+    local result, reason = WCRefunds.guard(src, receipt, run)
+    if WCResult.is(result) then return result end
+    local uncertain = reason == 'generation_callback_failed'
+    WCRefunds.update(receipt, uncertain and 'review' or 'cancelled')
+    return WCResult.fail(uncertain and 'REFUND_REVIEW' or 'ECONOMY_NOT_READY',
+        { refundId = receipt.id, paymentUncertain = uncertain })
 end

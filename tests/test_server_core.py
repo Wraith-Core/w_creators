@@ -150,7 +150,7 @@ class EconomyTests(unittest.TestCase):
         self.assertTrue(any(e.event == 'security_violation' and e.payload.kind == 'refund_failed'
                             for e in self.e('LogEmits').values()))
         canbuys = [c for c in self.e('MoneyCalls').values() if c.op == 'canBuy']
-        self.assertEqual(len(canbuys), 6)  # one charge attempt per withCharge call
+        self.assertEqual(len(canbuys), 5)  # insufficient funds are rejected before any debit attempt
 
 
 class SecurityTests(unittest.TestCase):
