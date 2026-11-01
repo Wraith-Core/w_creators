@@ -14,6 +14,9 @@ Config.Voice = {
         -- focused person are muted while ours are shown
         greetControl = 'INPUT_INTERACT_LOCKON_POS',
         antagonizeControl = 'INPUT_INTERACT_LOCKON_NEG',
+        -- 1.0.7: the letters w_lib's prompt frame draws beside the two rows (the controls' default keys)
+        greetKey = 'R',
+        antagonizeKey = 'F',
         -- lines every voice of AppearanceSchema.SPEECH_VOICES has (checked against the game's voice banks);
         -- male / female = the sex of the person spoken to
         lines = {
