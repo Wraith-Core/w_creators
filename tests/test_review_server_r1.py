@@ -490,6 +490,7 @@ class GroomingSteadyStateTests(unittest.TestCase):
     def test_a_fully_grown_character_is_not_rewritten(self):
         rt = services_server()
         rt.run(r'''
+            Config.Grooming.enabled = true -- growth ships off; this covers the feature
             Config.Grooming.saveIntervalSeconds = 300
             Config.Grooming.minutesPerStage.hair = 1; Config.Grooming.minutesPerStage.beard = 1
             function step(seconds) Clock.now = Clock.now + seconds * 1000; WCGroomingServer.tick() end

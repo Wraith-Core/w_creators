@@ -62,6 +62,7 @@ class BarberTests(unittest.TestCase):
         return self.e('c')
 
     def test_open_payload(self):
+        self.rt.run('Config.Grooming.enabled = true')  # growth ships off; the plate is checked with it on
         o = self.open()
         self.assertTrue(o.ok, o.code)
         self.assertTrue(self.e('S.equal(o.data.appearance, savedApp)'))

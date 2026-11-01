@@ -135,6 +135,69 @@ class TaxonomyCoverageTests(unittest.TestCase):
         self.assertEqual(len(seen), 35)
 
 
+# Only the real w_lib catalogue has a beard group that mixes several beards (the fixture catalogue
+# does not), so this runs only on a PC with w_lib beside w_creators; elsewhere it is SKIPPED.
+@unittest.skipUnless(REAL_CATALOG, 'w_lib catalogue not available')
+class RealBeardCatalogTests(unittest.TestCase):
+    """w_lib's last male beard group holds M_BEARD_019..024 mixed together without names: split
+    into one model per beard, a colour step never changes the beard's shape."""
+
+    def setUp(self):
+        self.rt = Runtime(catalog='real').load_shared()
+        self.e = self.rt.eval
+        self.rt.run('cat = WCCatalog.forSex("male").mustache; raw = w.component.getFullPedComponentList().male.mustache')
+
+    def models(self):
+        """[(style key or None, [(hash, name), ...]), ...] per model."""
+        out = []
+        for m in range(1, int(self.e('#cat.models')) + 1):
+            variants = [(self.e('cat.models[%d][%d].hash' % (m, v)), self.e('cat.models[%d][%d].name' % (m, v)))
+                        for v in range(1, int(self.e('#cat.models[%d]' % m)) + 1)]
+            keys = {self.e('WCCatalog.variantStyleKey(cat.models[%d][%d])' % (m, v)) for v in range(1, len(variants) + 1)}
+            self.assertEqual(len(keys), 1, (m, keys))  # one style per model
+            out.append((keys.pop(), variants))
+        return out
+
+    def test_every_beard_model_is_one_style(self):
+        models = self.models()
+        self.assertEqual(len(models), 26)
+        # beards 1-18 as before; 19-24 = M_BEARD_019..024 (the old mixed model 19), named
+        for m, (key, variants) in enumerate(models[:24], start=1):
+            self.assertEqual(key, 'M_BEARD_%03d' % m, m)
+            self.assertEqual(len(variants), 17, key)
+            if m > 18:
+                self.assertEqual(self.e('WCCatalog.styleName("male", "mustache", %d)' % m),
+                                 self.e('WCCatalog.STYLE_NAMES.%s' % key))
+        # every colour named, in the catalogue's colour order (as beard 18 lists them)
+        order = [self.e('WCCatalog.colorSuffix("%s")' % name) for _, name in models[17][1]]
+        self.assertEqual(len(set(order)), 17)
+        for key, variants in models[18:24]:
+            self.assertEqual([self.e('WCCatalog.colorSuffix("%s")' % name) for _, name in variants], order, key)
+        # the two hashes of no known beard: each a model of its own (one hash = one model)
+        self.assertEqual([(key, [h for h, _ in variants]) for key, variants in models[24:]],
+                         [(None, [1744685570]), (None, [4127777233])])
+        # every hash points back at its own model and colour
+        total = 0
+        for m, (_, variants) in enumerate(models, start=1):
+            for v, (h, _) in enumerate(variants, start=1):
+                self.assertEqual((self.e('cat.hashes[%d].model' % h), self.e('cat.hashes[%d].variant' % h)), (m, v))
+                total += 1
+        self.assertEqual(total, 18 * 17 + 104)
+
+    def test_legacy_model_variant_values_resolve_to_the_same_beard(self):
+        self.assertEqual(self.e('#cat.legacy'), 19)
+        for value, h in (('{19, 1}', 17656519), ('{19, 40}', 1744685570), ('{19, 104}', 4214953211),
+                         ('{5, 3}', 2377311071), ('{ model = 19, variant = 2 }', 19363891)):
+            self.assertEqual(self.e('WCCatalog.resolve("male", "mustache", %s)' % value), h, value)
+        # every { group, variant } of the catalogue as it is
+        for g in range(1, int(self.e('#raw')) + 1):
+            for v in range(1, int(self.e('#raw[%d].variations' % g)) + 1):
+                self.assertEqual(self.e('WCCatalog.resolve("male", "mustache", {%d, %d})' % (g, v)),
+                                 self.e('WCUtil.u32(raw[%d].variations[%d].hash)' % (g, v)), (g, v))
+        # the other categories are not split
+        self.assertIsNone(self.e('WCCatalog.forSex("male").hair.legacy'))
+
+
 class RulesTests(unittest.TestCase):
     def setUp(self):
         self.rt = Runtime().load_shared()

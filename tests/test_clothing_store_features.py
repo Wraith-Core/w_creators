@@ -1158,6 +1158,33 @@ function lastOf(op)
 end
 '''
 
+# The store camera's wall probe (WCNative.camera.firstWall): Walls are lines y = <y> across the room
+# (optionally only from minX / up to maxX); the probe answers the first one its line crosses, the
+# way GET_SHAPE_TEST_RESULT answers (retval, hit 1/0, end coords, normal, entity).
+WALL_STUBS = r'''
+Walls, Probes = {}, {}
+local invoke = Citizen.InvokeNative
+Citizen.InvokeNative = function(hash, ...)
+    if hash ~= 0x377906D8A31E5586 then return invoke(hash, ...) end
+    local x1, y1, z1, x2, y2, z2, flags, ignore, options = ...
+    Probes[#Probes + 1] = { x1, y1, z1, x2, y2, z2, flags = flags, ignore = ignore, options = options }
+    return #Probes
+end
+function GetShapeTestResult(handle)
+    local p, best = Probes[handle], nil
+    for _, wall in ipairs(Walls) do
+        if (p[2] - wall.y) * (p[5] - wall.y) < 0 then
+            local t = (wall.y - p[2]) / (p[5] - p[2])
+            local x = p[1] + (p[4] - p[1]) * t
+            if x >= (wall.minX or -math.huge) and x <= (wall.maxX or math.huge) and (not best or t < best) then best = t end
+        end
+    end
+    if not best then return 2, 0, vector3(0, 0, 0), vector3(0, 0, 0), 0 end
+    return 2, 1, vector3(p[1] + (p[4] - p[1]) * best, p[2] + (p[5] - p[2]) * best, p[3] + (p[6] - p[3]) * best),
+        vector3(0, -1, 0), 0
+end
+'''
+
 
 def geometry(rt, heading):
     """Where the last camera stands relative to the ped facing `heading`: (ahead, right, up,
@@ -1273,6 +1300,75 @@ class StoreCameraTests(unittest.TestCase):
             self.assertAlmostEqual(aim[3] - p.y, 0.03 + 0.1, places=3)
             self.assertEqual(self.e('lastOf("SetCamFov")')[2], 30.0)
             self.assertFalse(math.isnan(cam[2]))
+
+    def test_a_store_camera_a_wall_hides_is_kept_in_front_of_it(self):
+        # The Valentine hotel room in Arabic, the Tumbleweed booth: the store's framing stood inside
+        # or behind a wall and, aimed at the player, showed the wall. Heading 0: ahead is +y, right +x.
+        import math
+        self.run(WALL_STUBS)
+        margin, least = self.e('WCCamera.WALL_MARGIN'), self.e('WCCamera.WALL_MIN')
+        self.assertEqual((margin, least), (0.15, 0.45))
+
+        def shot(view):
+            self.run('clearLog(); WCCamera.focus("%s", true)' % view)
+            return self.e('lastOf("SetCamCoord")'), self.e('lastOf("PointCamAtCoord")')
+
+        def walled(view, wall, seen=True, lang='ar'):
+            """The camera of `view` with no wall, then with a wall across the room at y = wall."""
+            self.run('Walls = {}')
+            self.open_on(0.0, 0.0, 0.0, 0.0, 0.0, lang)
+            p = self.e('Peds[MyPed].coords')
+            cam0, aim0 = shot(view)
+            self.run('Walls = { { y = %r } }; Probes = {}' % wall)  # both sides walled in
+            cam, aim = shot(view)
+            x0, y0, x, y = cam0[2] - p.x, cam0[3] - p.y, cam[2] - p.x, cam[3] - p.y
+            self.assertGreater(y0, wall, view)                          # the framing stood behind it
+            want = max(wall / y0 * math.hypot(x0, y0) - margin, least)  # the wall's distance on its line
+            self.assertAlmostEqual(math.hypot(x, y), want, places=3, msg=view)
+            if want > least:
+                self.assertLess(y, wall, view)                          # in front of the wall
+            self.assertAlmostEqual(x * y0, y * x0, places=4, msg=view)  # on its line to the player
+            self.assertAlmostEqual(cam[4], cam0[4], places=4, msg=view)  # at the same height
+            for i in (2, 3, 4):
+                self.assertAlmostEqual(aim[i], aim0[i], places=4, msg=view)  # aimed at the same point
+            # the probe runs from the player at the camera's height, on the map only, past the player
+            probe = self.e('Probes[1]')
+            self.assertEqual((probe[1], probe[2], probe[3]), (p.x, p.y, cam0[4]))
+            self.assertEqual((probe.flags, probe.ignore, probe.options), (1, self.e('MyPed'), 7))
+            if seen:
+                self.assertTrue(geometry(self.rt, 0.0)[5], view)        # the player is in the picture
+
+        walled('fullBody', 1.2)  # the mirrored and the unmirrored side both walled in
+        walled('feet', 0.9)
+        walled('face', 0.8)      # a bone framing (frameBone)
+        walled('fullBody', 0.3, seen=False)  # a wall right in front: never nearer than WALL_MIN
+        # one hand on its named bone (the store's bone framing falls back to it)
+        self.run('''
+            BoneAxes = -1
+            GetEntityBoneIndexByName = function(e, name) return name == 'SKEL_L_Hand' and 10 or -1 end
+            GetWorldPositionOfEntityBone = function(e, i) local c = Peds[e].coords return vector3(c.x - 0.3, c.y, c.z + 0.1) end
+        ''')
+        walled('handLeft', 0.6, seen=False)  # the hand, not the body, is the picture here
+        self.assertAlmostEqual(self.e('lastOf("PointCamAtCoord")')[2], -0.3, places=3)
+        self.run('BoneAxes = 1')
+
+        # walled in on the mirrored side only: Jump On's own (unmirrored) framing, at its full distance
+        self.open_on(0.0, 0.0, 0.0, 0.0, 0.0, 'ar')
+        self.run('Walls = { { y = 1.2, maxX = -0.05 } }')
+        cam, aim = shot('fullBody')
+        self.assertEqual([round(v, 3) for v in (cam[2], cam[3], aim[2])], [0.5, 2.0, 0.5])
+        # in English that side is the framing itself: unchanged
+        self.open_on(0.0, 0.0, 0.0, 0.0, 0.0, 'en')
+        cam, aim = shot('fullBody')
+        self.assertEqual([round(v, 3) for v in (cam[2], cam[3], aim[2])], [0.5, 2.0, 0.5])
+
+        # only the store and the wardrobe: the other editors never probe and keep their framings
+        self.run('WCCamera.close(); Walls = { { y = 1.2 } }; Probes = {}; LocaleKey = "en";'
+                 ' Peds[MyPed].heading = 0.0; clearLog(); WCCamera.open(MyPed)')
+        self.assertIsNone(self.e('WCCamera.currentSet()'))
+        self.assertEqual(self.e('#Probes'), 0)
+        self.assertAlmostEqual(self.e('lastOf("SetCamCoord")')[3] - self.e('Peds[MyPed].coords').y,
+                               self.e('WCCamera.PRESETS.fullBody.distance'), places=3)
 
     def test_a_turned_player_is_framed_from_where_the_camera_opened(self):
         # the player's own turn never swings the camera, the bone framings included

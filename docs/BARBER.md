@@ -67,9 +67,14 @@ Growth is never charged.
 
 ## 3. Grooming (hair and beard growth)
 
+**Growth ships disabled** (`enabled = false`, owner 2026-11-01, v1.0.5): no automatic growth, the barber
+is only for picking a style. The feature below stays in the code and can be turned back on with
+`enabled = true`. Saved appearances keep their `grooming` field; looks that already grew are not reverted
+(the player picks a style again at the barber).
+
 ```
 Config.Grooming = {
-    enabled = true,
+    enabled = false,
     minutesPerStage = { hair = 120, beard = 60 },
     stages = {
         male   = { hair = { ...3 prefixes }, beard = { ...3 prefixes } },

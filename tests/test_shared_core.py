@@ -195,6 +195,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(self.e('Config.Spawn.points[9].order'), 9)
         self.assertAlmostEqual(self.e('Config.Spawn.firstSpawn.coords.x'), -274.09)
         self.assertEqual(self.e('Config.Spawn.selector.transition'), 350)
+        self.assertFalse(self.e('Config.Grooming.enabled'))  # owner 2026-11-01: no automatic growth
         self.assertEqual(self.e('Config.Grooming.minutesPerStage.beard'), 60)
         self.assertEqual(self.e('Config.Grooming.saveIntervalSeconds'), 300)
         self.assertEqual(self.e('Config.CosmeticSurgery.price'), 500.0)

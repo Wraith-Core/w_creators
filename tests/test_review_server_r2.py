@@ -381,6 +381,7 @@ class RuntimeStateTests(unittest.TestCase):
 
     def test_a_grown_stage_keeps_the_raised_bandana(self):
         self.rt.run('''
+            Config.Grooming.enabled = true -- growth ships off; this covers the feature
             Config.Grooming.minutesPerStage.hair = 1; Config.Grooming.saveIntervalSeconds = 3600
             Clock.now = Clock.now + 0; WCGroomingServer.tick()
             Clock.now = Clock.now + 30000; WCGroomingServer.tick()
@@ -583,6 +584,7 @@ class GrowthPlateTests(unittest.TestCase):
     def setUp(self):
         self.rt = services_server()
         self.e = self.rt.eval
+        self.rt.run('Config.Grooming.enabled = true')  # growth ships off; the plate is checked with it on
 
     def open(self):
         self.rt.run('Clock.now = Clock.now + 11000; WCSessions.clear(1); o = WCBarberService.open(1, "valentine_barber")')

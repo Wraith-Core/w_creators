@@ -2,7 +2,7 @@ fx_version "adamant"
 games { "rdr3" }
 rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships.'
 lua54 'yes'
-version '1.0.4' -- 1.0.1 = the VIP character slot; 1.0.2 (2026-10-21) = store slots + name change; 1.0.3 (2026-10-23) = the chair picker's marks in the game's glitter (w_lib 4.1.0)
+version '1.0.5' -- 1.0.1 = the VIP character slot; 1.0.2 (2026-10-21) = store slots + name change; 1.0.3 (2026-10-23) = the chair picker's marks in the game's glitter (w_lib 4.1.0); 1.0.5 (2026-11-01) = no automatic hair/beard growth, the store camera stays in front of walls, a beard colour keeps the beard (beards 019-024 by name)
 
 -- =====================================================================
 --  w_creators v3 - the character lifecycle authority: account -> characters -> selection ->

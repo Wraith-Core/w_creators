@@ -244,6 +244,7 @@ class ApiReviewRegressionTests(unittest.TestCase):
 
     def test_set_skin_folds_the_pending_growth(self):
         self.rt.run('''
+            Config.Grooming.enabled = true -- growth ships off; this covers the feature
             Config.Grooming.saveIntervalSeconds = 3600
             WCGroomingServer.tick(); for _ = 1, 9 do Clock.now = Clock.now + 30000; WCGroomingServer.tick() end
         ''')

@@ -6,9 +6,12 @@
 --  forSex(sex)[category] = {
 --      models = { [m] = { { hash, name }, ... } },          -- m = 1.. over non-empty catalogue groups
 --      hashes = { [hash] = { model, variant, name } },
+--      legacy = { [g] = { { hash, name }, ... } },          -- split categories only (SPLIT_STYLES)
 --  }
 --  Model numbering matches the pre-v3 resource (empty groups are skipped) so legacy v1
---  { model, variant } appearances resolve to the same items.
+--  { model, variant } appearances resolve to the same items. A category whose groups mix several
+--  styles (SPLIT_STYLES: the beards) gets one model per style; its legacy values resolve through
+--  `legacy`, the groups as the catalogue lists them.
 -- =====================================================================
 
 WCCatalog = {}
@@ -35,6 +38,10 @@ local COLOR_KEYS = {
     SALT_PEPPER = 'ملح وفلفل', JET_BLACK = 'أسود فاحم',
 }
 C.COLOR_KEYS = COLOR_KEYS
+-- The same colours in the catalogue's own order (as w_lib lists every named beard group).
+local COLOR_ORDER = { 'BLONDE', 'BROWN', 'DARK_BLONDE', 'DARKEST_BROWN', 'DARK_GINGER', 'DARK_GREY', 'GINGER',
+                      'GREY', 'JET_BLACK', 'LIGHT_BLONDE', 'LIGHT_BROWN', 'LIGHT_GINGER', 'LIGHT_GREY',
+                      'MEDIUM_BROWN', 'SALT_PEPPER', 'STRAWBERRY_BLONDE', 'UNCLE_GREY' }
 
 -- The game's style names of the hair, beard and teeth assets (the MP creator's names), keyed by
 -- the asset's base name without the CLOTHING_ITEM_ prefix and the colour: 'M_HAIR_016' is every
@@ -86,21 +93,30 @@ local function styleKeyOf(hashname)
 end
 
 -- A few catalogue groups carry no asset names (only hashes): their style is found by hashing every
--- named base with every hair colour once (a lazy hash -> key index).
-local hashStyle
-local function styleKeyOfHash(hash)
+-- named base with every hair colour once (a lazy hash -> key index, with the asset name).
+local hashStyle, hashName
+local function hashIndex()
     if not hashStyle then
-        hashStyle = {}
+        hashStyle, hashName = {}, {}
         for base in pairs(STYLE_NAMES) do
             if base:find('_HAIR_') or base:find('_BEARD_') then
                 for colour in pairs(COLOR_KEYS) do
-                    local h = WCUtil.u32(GetHashKey(('CLOTHING_ITEM_%s_%s'):format(base, colour)))
-                    if h then hashStyle[h] = base end
+                    local name = ('CLOTHING_ITEM_%s_%s'):format(base, colour)
+                    local h = WCUtil.u32(GetHashKey(name))
+                    if h then hashStyle[h], hashName[h] = base, name end
                 end
             end
         end
     end
+end
+local function styleKeyOfHash(hash)
+    hashIndex()
     return hashStyle[WCUtil.u32(hash) or -1]
+end
+--- The asset name of a nameless catalogue hash ('CLOTHING_ITEM_M_BEARD_019_BLONDE'), or nil.
+local function nameOfHash(hash)
+    hashIndex()
+    return hashName[WCUtil.u32(hash) or -1]
 end
 
 --- The style-name key of one catalogue variant { hash, name }, or nil.
@@ -111,7 +127,8 @@ end
 
 --- The translated name of a style (a catalogue model of hair / mustache / teeth): the game's name
 --  when most of its variants are one named asset, else the numbered "<category> NN" label. A group
---  that mixes several styles (a beard group holding six beards) keeps its number.
+--  that mixes several styles keeps its number (the beard group that held six beards is split into
+--  one model per beard, SPLIT_STYLES).
 function C.styleName(sex, category, model)
     local cat = C.forSex(sex)[category]
     local variants = cat and cat.models[WCUtil.int(model, 1, nil, 0)] or nil
@@ -137,6 +154,52 @@ function C.colorSuffix(hashname)
     if type(hashname) ~= 'string' then return nil end
     local upper = hashname:upper()
     return upper:match('_HAIR_%d+_(.+)$') or upper:match('_BEARD_%d+_(.+)$')
+end
+
+-- Categories whose catalogue groups can mix several styles. w_lib's last male beard group holds
+-- M_BEARD_019..024 (17 colours each) mixed together, sorted by hash and without asset names, plus two
+-- hashes of no known beard: as one model, every colour step put on another beard. Such a group is
+-- split into one model per style (its colours in the catalogue's colour order) and one model per
+-- variant of no known style, so a colour change never changes the shape. A nameless variant gets
+-- its asset name back from its hash (colour label and swatch, the colour kept on a style change).
+local SPLIT_STYLES = { mustache = true }
+
+local COLOR_RANK = {}
+for i, colour in ipairs(COLOR_ORDER) do COLOR_RANK[colour] = i end
+
+--- The models of one catalogue group: the group itself when it is one style (or holds no known
+--  style at all), else one model per style key in key order, then one per variant of no known style.
+local function splitByStyle(variants)
+    local byKey, keys, rest, pos = {}, {}, {}, {}
+    for i, v in ipairs(variants) do
+        pos[v] = i
+        local key = C.variantStyleKey(v)
+        if key then
+            if not byKey[key] then
+                byKey[key] = {}
+                keys[#keys + 1] = key
+            end
+            local list = byKey[key]
+            list[#list + 1] = v
+        else
+            rest[#rest + 1] = v
+        end
+    end
+    if #keys == 0 or (#keys == 1 and #rest == 0) then return { variants } end
+    table.sort(keys)
+    local last = #COLOR_ORDER + 1
+    local function before(a, b)
+        local ra, rb = COLOR_RANK[C.colorSuffix(a.name) or ''] or last, COLOR_RANK[C.colorSuffix(b.name) or ''] or last
+        if ra ~= rb then return ra < rb end
+        return pos[a] < pos[b]
+    end
+    local out = {}
+    for _, key in ipairs(keys) do
+        table.sort(byKey[key], before)
+        out[#out + 1] = byKey[key]
+    end
+    for _, v in ipairs(rest) do out[#out + 1] = { v } end
+    return out
 end
 
 local cache = {}
@@ -166,24 +229,35 @@ function C.forSex(sex)
     for _, category in ipairs(WCUtil.sortedKeys(source)) do
         local groups = source[category]
         local entry = { models = {}, hashes = {} }
+        local split = SPLIT_STYLES[category]
+        if split then entry.legacy = {} end
         if type(groups) == 'table' then
             for _, group in ipairs(groups) do
                 local variations = type(group) == 'table' and group.variations
                 if type(variations) == 'table' and #variations > 0 then
-                    local model = #entry.models + 1
                     local variants = {}
                     for _, variant in ipairs(variations) do
                         local hash = type(variant) == 'table' and WCUtil.u32(variant.hash)
-                        -- Every numeric variant keeps its position (pre-v3 numbering); a duplicate
-                        -- hash maps to its last position, as before.
                         if hash then
                             local name = type(variant.hashname) == 'string' and variant.hashname or ''
+                            if name == '' and split then name = nameOfHash(hash) or '' end
                             variants[#variants + 1] = { hash = hash, name = name }
-                            entry.hashes[hash] = { model = model, variant = #variants, name = name }
                             if not index[hash] then index[hash] = category end
                         end
                     end
-                    if #variants > 0 then entry.models[model] = variants end
+                    if #variants > 0 then
+                        -- the group as the catalogue lists it: the pre-v3 { model, variant } numbering
+                        if split then entry.legacy[#entry.legacy + 1] = variants end
+                        for _, part in ipairs(split and splitByStyle(variants) or { variants }) do
+                            local model = #entry.models + 1
+                            entry.models[model] = part
+                            -- Every numeric variant keeps its position (pre-v3 numbering outside the
+                            -- split categories); a duplicate hash maps to its last position, as before.
+                            for i, v in ipairs(part) do
+                                entry.hashes[v.hash] = { model = model, variant = i, name = v.name }
+                            end
+                        end
+                    end
                 end
             end
         end
@@ -212,7 +286,8 @@ function C.resolve(sex, category, value)
     local cat = C.forSex(sex)[category]
     if not cat then return nil end
     if type(value) == 'table' and value.hash == nil then
-        local model = cat.models[WCUtil.int(value[1] or value.model, nil, nil, 0)]
+        -- a split category keeps the catalogue's own numbering for these (cat.legacy)
+        local model = (cat.legacy or cat.models)[WCUtil.int(value[1] or value.model, nil, nil, 0)]
         if not model then return nil end
         local variant = model[WCUtil.int(value[2] or value.variant, nil, nil, 1)]
         return variant and variant.hash or nil

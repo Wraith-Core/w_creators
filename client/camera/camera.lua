@@ -10,6 +10,7 @@
 --  A service flow can fix that direction and the framings first (Cam.anchor): the clothing store
 --  and the wardrobe frame from the fitting stand's own heading with the store framings
 --  (Cam.SETS.shop), never from whatever heading the player happens to have when the camera opens.
+--  A store framing that a wall would hide is kept in front of that wall (keepInRoom).
 --  Camera natives are the plain named ones (CreateCam, SetCamCoord, ...), as §0.4 allows.
 -- =====================================================================
 
@@ -116,6 +117,10 @@ Cam.HOLD_TOLERANCE = 1.0
 Cam.BONE_MIN_AHEAD = 0.25
 Cam.BONE_MIN_RISE = 0.85
 Cam.BONE_MIN_REACH, Cam.BONE_MAX_REACH = 0.2, 3.0
+--- A store camera that a wall hides (keepInRoom, the 'shop' set only) is pulled in to WALL_MARGIN
+--  metres short of the wall, never nearer than WALL_MIN metres to the player.
+Cam.WALL_MARGIN = 0.15
+Cam.WALL_MIN = 0.45
 
 local st = {
     camA = nil, camB = nil, active = nil,
@@ -223,6 +228,41 @@ local function namedBone(ped, name)
     return x, y, z
 end
 
+--- The camera at (cx, cy, cz) moved in front of the first wall on the level line from the ped to
+--  it: x, y, and whether a wall was in the way (unchanged when the line is clear).
+local function pullIn(ped, cx, cy, cz)
+    local at = GetEntityCoords(ped)
+    local hit, hx, hy = WCNative.camera.firstWall(at.x, at.y, cz, cx, cy, cz, ped)
+    if not hit then return cx, cy, false end
+    local dx, dy = cx - at.x, cy - at.y
+    local len = math.sqrt(dx * dx + dy * dy)
+    if len <= 0 then return cx, cy, true end
+    local free = math.sqrt((hx - at.x) ^ 2 + (hy - at.y) ^ 2)
+    -- never pushed further out than the framing itself (WALL_MIN could exceed a short line)
+    local keep = math.min(math.max(free - Cam.WALL_MARGIN, Cam.WALL_MIN), len)
+    return at.x + dx * keep / len, at.y + dy * keep / len, true
+end
+
+--- The store framings (Cam.SETS.shop) are Jump On's numbers, measured on its own stands without
+--  the mirror and with nothing checking for walls. At some of our stands the mirrored camera
+--  (right-to-left languages) or even the plain one stood inside or behind a wall (the Valentine
+--  hotel room in Arabic, the Tumbleweed booth), and since it keeps aiming at the player the screen
+--  showed the wall. A store camera at (cx, cy, cz) aimed at (tx, ty) therefore:
+--    1. stays where it is when no wall is in the way (a clear stand looks exactly as before);
+--    2. else takes the unmirrored framing alt = { cx, cy, tx, ty } (Jump On's tested side), when
+--       the mirror moved it and that side is clear;
+--    3. else is pulled in along its line to the player (pullIn).
+--  Returns the camera's x, y and its target's x, y (the heights never change).
+local function keepInRoom(ped, cx, cy, cz, tx, ty, alt)
+    local px, py, blocked = pullIn(ped, cx, cy, cz)
+    if not blocked then return cx, cy, tx, ty end
+    if alt then
+        local _, _, altBlocked = pullIn(ped, alt[1], alt[2], cz)
+        if not altBlocked then return alt[1], alt[2], alt[3], alt[4] end
+    end
+    return px, py, tx, ty
+end
+
 --- A framing measured on one bone (a Cam.SETS preset with boneId): the camera and its target are
 --  the bone's position moved by the preset's offsets, exactly as GetPedBoneCoords moves them. Both
 --  are then taken into the ped's own frame (right, ahead, up at its live heading) and laid out
@@ -259,6 +299,8 @@ local function frameBone(ped, d)
         or reach < Cam.BONE_MIN_REACH or reach > Cam.BONE_MAX_REACH then
         return false
     end
+    -- the bone framings are never mirrored: no other side to try
+    if st.set == 'shop' then cx, cy = keepInRoom(ped, cx, cy, cz + st.height, tx, ty) end
     place(cx, cy, cz + st.height, tx, ty, tz + st.height, d.fov - st.zoom, bone.x, bone.y, bone.z)
     return true
 end
@@ -286,7 +328,16 @@ local function frame(presetName)
             local frontX, frontY = -math.sin(angle), math.cos(angle)
             local tx, ty = bx + rightX * side, by + rightY * side
             local tz = bz + (d.offset or 0.0) + st.height
-            place(tx + frontX * d.distance, ty + frontY * d.distance, tz, tx, ty, tz, d.fov - st.zoom, bx, by, bz)
+            local cx, cy = tx + frontX * d.distance, ty + frontY * d.distance
+            if st.set == 'shop' then
+                -- the unmirrored framing, when the mirror moved this one
+                local alt = side ~= d.side and {
+                    bx + rightX * d.side + frontX * d.distance, by + rightY * d.side + frontY * d.distance,
+                    bx + rightX * d.side, by + rightY * d.side,
+                } or nil
+                cx, cy, tx, ty = keepInRoom(ped, cx, cy, tz, tx, ty, alt)
+            end
+            place(cx, cy, tz, tx, ty, tz, d.fov - st.zoom, bx, by, bz)
             st.preset = presetName
             return true
         end
@@ -321,6 +372,15 @@ local function frame(presetName)
     local cx = at.x + rightX * camSide + frontX * d.distance
     local cy = at.y + rightY * camSide + frontY * d.distance
     local cz = tz + rise
+    if st.set == 'shop' then
+        -- the unmirrored framing, when the mirror moved this one
+        local alt = (side ~= d.side or camSide ~= (d.camSide or d.side)) and {
+            at.x + rightX * (d.camSide or d.side) + frontX * d.distance,
+            at.y + rightY * (d.camSide or d.side) + frontY * d.distance,
+            at.x + rightX * d.side, at.y + rightY * d.side,
+        } or nil
+        cx, cy, tx, ty = keepInRoom(ped, cx, cy, cz, tx, ty, alt)
+    end
     place(cx, cy, cz, tx, ty, tz, d.fov - st.zoom, at.x, at.y, at.z)
     st.preset = presetName
     return true

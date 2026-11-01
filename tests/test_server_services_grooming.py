@@ -24,7 +24,8 @@ class GroomingTests(unittest.TestCase):
         self.rt = services_server()
         self.e = self.rt.eval
         self.rt.run(HELPERS)
-        self.rt.run('Config.Grooming.saveIntervalSeconds = 300')
+        # growth ships off (config/barber.lua); these tests cover the feature, which stays in the code
+        self.rt.run('Config.Grooming.enabled = true; Config.Grooming.saveIntervalSeconds = 300')
 
     def test_saves_only_at_the_interval_without_per_tick_database_access(self):
         self.rt.run('step(0)')  # starts tracking

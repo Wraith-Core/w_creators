@@ -36,7 +36,7 @@ Config.Barber = {
 --  and when the player drops (no per-tick database writes).
 -- ---------------------------------------------------------------------
 Config.Grooming = {
-    enabled = true,
+    enabled = false, -- owner 2026-11-01: no automatic growth; the barber is only for picking a style
     minutesPerStage = { hair = 120, beard = 60 },
     stages = {
         male = {
