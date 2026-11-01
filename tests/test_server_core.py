@@ -112,6 +112,11 @@ class EconomyTests(unittest.TestCase):
         self.assertEqual((call.op, call.moneyType, call.remove), ('canBuy', 0, True))
         self.rt.run('r = WCEconomy.charge(1, 1000, "x")')
         self.assertEqual(self.e('r.code'), 'INSUFFICIENT_FUNDS')
+        # 1.0.6: the price and what he holds
+        self.assertEqual(self.e('r.detail.key'), self.e('WCResult.details.funds_cash'))
+        self.assertEqual((self.e('r.detail.args[1]'), self.e('r.detail.args[2]')), ('1000', '89.99'))
+        self.assertEqual(self.e('WCResult.text(r, function(k, ...) return k:format(...) end)'), 'السعر 1000$ ومعك 89.99$')
+        self.assertEqual(self.e('WCResult.text(WCResult.fail("BUSY"), function(k) return k end)'), self.e('WCResult.messageKey("BUSY")'))
         self.assertAlmostEqual(self.e('FakeUsers[1].money'), 89.99)
         self.rt.run('r = WCEconomy.charge(9, 1, "x")')
         self.assertEqual(self.e('r.code'), 'NO_CHARACTER')

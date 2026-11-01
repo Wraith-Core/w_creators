@@ -33,11 +33,14 @@
 
 `exports.w_creators:OpenWardrobe()` متاح للموارد الأخرى. الأسعار والمواقع تضبط من ملفات `config/*.lua` (المواقع في `config/locations.lua`)، ولا تُقبل أسعار من الواجهة.
 
-## نمو الشعر واللحية
+## الحلاق، ونمو الشعر واللحية (متوقف)
+
+**النمو التلقائي متوقف منذ 1.0.5 (طلب المالك 2026-11-01):** `Config.Grooming.enabled = false`، فلا يطول الشعر ولا اللحية
+وحدهما، والحلاق لاختيار القصة فقط. ما يلي يصف النمو كما يعمل لو أُعيد تشغيله (`enabled = true`).
 
 إعدادات `config/barber.lua` (`Config.Grooming` و`Config.Barber`):
 
-- `Config.Grooming.enabled`: تشغيل النمو.
+- `Config.Grooming.enabled`: تشغيل النمو (الافتراضي الآن `false`).
 - `minutesPerStage.hair = 120` و`beard = 60`: دقائق اللعب الفعلية لكل مرحلة.
 - `stages`: أسماء موديلات MP لمراحل نمو مستقلة لشعر الرجال والنساء وللحية الرجال. يحتفظ الانتقال بدرجة اللون.
 - `Config.Barber.services.{hair,facialHair,details}.price`: سعر كل خدمة تتغير في الزيارة (الافتراضي 10 للشعر و10 للحية و5 للتفاصيل)، و`Config.Barber.prices.visitCap = 10`: أقصى ما تكلفه زيارة واحدة (`nil` = بلا حد).
@@ -88,7 +91,7 @@
 
 w_creators v3 is the server authority for the whole character lifecycle: account → characters
 (selection, creation, deletion, switching) → identity → persistent appearance → clothing ownership →
-saved outfits → runtime clothing states → barber and hair/beard growth → cosmetic surgery → spawn →
+saved outfits → runtime clothing states → barber (hair/beard growth: off since 1.0.5) → cosmetic surgery → spawn →
 respawn after death. The binding contract is `docs/ARCHITECTURE.md`; the public integration surface
 is `docs/API.md`.
 
@@ -135,7 +138,7 @@ ensure w_ambulancejob       # optional
 | `config/main.lua` | `Config.Debug`, `Config.Framework`, `Config.Services`, `Config.Characters`, `Config.Creator`, `Config.Scene`, `Config.Experimental`, `Config.Keys`, `Config.Admin` | service toggles, slots, deletion, identity rules, selection/gender prompts, creator stages and cutscene, the creator room, research flags (all off), keys, admin ACEs and dev tools |
 | `config/locations.lua` | `Config.LocationDefaults`, `Config.Locations` | every clothing store, wardrobe, barber and surgery clinic: `id`, `type`, `enabled`, `coords`, `interactionRadius`, `npc`, `blip`, `prompt`, `preview`, `camera`, `storeProfile`, `pricingProfile`, `allowedServices`, `hours`, `book` (the store's catalogue book), `outfits`, `access` (jobs / ACE) |
 | `config/clothing.lua` | `Config.Clothing` (`taxonomy`, `prices`, `modelPrices`, `payment`, `tints`, `storeProfiles`, `pricingProfiles`, `resell`, `suggestions`, `fittingLight`, `catalogue`, `items`, `applyOrder`, `rules`, `essentialNotRemovable`), `Config.ClothingStates` (+ `commands`, `bandanaStateBag`) | the category tree, prices per category and per model, in cash or gold (a negative or missing price means not for sale), tint palettes, limits and price, selling back, the tailor's suggestions, the fitting-room light, the catalogue book, the optional inventory items, conflicts, clothing-state groups and their commands |
-| `config/barber.lua` | `Config.Barber`, `Config.Grooming` | barber service prices and `prices.visitCap`; growth stages, `minutesPerStage`, `saveIntervalSeconds` |
+| `config/barber.lua` | `Config.Barber`, `Config.Grooming` | barber service prices and `prices.visitCap`; growth (`enabled = false` since 1.0.5), its stages, `minutesPerStage`, `saveIntervalSeconds` |
 | `config/surgery.lua` | `Config.CosmeticSurgery` | `price`, `allow` (sections a procedure may change), `sessionMinutes` |
 | `config/wardrobe.lua` | `Config.Wardrobe` | `maxSavedOutfits`, `outfitNameMax`, `allowRemote` |
 | `config/spawn.lua` | `Config.Spawn`, `Config.Respawn` | `firstSpawn`, selector, camera, `lastLocation`, `snapToGround`, `bounds`, `sceneExclusionRadius`, `points` (`id`, `enabled`, `order`, `coords`, `heading`, `cam`); respawn polling/restore |
@@ -268,6 +271,15 @@ engine-dependent behaviour in these documents still requires live verification (
 - استعراض إيصال جيل سابق من الكونسول: `creatorrefund <character-id> <players-row-id>`. هذا للقراءة فقط.
 
 - لا يعامل رد الجسر `false` على أنه رفض مالي مؤكد؛ فقد يخفي نتيجة دفتر غير محسومة. يتحقق الرصيد قبل الخصم، وتمنع إعادة الخصم أو التعويض إذا لم تتأكد نتيجة المحاولة السابقة.
+
+## 1.0.6 — 2026-11-01
+
+- رسائل الرفض في المتاجر والحلاق والخزانة والعيادة تقول السبب:
+  - المكان المغلق بسبب ساعات العمل يقول متى يفتح: «مغلق الآن، يفتح من 06:00 إلى 22:00». المكان الذي أوقفته الإدارة يبقى
+    «هذا المكان مغلق حاليًا».
+  - المكان الخاص بوظيفة يذكر الوظيفة: «هذا المكان خاص بوظيفة: الشريف».
+  - نقص المال يذكر السعر وما معك: «السعر 12$ ومعك 5$» (وبالذهب كذلك).
+- هذا الملف كان ما زال يشرح نمو الشعر واللحية كأنه يعمل؛ صُحّح: النمو متوقف منذ 1.0.5.
 
 ## 1.0.5 — 2026-11-01
 

@@ -130,9 +130,26 @@ function SS.accessAllowed(src, loc)
     return WCLocations.allows(loc, job, grade, hasAce) == true
 end
 
+--- 1.0.6: the ACCESS_DENIED Result, naming the jobs the location is for ("this place is for the sheriff
+--  only"). A rule that also takes an ACE permission stays unnamed (staff access is not advertised).
+function SS.accessRefusal(src, loc)
+    local r = fail('ACCESS_DENIED')
+    local rule = WCLocations.access(loc)
+    if not rule or rule.ace then return r end
+    local names = {}
+    for name in pairs(rule.jobs) do
+        local label = type(Bridge) == 'table' and type(Bridge.JobLabel) == 'function' and Bridge.JobLabel(src, name) or nil
+        names[#names + 1] = (type(label) == 'string' and label ~= '') and label or name
+    end
+    if #names == 0 then return r end
+    table.sort(names)
+    return WCResult.detail(r, 'jobs', table.concat(names, ' / '))
+end
+
 --- Open a session. opts = { locationId?, remote? }.
 --  Result: ok({ token, session }) or INVALID_PAYLOAD | RATE_LIMITED | *_DISABLED | NO_CHARACTER |
---  BUSY | LOCATION_NOT_FOUND | LOCATION_DISABLED | TOO_FAR | CHARACTER_NOT_FOUND | DATABASE_ERROR.
+--  BUSY | LOCATION_NOT_FOUND | LOCATION_DISABLED | LOCATION_CLOSED_HOURS | TOO_FAR | ACCESS_DENIED |
+--  CHARACTER_NOT_FOUND | DATABASE_ERROR.
 function SS.open(src, kind, opts)
     opts = type(opts) == 'table' and opts or {}
     local def = SS.KINDS[kind]
@@ -163,10 +180,10 @@ function SS.open(src, kind, opts)
         if type(opts.locationId) ~= 'string' then return fail('LOCATION_NOT_FOUND') end
         loc = WCLocations.byId(opts.locationId)
         if not loc or loc.type ~= def.locationType then return fail('LOCATION_NOT_FOUND') end
-        if not loc.enabled or not WCLocations.isOpen(loc) then return fail('LOCATION_DISABLED') end
+        if not loc.enabled or not WCLocations.isOpen(loc) then return WCLocations.refusal(loc) end
         if not WCLocations.isUsable(loc) then return fail(WCServices.code(def.service)) end
         if not withinRange(src, loc) then return fail('TOO_FAR') end
-        if not SS.accessAllowed(src, loc) then return fail('ACCESS_DENIED') end
+        if not SS.accessAllowed(src, loc) then return SS.accessRefusal(src, loc) end
     end
 
     -- The load may yield (database): reserve the player's slot so a second open() in that window

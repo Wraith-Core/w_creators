@@ -146,8 +146,7 @@ local function fail(code, data) return WCResult.fail(code, data) end
 
 local function notify(result)
     if type(result) ~= 'table' then return end
-    local key = result.message or WCResult.messageKey(result.code or 'INTERNAL_ERROR')
-    pcall(w.notify, { description = L(key), type = 'error' })
+    pcall(w.notify, { description = WCResult.text(result, L), type = 'error' })
 end
 
 local function notifyKey(key, kind)

@@ -246,7 +246,7 @@ local function commitSurgery(src, s, submitted)
     if s.kind ~= 'surgery' then return fail('SESSION_NOT_FOUND') end
     if not WCServices.enabled('surgery') then return fail(WCServices.code('surgery')) end
     local loc = s.location and WCLocations.byId(s.location.id) or nil
-    if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return fail('LOCATION_DISABLED') end
+    if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return WCLocations.refusal(loc) end
 
     local saved, meta = WCAppearanceRepo.load(s.charid)
     if not saved then return fail(type(meta) == 'table' and meta.error or 'CHARACTER_NOT_FOUND') end

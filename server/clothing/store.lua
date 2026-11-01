@@ -382,8 +382,8 @@ local function commitStore(src, s, submitted, extra)
     if s.kind ~= 'store' then return fail('SESSION_NOT_FOUND') end
     if not WCServices.enabled('clothingStores') then return fail(WCServices.code('clothingStores')) end
     local loc = s.location and WCLocations.byId(s.location.id) or nil
-    if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return fail('LOCATION_DISABLED') end
-    if not WCSessions.accessAllowed(src, loc) then return fail('ACCESS_DENIED') end
+    if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return WCLocations.refusal(loc) end
+    if not WCSessions.accessAllowed(src, loc) then return WCSessions.accessRefusal(src, loc) end
     extra = type(extra) == 'table' and extra or {}
     if extra.currency ~= nil and type(extra.currency) ~= 'string' then return fail('INVALID_PAYLOAD') end
     local outfitName = extra.outfitName
@@ -583,9 +583,9 @@ function Store.resell(src, token, hash)
     if not WCServices.enabled(service) then return fail(WCServices.code(service)) end
     if s.location then
         local loc = WCLocations.byId(s.location.id)
-        if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return fail('LOCATION_DISABLED') end
+        if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return WCLocations.refusal(loc) end
         if not WCSessions.withinRange(src, s.location) then return fail('TOO_FAR') end
-        if not WCSessions.accessAllowed(src, loc) then return fail('ACCESS_DENIED') end
+        if not WCSessions.accessAllowed(src, loc) then return WCSessions.accessRefusal(src, loc) end
     elseif s.kind ~= 'wardrobe' or not (Config.Wardrobe and Config.Wardrobe.allowRemote == true) then
         return fail('LOCATION_NOT_FOUND')
     end

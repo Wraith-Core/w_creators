@@ -163,7 +163,7 @@ local function commitWardrobe(src, s, submitted)
     if not WCServices.enabled('wardrobe') then return fail(WCServices.code('wardrobe')) end
     if s.location then
         local loc = WCLocations.byId(s.location.id)
-        if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return fail('LOCATION_DISABLED') end
+        if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return WCLocations.refusal(loc) end
     elseif not (Config.Wardrobe and Config.Wardrobe.allowRemote == true) then
         return fail('LOCATION_NOT_FOUND')
     end

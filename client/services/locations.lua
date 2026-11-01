@@ -62,6 +62,11 @@ local function notify(key)
 end
 F.notify = notify
 
+--- 1.0.6: a failure Result as the player reads it, its specifics included (WCResult.text).
+local function notifyResult(r)
+    pcall(w.notify, { description = WCResult.text(r, locale), type = 'error' })
+end
+
 --- Call a server callback and always return a WCResult (a throw, a timeout or anything that is
 --  not a Result is INTERNAL_ERROR).
 ---@return table Result
@@ -496,7 +501,7 @@ local function commit(flow, working, extra)
         -- nothing can be saved any more: the watcher cancels the editor once this answer is shown
         flow.serverClosed = true
         flow.abortReason = flow.abortReason or 'session'
-        notify(result.message or WCResult.messageKey(result.code))
+        notifyResult(result)
     end
     return result
 end
@@ -535,7 +540,7 @@ local function openFlow(flow)
     end
     if not result.ok then
         if UNCERTAIN_OPEN[result.code] then send(F.ABANDON) end
-        notify(result.message or WCResult.messageKey(result.code))
+        notifyResult(result)
         flow.finished = true
         release(flow)
         return false, result.code
@@ -561,7 +566,7 @@ local function openFlow(flow)
             return false, stopCode(flow)
         end
         if not entered then
-            notify(failure.message or WCResult.messageKey(failure.code))
+            notifyResult(failure)
             F.finish(flow, 'error')
             return false, failure.code
         end

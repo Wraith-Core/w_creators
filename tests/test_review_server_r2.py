@@ -250,12 +250,13 @@ class OutfitLocationTests(unittest.TestCase):
     def test_closed_after_the_open_refuses_like_the_commit(self):
         self.assertTrue(self.e('outfit("save", wardrobeToken, "day", eq, {}).ok'))
         self.rt.run('testHour = 22')
-        self.assertEqual(self.e('wear(working()).code'), 'LOCATION_DISABLED')
+        # 1.0.6: closed by its hours is its own refusal (LOCATION_DISABLED = switched off)
+        self.assertEqual(self.e('wear(working()).code'), 'LOCATION_CLOSED_HOURS')
         for op in ('outfit("save", wardrobeToken, "night", eq, {})',
                    'outfit("update", wardrobeToken, 1, eq, {})',
                    'outfit("rename", wardrobeToken, 1, "x")',
                    'outfit("delete", wardrobeToken, 1)'):
-            self.assertEqual(self.e(op).code, 'LOCATION_DISABLED', op)
+            self.assertEqual(self.e(op).code, 'LOCATION_CLOSED_HOURS', op)
         self.assertEqual(self.e('#outfitRows'), 1)
         self.rt.run('testHour = 7')                                 # open again, same session
         self.assertTrue(self.e('outfit("rename", wardrobeToken, 1, "morning").ok'))

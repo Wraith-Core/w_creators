@@ -17,6 +17,7 @@ local MESSAGES = {
     BUSY                         = 'عملية أخرى قيد التنفيذ',
     SERVICE_DISABLED             = 'هذه الخدمة غير متاحة حاليًا',
     LOCATION_DISABLED            = 'هذا المكان مغلق حاليًا',
+    LOCATION_CLOSED_HOURS        = 'هذا المكان مغلق الآن، خارج ساعات العمل',
     LOCATION_NOT_FOUND           = 'المكان غير موجود',
     TOO_FAR                      = 'أنت بعيد جدًا عن المكان',
     ACCESS_DENIED                = 'هذا المكان مخصّص لأصحاب صلاحية معيّنة',
@@ -80,6 +81,17 @@ for code in pairs(MESSAGES) do WCCodes[code] = code end
 
 WCResult.messages = MESSAGES
 
+-- 1.0.6 (owner 2026-11-01: a refusal says the reason): the specifics of a refusal, as locale keys with
+-- %s. A screen that can show them reads WCResult.text; any other still shows the code's message above,
+-- which reads right on its own.
+local DETAILS = {
+    hours      = 'مغلق الآن، يفتح من %s إلى %s',
+    jobs       = 'هذا المكان خاص بوظيفة: %s',
+    funds_cash = 'السعر %s$ ومعك %s$',
+    funds_gold = 'السعر %s ذهب ومعك %s ذهب',
+}
+WCResult.details = DETAILS
+
 --- The locale key for a code (unknown codes -> the INTERNAL_ERROR key).
 function WCResult.messageKey(code)
     return MESSAGES[code] or MESSAGES.INTERNAL_ERROR
@@ -97,6 +109,26 @@ function WCResult.fail(code, data)
         code = 'INTERNAL_ERROR'
     end
     return { ok = false, code = code, message = MESSAGES[code], data = data }
+end
+
+--- `r` (a failure Result) with its specifics: DETAILS[name] filled with the args. Returns `r`.
+function WCResult.detail(r, name, ...)
+    if type(r) == 'table' and r.ok == false and DETAILS[name] then
+        r.detail = { key = DETAILS[name], args = { ... } }
+    end
+    return r
+end
+
+--- The text a player reads for a failure Result: its detail when it carries one, else its message.
+---@param tr function the translator (locale / L): tr(key, ...) -> text
+function WCResult.text(r, tr)
+    if type(r) ~= 'table' then return tr(MESSAGES.INTERNAL_ERROR) end
+    local d = r.detail
+    if type(d) == 'table' and type(d.key) == 'string' and type(d.args) == 'table' then
+        local ok, text = pcall(tr, d.key, table.unpack(d.args))
+        if ok and type(text) == 'string' then return text end
+    end
+    return tr(r.message or WCResult.messageKey(r.code))
 end
 
 --- Is this value a Result table?

@@ -151,6 +151,9 @@ class AccessServerTests(ServerCase):
         self.restrict('{ jobs = { tailor = 1 } }')
         self.run('r = openStore()')
         self.assertEqual(self.e('r.code'), 'ACCESS_DENIED')
+        # 1.0.6: the refusal names the job the place is for (its label when the core has one)
+        self.assertEqual(self.e('r.detail.key'), self.e('WCResult.details.jobs'))
+        self.assertEqual(self.e('r.detail.args[1]'), 'tailor')
         self.assertIsNone(self.e('WCSessions.current(1)'))
         # the job at its grade opens it
         self.run('''
@@ -165,6 +168,7 @@ class AccessServerTests(ServerCase):
         self.restrict("{ ace = 'w_creators.vip' }")
         self.run('r = openStore()')
         self.assertEqual(self.e('r.code'), 'ACCESS_DENIED')
+        self.assertIsNone(self.e('r.detail'))                     # a permission rule is not advertised
         self.run('IsPlayerAceAllowed = function(src, ace) return ace == "w_creators.vip" and 1 or false end')
         self.run('WCSecurity.clear(1); a = call("w_creators:locations:access", 1)')
         self.assertTrue(self.e('a.ok'))

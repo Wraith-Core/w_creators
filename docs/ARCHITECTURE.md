@@ -529,11 +529,14 @@ command)` behind the `w_creators:dev:allowed` callback, `CLIENT_COMMANDS`, `vali
 ## 4. Result contract and error codes
 
 Every callback returns `WCResult`. The client translates `message` (a locale key) only at the UI boundary.
+Since 1.0.6 a refusal may also carry `detail = { key, args }` (a locale key with `%s` and its values:
+the opening hours, the jobs a place is for, the price and the balance); `WCResult.text(r, tr)` reads it
+where the screen shows the refusal, and `message` stays the plain text everywhere else.
 
 ```
 OK
-INVALID_PAYLOAD  RATE_LIMITED  BUSY  SERVICE_DISABLED  LOCATION_DISABLED  LOCATION_NOT_FOUND
-TOO_FAR  ACCESS_DENIED  SESSION_EXPIRED  SESSION_NOT_FOUND  NO_CHARACTER  NO_CHANGES
+INVALID_PAYLOAD  RATE_LIMITED  BUSY  SERVICE_DISABLED  LOCATION_DISABLED  LOCATION_CLOSED_HOURS
+LOCATION_NOT_FOUND  TOO_FAR  ACCESS_DENIED  SESSION_EXPIRED  SESSION_NOT_FOUND  NO_CHARACTER  NO_CHANGES
 CHARACTER_NOT_FOUND  NOT_CHARACTER_OWNER  CHARACTER_SLOT_LIMIT  CREATION_NOT_GRANTED
 INVALID_NAME  INVALID_DOB  DELETE_CONFIRMATION_REQUIRED  DELETE_DISABLED  CREATION_DISABLED
 INVALID_COMPONENT  COMPONENT_NOT_AVAILABLE  ITEM_NOT_OWNED  INVALID_TINT  CONFLICTING_ITEMS
@@ -814,7 +817,7 @@ no NPCs, **and** every server callback of that service returns `*_DISABLED`/`SER
 ```
 Adding a shop is a config edit only. Opening hours use the server's local hour; the client prompts
 read the hour the server publishes (`GlobalState['w_creators:hour']`, §3.3) and show the prompt when
-it is not published — the server's `<kind>:open` (`LOCATION_DISABLED`) always decides.
+it is not published — the server's `<kind>:open` (`LOCATION_CLOSED_HOURS`, with the hours) always decides.
 
 ---
 

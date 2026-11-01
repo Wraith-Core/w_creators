@@ -18,7 +18,8 @@
 --    pricingProfile    Config.Clothing.pricingProfiles id (clothing)
 --    allowedServices   { hair = true, facialHair = true, details = true } | nil (barber)
 --    hours             { open = 6, close = 22 } | nil: open from 06:00 until 21:59 in the server's local
---                      time (close < open spans midnight); a closed location is refused (LOCATION_DISABLED)
+--                      time (close < open spans midnight); a closed location is refused (LOCATION_CLOSED_HOURS,
+--                      its text names the hours)
 --    book              vector4 | nil (clothing): the catalogue book on the counter (x, y, z, heading).
 --                      With Config.Clothing.catalogue on, the book prop stands there and the player
 --                      reads it when the store opens and closes (client/services/locations.lua)

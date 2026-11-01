@@ -638,7 +638,7 @@ local function openService(src, kind, locationId)
         if type(locationId) ~= 'string' or #locationId > MAX_ID then return fail('LOCATION_NOT_FOUND') end
         local loc = WCLocations.byId(locationId)
         if not loc or loc.type ~= def.locationType then return fail('LOCATION_NOT_FOUND') end
-        if not loc.enabled or not WCLocations.isOpen(loc) then return fail('LOCATION_DISABLED') end
+        if not loc.enabled or not WCLocations.isOpen(loc) then return WCLocations.refusal(loc) end
         if not WCLocations.isUsable(loc) then return fail(WCServices.code(def.service)) end
         if not near(src, loc) then return fail('TOO_FAR') end
         if kind == 'surgery' and WCSurgeryService then

@@ -49,7 +49,12 @@ function E.charge(src, amount, reason, currency)
     if not read or type(balance) ~= 'number' or not WCUtil.isFinite(balance) then
         return WCResult.fail('ECONOMY_NOT_READY')
     end
-    if balance < value then return WCResult.fail('INSUFFICIENT_FUNDS') end
+    if balance < value then
+        -- 1.0.6: the price and what he holds ("the price is $12, you have $5")
+        local function shown(n) return n % 1 == 0 and ('%d'):format(n) or ('%.2f'):format(n) end
+        return WCResult.detail(WCResult.fail('INSUFFICIENT_FUNDS'), currency == 'gold' and 'funds_gold' or 'funds_cash',
+            shown(value), shown(WCUtil.round2(math.max(balance, 0))))
+    end
     local ok, paid = pcall(u.canBuy, u, value, moneyType, true)
     if not ok then
         WCDebug.warn('economy', 'charge failed for %s: %s', tostring(src), tostring(paid))

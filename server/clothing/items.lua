@@ -66,7 +66,7 @@ local function wardrobeSession(src, token)
     if not WCServices.enabled('wardrobe') then return nil, WCServices.code('wardrobe') end
     if s.location then
         local loc = WCLocations.byId(s.location.id)
-        if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return nil, 'LOCATION_DISABLED' end
+        if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return nil, WCLocations.closedCode(loc) end
         if not WCSessions.withinRange(src, s.location) then return nil, 'TOO_FAR' end
         if not WCSessions.accessAllowed(src, loc) then return nil, 'ACCESS_DENIED' end
     elseif not (Config.Wardrobe and Config.Wardrobe.allowRemote == true) then

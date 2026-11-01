@@ -242,7 +242,7 @@ function P.action(data)
     local out = { ok = result.ok == true }
     if not out.ok then
         out.code = result.code
-        out.message = L(result.message or WCResult.messageKey(result.code))
+        out.message = WCResult.text(result, L)
     end
     if current == s then out.payload = P.payload(s) else out.closed = true end
     return out

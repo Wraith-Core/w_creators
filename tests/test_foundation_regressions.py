@@ -392,7 +392,10 @@ class LocationHoursTests(unittest.TestCase):
             r = WCSessions.open(1, "store", { locationId = "valentine_clothing" })
         ''')
         self.assertFalse(rt.eval('WCLocations.isUsable(WCLocations.byId("valentine_clothing"))'))
-        self.assertEqual(rt.eval('r.code'), 'LOCATION_DISABLED')
+        # 1.0.6: closed by its hours is its own refusal, and it names them
+        self.assertEqual(rt.eval('r.code'), 'LOCATION_CLOSED_HOURS')
+        self.assertEqual(rt.eval('r.detail.key'), rt.eval('WCResult.details.hours'))
+        self.assertEqual(rt.eval('r.detail.args[1]'), '%02d:00' % ((rt.eval('WCLocations.hour()') + 1) % 24))
         self.assertIsNone(rt.eval('WCLocations.all()[2].hours'))
         self.assertTrue(any('invalid hours' in p.text for p in rt.eval('Printed').values()))
         rt.run('Config.Locations[1].hours = nil; WCLocations.reload(); Clock.now = Clock.now + 20000')

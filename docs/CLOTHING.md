@@ -316,7 +316,7 @@ Callbacks: `w_creators:store:open(locationId)`, `w_creators:store:commit(token, 
 - **Character.** An active character is required (`NO_CHARACTER`).
 - **Busy.** Refused with `BUSY` when another session is open or a commit is in flight.
 - **Location.** The location must exist and be a `clothing` location (`LOCATION_NOT_FOUND`), enabled
-  and open (`LOCATION_DISABLED`).
+  (`LOCATION_DISABLED`) and open (`LOCATION_CLOSED_HOURS`).
 - **Distance.** Within `interactionRadius + 3` m of `coords` or `preview` (`TOO_FAR`).
 - **Access.** A location with an `access` rule (§12) is refused to anyone it does not admit
   (`ACCESS_DENIED`).
@@ -361,8 +361,8 @@ session lasts 1800 s. `outfits` is the character's saved outfits (read only, §1
    - The token must be a store session (`SESSION_NOT_FOUND`), not busy (`BUSY`), and the player must
      still be in range (`TOO_FAR`).
    - The character appearance lock is taken.
-3. The `clothingStores` service must still be on, and the location still enabled and open
-   (`LOCATION_DISABLED`).
+3. The `clothingStores` service must still be on, and the location still enabled (`LOCATION_DISABLED`)
+   and open (`LOCATION_CLOSED_HOURS`).
 4. The saved appearance and the owned list are read again. A degraded appearance fails with
    `INTERNAL_ERROR`.
 5. `WCClothingStore.plan` uses only the **clothing** section of the submission:

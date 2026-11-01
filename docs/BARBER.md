@@ -143,7 +143,7 @@ Defaults (`Config.LocationDefaults.barber`): `interactionRadius = 2.0`, `prompt 
 | `strawberry_barber` | Strawberry | `-1810.92, -372.15, 162.89` |
 
 Optional per-location fields: `enabled = false` (hidden, server answers `LOCATION_DISABLED`),
-`hours = { open, close }` (server local time; closed → `LOCATION_DISABLED`), `pricingProfile`,
+`hours = { open, close }` (server local time; closed → `LOCATION_CLOSED_HOURS`), `pricingProfile`,
 `allowedServices`, `npc`, `blip`, `camera`, and `preview` (a `vector4` chair). No shipped barber has a
 `preview`: the visit happens where the player stands. With a `preview`, `WCServiceSeat` fades out,
 moves the player to the chair, and puts him back when the visit ends (requires live verification).

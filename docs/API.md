@@ -150,7 +150,7 @@ Checks, in order:
 3. No service session is open (`BUSY`).
 4. The location:
    - It must be a string id of at most 64 characters, of the right `type` (`LOCATION_NOT_FOUND`).
-   - It must be `enabled` and inside its `hours` (`LOCATION_DISABLED`).
+   - It must be `enabled` (`LOCATION_DISABLED`) and inside its `hours` (`LOCATION_CLOSED_HOURS`).
    - The player must be within `interactionRadius + 3` m of its `coords` or `preview` (`TOO_FAR`).
    - A location with an `access` rule admits only the jobs (at their grade) or the ACE permission it
      names (`ACCESS_DENIED`; CLOTHING.md §12).

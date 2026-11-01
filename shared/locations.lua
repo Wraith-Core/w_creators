@@ -104,6 +104,25 @@ function WCLocations.isOpen(loc, hour)
     return hour >= open or hour < close
 end
 
+--- 1.0.6: why a location cannot be used now: 'LOCATION_CLOSED_HOURS' when it is switched on but outside
+--  its opening hours, else 'LOCATION_DISABLED' (switched off, or gone).
+function WCLocations.closedCode(loc)
+    if type(loc) == 'table' and loc.enabled and not WCLocations.isOpen(loc) then return 'LOCATION_CLOSED_HOURS' end
+    return 'LOCATION_DISABLED'
+end
+
+--- 1.0.6: the failure Result of a location that cannot be used now, with its opening hours when they
+--  are the reason ("opens from 06:00 to 22:00").
+function WCLocations.refusal(loc)
+    local code = WCLocations.closedCode(loc)
+    local r = WCResult.fail(code)
+    if code == 'LOCATION_CLOSED_HOURS' then
+        local function at(h) return ('%02d:00'):format(math.floor(tonumber(h) or 0) % 24) end
+        WCResult.detail(r, 'hours', at(loc.hours.open), at(loc.hours.close))
+    end
+    return r
+end
+
 --- Is the location usable: enabled, open (hours) AND its service enabled?
 function WCLocations.isUsable(loc)
     if type(loc) ~= 'table' or loc.enabled == false then return false end

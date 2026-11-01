@@ -585,6 +585,20 @@ local function storedJobLabel(source, raw)
     return (type(label) == 'string' and label ~= '') and label or nil
 end
 
+--- 1.0.6: the label of a job by its name, in the player's language (a refusal names the job a place is
+--  for), or nil when the core has no catalogue. rsg / qbr shaped cores only (w_core is one).
+function Bridge.JobLabel(source, name)
+    if type(name) ~= 'string' or (Bridge.Name ~= 'rsg' and Bridge.Name ~= 'qbr') then return nil end
+    local okc, core = pcall(Bridge.Name == 'rsg' and rsgCore or qbrCore)
+    local jobs = okc and type(core) == 'table' and type(core.Shared) == 'table' and core.Shared.Jobs or nil
+    local def = type(jobs) == 'table' and jobs[name] or nil
+    if type(def) ~= 'table' then return nil end
+    local okk, key = pcall(function() return exports.w_lib:getPlayerLocaleKey(source) end)
+    local label = (okk and key == 'ar') and def.label_ar or nil
+    if type(label) ~= 'string' or label == '' then label = def.label end
+    return (type(label) == 'string' and label ~= '') and label or nil
+end
+
 -- rsg / qbr balances of a listed character: { cash, bank, gold } (a field is nil when unknown).
 --  * the central ledger (w_centralbank, ready): it owns the balances behind w_core — players.money
 --    is only a projection there (written on the row's creation, never updated), so it is not read;
