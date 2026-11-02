@@ -586,7 +586,7 @@ function Store.resell(src, token, hash)
         if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return WCLocations.refusal(loc) end
         if not WCSessions.withinRange(src, s.location) then return fail('TOO_FAR') end
         if not WCSessions.accessAllowed(src, loc) then return WCSessions.accessRefusal(src, loc) end
-    elseif s.kind ~= 'wardrobe' or not (Config.Wardrobe and Config.Wardrobe.allowRemote == true) then
+    elseif s.kind ~= 'wardrobe' or not WCSessions.remoteAllowed(src, s) then -- 1.0.8: or a home wardrobe
         return fail('LOCATION_NOT_FOUND')
     end
     -- the appearance lock (no commit or state write meanwhile) and the outfit lock (no outfit saved

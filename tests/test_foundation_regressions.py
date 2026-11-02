@@ -413,6 +413,8 @@ class SpawnServiceTests(unittest.TestCase):
         return self.rt.client_events('w_creators:client:spawn')
 
     def test_select_payload_has_points_kind_and_last_label(self):
+        # 1.0.8: the selector for a returning character is now the config choice lastLocation.direct = false
+        self.rt.run('Config.Spawn.lastLocation.direct = false')
         self.rt.run('Config.Spawn.points[2].enabled = false; Config.Spawn.points[1].order = 99; Bridge.FinishCharacter(1, false)')
         payload = self.rt.client_events('w_creators:client:selectSpawn')[0].args[1]
         self.assertEqual(list(payload.points.values()),
@@ -426,6 +428,8 @@ class SpawnServiceTests(unittest.TestCase):
         self.assertIsNone(payload.last)
 
     def test_choose_callback(self):
+        # 1.0.8: the selector for a returning character is now the config choice lastLocation.direct = false
+        self.rt.run('Config.Spawn.lastLocation.direct = false')
         self.assertEqual(self.choose('rhodes').code, 'SPAWN_NOT_PENDING')
         self.rt.run('Bridge.FinishCharacter(1, false, "switch")')
         self.assertEqual(self.choose('nowhere').code, 'INVALID_SPAWN')
@@ -442,6 +446,8 @@ class SpawnServiceTests(unittest.TestCase):
         self.assertEqual(self.choose('rhodes').code, 'SPAWN_NOT_PENDING')
 
     def test_invalid_last_positions_fall_back_to_the_first_enabled_point(self):
+        # 1.0.8: the selector for a returning character is now the config choice lastLocation.direct = false
+        self.rt.run('Config.Spawn.lastLocation.direct = false')
         self.rt.run('Config.Spawn.points[1].enabled = false')     # valentine off -> saintdenis (order 2)
         bad = ('{ x = 1/0, y = 1, z = 1 }', '{ x = 0/0, y = 1, z = 1 }', '{ x = "1e999", y = 1, z = 1 }',
                '{ x = 9000, y = 0, z = 0 }', '{ x = 0, y = 0, z = 5000 }',

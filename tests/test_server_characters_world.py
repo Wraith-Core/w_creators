@@ -257,6 +257,8 @@ class SpawnTests(Base):
         self.assertAlmostEqual(r.data.pos.x, -274.09)                         # the first enabled point
 
     def test_last_location_valid_and_when_disabled(self):
+        # 1.0.8: the selector for a returning character is now the config choice lastLocation.direct = false
+        self.rt.run('Config.Spawn.lastLocation.direct = false')
         self.rt.run('lastPos = { x = 1230.0, y = -1290.0, z = 76.0, heading = 33.0 }')
         self.activate()
         payload = self.rt.client_events('w_creators:client:selectSpawn')[-1].args[1]

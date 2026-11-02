@@ -5,6 +5,9 @@
 --    w_creators:wardrobe:open(locationId | nil) -> { token, appearance, owned, outfits = [{id, name, data}],
 --                                                    maxOutfits, outfitsEnabled, remote, expiresIn }
 --       nil = a remote wardrobe (exports / job resources): only with Config.Wardrobe.allowRemote.
+--       1.0.8: 'home:<piece id>' = a wardrobe placed in a w_housing house: only while w_housing's
+--       CanUseWardrobe says the player may use it there (owner / key holder at the piece), checked again
+--       on every write of the session, whatever Config.Wardrobe.allowRemote says.
 --       `owned` also lists the items worn now that have no ownership row, as { ..., source = 'worn',
 --       worn = true } (display only: the wardrobe never writes ownership).
 --    w_creators:wardrobe:commit(token, opId, app) -> { appearance }
@@ -36,7 +39,10 @@ function Wardrobe.open(src, locationId)
     if locationId ~= nil and (type(locationId) ~= 'string' or #locationId > 64) then
         return fail('INVALID_PAYLOAD')
     end
-    local opened = WCSessions.open(src, 'wardrobe', { locationId = locationId, remote = locationId == nil })
+    -- 1.0.8: 'home:<piece id>' = a wardrobe placed in a w_housing house (WCSessions.homeAllowed decides)
+    local home = type(locationId) == 'string' and tonumber(locationId:match('^home:(%d+)$')) or nil
+    local opened = WCSessions.open(src, 'wardrobe', home and { home = home }
+        or { locationId = locationId, remote = locationId == nil })
     if not opened.ok then return opened end
     local s = opened.data.session
 
@@ -164,7 +170,8 @@ local function commitWardrobe(src, s, submitted)
     if s.location then
         local loc = WCLocations.byId(s.location.id)
         if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return WCLocations.refusal(loc) end
-    elseif not (Config.Wardrobe and Config.Wardrobe.allowRemote == true) then
+    elseif not WCSessions.remoteAllowed(src, s) then
+        -- 1.0.8: a home wardrobe asks w_housing again (still his, still at the piece)
         return fail('LOCATION_NOT_FOUND')
     end
 

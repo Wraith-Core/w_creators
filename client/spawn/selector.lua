@@ -4,6 +4,7 @@
 --
 --  An aerial camera orbits each town; the player steps with the prompts and confirms.
 --  The server sends w_creators:client:selectSpawn { last = {x, y, z, heading, label} | nil,
+--  home = {x, y, z, heading} | nil (1.0.8: a house owner's «بيتي», then «آخر مكان» for the last),
 --  points = { enabled point ids in order }, kind }. The ids are resolved against
 --  Config.Spawn.points only for the camera and the labels: the confirmation sends the point ID
 --  (w_creators:spawn:choose(id)) and never a coordinate — the server resolves it and answers with
@@ -28,6 +29,7 @@ WCSpawnSelector = {}
 local Sel = WCSpawnSelector
 
 Sel.LAST_ID = '__last'           -- the 'the last place you were' option (server id)
+Sel.HOME_ID = '__home'           -- 1.0.8: a house owner's «بيتي» (server id; the server asks w_housing again)
 Sel.INPUT_DELAY = 500            -- ms before the first input counts (an ENTER held from the previous screen)
 Sel.UI_REASSERT = 2000           -- ms between two re-hides of the world UI (late HUD resources)
 Sel.PROMPT_REASSERT = 250        -- ms between two checks that the prompt group is still displayed
@@ -114,10 +116,27 @@ function Sel.resolve(data)
             }
         end
     end
-    local preselect = not (Config.Spawn and Config.Spawn.lastLocation and Config.Spawn.lastLocation.preselect == false)
+    -- 1.0.8: a house owner's «بيتي» (the server sends it only to the owner); beside it the last location is «آخر مكان»
+    local home
+    if type(data.home) == 'table' then
+        local x, y, z = WCUtil.xyz(data.home)
+        if x then
+            local heading = tonumber(data.home.heading)
+            home = {
+                id = Sel.HOME_ID, label = L.home, region = L.homeRegion, coords = vector3(x, y, z),
+                heading = WCUtil.isFinite(heading) and heading or 0.0,
+            }
+            if last then last.label = L.lastPlace or last.label end
+        end
+    end
+    -- 1.0.8 (pre-ship review): a house owner's two choices do not follow lastLocation.preselect: always «آخر مكان»
+    -- first, then «بيتي» (then the towns when there is no last location). preselect only orders the plain selector.
+    local preselect = home ~= nil
+        or not (Config.Spawn and Config.Spawn.lastLocation and Config.Spawn.lastLocation.preselect == false)
     if last and preselect then out[#out + 1] = last end
+    if home then out[#out + 1] = home end
     for _, id in ipairs(type(data.points) == 'table' and data.points or {}) do
-        local pt = type(id) == 'string' and not seen[id] and id ~= Sel.LAST_ID and configPoint(id) or nil
+        local pt = type(id) == 'string' and not seen[id] and id ~= Sel.LAST_ID and id ~= Sel.HOME_ID and configPoint(id) or nil
         local x, y, z
         if pt then x, y, z = WCUtil.xyz(pt.coords) end
         if x then

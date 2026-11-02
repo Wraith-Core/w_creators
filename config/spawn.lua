@@ -34,6 +34,10 @@ Config.Spawn = {
             next         = 'التالي',
             lastPosition = 'آخر موقع كنت فيه',
             lastRegion   = 'حيث غادرت آخر مرّة',
+            -- 1.0.8: a house owner's choice of two (Config.Spawn.home)
+            lastPlace    = 'آخر مكان',
+            home         = 'بيتي',
+            homeRegion   = 'البيت الذي تملكه',
         },
     },
 
@@ -52,6 +56,23 @@ Config.Spawn = {
         enabled = Config.Services.lastLocation,
         -- Shown first and preselected in the selector for an existing character.
         preselect = true,
+        -- 1.0.8 (owner 2026-11-02): a returning character (login / switch) spawns at his valid last location with
+        -- no selector; a missing / rejected one opens the selector. A new character always gets the selector.
+        -- false = the selector for every login, the last location preselected (as before 1.0.8).
+        direct = true,
+    },
+
+    -- 1.0.8 (owner 2026-11-02): a character who OWNS a house (w_housing's GetHomeSpawn; key holders never) chooses
+    -- between two at login: «آخر مكان» and «بيتي» (his bed, waking up with the game's own get-out-of-bed; no bed =
+    -- just inside the door). Without a valid last location: «بيتي» and the towns. Needs lastLocation.direct.
+    --   wakeMs = how long he lies in bed after the screen fades in before he gets up (ms)
+    --   sleepScenario = the game's lying-in-bed scenario (amb_rest.meta); he gets up through its own exit, the
+    --                   game's clips amb_rest@prop_human_sleep_bed@pillow@male_a / female_a@stand_exit
+    home = {
+        enabled = true,
+        resource = 'w_housing',
+        wakeMs = 2500,
+        sleepScenario = 'PROP_HUMAN_SLEEP_BED_PILLOW',
     },
 
     -- Correct the spawn height onto the ground after the move (the Z values below are approximate).

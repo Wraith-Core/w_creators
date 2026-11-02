@@ -146,7 +146,24 @@ function SS.accessRefusal(src, loc)
     return WCResult.detail(r, 'jobs', table.concat(names, ' / '))
 end
 
---- Open a session. opts = { locationId?, remote? }.
+--- 1.0.8: may the player use this home wardrobe (a placed w_housing piece id) now? w_housing decides: the house's
+--  owner or a key holder standing at that piece (export CanUseWardrobe). Missing / stopped / throwing = no.
+--  -> true | false, reason (w_housing's: 'distance', 'no_key', 'piece', ...)
+function SS.homeAllowed(src, piece)
+    if GetResourceState('w_housing') ~= 'started' then return false, 'piece' end
+    local ok, allowed, why = pcall(function() return exports.w_housing:CanUseWardrobe(src, piece) end)
+    if not ok then return false, 'piece' end
+    return allowed == true, why
+end
+
+--- 1.0.8: may a session without a location go on (a commit, an outfit, a resell, a wrap)? A home wardrobe while
+--  w_housing still lets the player use it there; any other only while remote wardrobes are allowed.
+function SS.remoteAllowed(src, s)
+    if type(s) == 'table' and s.home ~= nil then return (SS.homeAllowed(src, s.home)) end
+    return Config.Wardrobe and Config.Wardrobe.allowRemote == true or false
+end
+
+--- Open a session. opts = { locationId?, remote?, home? (1.0.8: a placed w_housing piece id, kind wardrobe) }.
 --  Result: ok({ token, session }) or INVALID_PAYLOAD | RATE_LIMITED | *_DISABLED | NO_CHARACTER |
 --  BUSY | LOCATION_NOT_FOUND | LOCATION_DISABLED | LOCATION_CLOSED_HOURS | TOO_FAR | ACCESS_DENIED |
 --  CHARACTER_NOT_FOUND | DATABASE_ERROR.
@@ -176,6 +193,13 @@ function SS.open(src, kind, opts)
 
     local loc
     local remote = opts.remote == true and opts.locationId == nil and def.remote ~= nil and def.remote()
+    -- 1.0.8: a home wardrobe (opts.home = a placed w_housing piece): w_housing says the player may use it there
+    local home = nil
+    if kind == 'wardrobe' and opts.home ~= nil and opts.locationId == nil then
+        local allowed, why = SS.homeAllowed(src, opts.home)
+        if not allowed then return fail(why == 'distance' and 'TOO_FAR' or 'ACCESS_DENIED') end
+        home, remote = opts.home, true
+    end
     if not remote then
         if type(opts.locationId) ~= 'string' then return fail('LOCATION_NOT_FOUND') end
         loc = WCLocations.byId(opts.locationId)
@@ -212,6 +236,7 @@ function SS.open(src, kind, opts)
         sex = snapshot.sex,
         location = loc,
         remote = remote,
+        home = home,
         snapshot = snapshot,
         opened = now(),
         openedAt = GetGameTimer(),

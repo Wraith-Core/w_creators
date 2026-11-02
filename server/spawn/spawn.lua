@@ -7,6 +7,12 @@
 --  loading (WCSpawnServer.finish) and consumed by the choice. Spawn kinds:
 --  'initial' (new character) | 'login' | 'switch' | 'death' | 'admin'.
 --
+--  1.0.8 (owner 2026-11-02): a returning character (login / switch) spawns at his valid last location
+--  with no selector (Config.Spawn.lastLocation.direct); a house OWNER (w_housing GetHomeSpawn,
+--  Config.Spawn.home) gets the selector with two choices, '__last' «آخر مكان» and '__home' «بيتي»
+--  (no valid last location: «بيتي» and the towns); «بيتي» on a bed sends meta.bed (the client wakes
+--  him up there). A new character, or no valid last location and no house: the selector as before.
+--
 --  Last location (only while Config.Services.lastLocation is on): read from the framework and
 --  rejected when non-finite, all-zero, outside Config.Spawn.bounds or within
 --  Config.Spawn.sceneExclusionRadius of the creator scene anchor; a rejected last location falls
@@ -28,8 +34,9 @@
 --    WCSpawnServer.heldByDeathOwner(src)        w_ambulancejob (started) says dead / downed / in a bed
 --
 --  Events (§16.3):
---    w_creators:client:selectSpawn  { last = {x, y, z, heading, label} | nil, points = { ids }, kind }
---    w_creators:client:spawn        (pos {x, y, z, heading}, meta {kind})
+--    w_creators:client:selectSpawn  { last = {x, y, z, heading, label} | nil, home = {x, y, z, heading} | nil,
+--                                     points = { ids }, kind }
+--    w_creators:client:spawn        (pos {x, y, z, heading}, meta {kind, bed = {x, y, z, heading} | nil})
 --    w_creators:client:respawn      (pos, meta {kind, point})
 --    w_creators:spawn:choose        callback (pointId) -> Result { pos, kind }
 --    w_creators:server:spawnAt      legacy net event (pointId) -> same resolution, never refuses a
@@ -51,6 +58,9 @@ local pendingKind = {} -- [src] = the spawn kind of the grant
 Spawn.KINDS = { initial = true, login = true, switch = true, death = true, admin = true }
 Spawn.LAST_ID = '__last'
 local LAST_ID = Spawn.LAST_ID
+-- 1.0.8: the house owner's «بيتي» (Config.Spawn.home, w_housing GetHomeSpawn)
+Spawn.HOME_ID = '__home'
+local HOME_ID = Spawn.HOME_ID
 local MAX_ID_LEN = 64
 
 AddEventHandler('playerDropped', function()
@@ -174,6 +184,30 @@ function Spawn.lastPosition(src)
     return Spawn.validateLast(pos)
 end
 
+--- 1.0.8: is a returning character spawned straight at his last location (Config.Spawn.lastLocation.direct)?
+local function directLast()
+    return lastLocationEnabled() and Config.Spawn.lastLocation.direct == true
+end
+
+--- 1.0.8: the house the character OWNS, as w_housing answers it (soft dependency: missing, stopped or throwing =
+--  no home). Validated like a last location; the bed's sleep point is kept for the wake-up.
+--  -> { x, y, z, heading, bed = { x, y, z, heading } | nil } | nil
+function Spawn.home(src)
+    local cfg = Config.Spawn.home
+    if type(cfg) ~= 'table' or cfg.enabled ~= true or type(cfg.resource) ~= 'string' then return nil end
+    local okState, state = pcall(GetResourceState, cfg.resource)
+    if not okState or state ~= 'started' then return nil end
+    local ok, home = pcall(function() return exports[cfg.resource]:GetHomeSpawn(tonumber(src)) end)
+    if not ok or type(home) ~= 'table' then return nil end
+    local pos = Spawn.validateLast(home)
+    if not pos then return nil end
+    if type(home.bed) == 'table' then
+        local bed = Spawn.validateLast(home.bed)
+        if bed then pos.bed = bed end
+    end
+    return pos
+end
+
 --- The locale key of the enabled spawn point nearest to a position (the region the player left).
 function Spawn.nearestLabel(pos)
     local best, bestD
@@ -195,6 +229,12 @@ function Spawn.resolve(pointId, src)
         local last = src and Spawn.lastPosition(src)
         if last then return last, LAST_ID end
         return fallback()
+    end
+    -- 1.0.8: «بيتي», asked of w_housing again now (the house may have been sold since the choice was shown)
+    if pointId == HOME_ID then
+        local home = src and Spawn.home(src)
+        if home then return home, HOME_ID end
+        return nil, 'INVALID_SPAWN'
     end
     local pt = Bridge.FindSpawnPoint(pointId)
     local pos = pt and position(pt.coords, pt.heading)
@@ -245,7 +285,9 @@ local function spawnNow(src, pos, point, kind)
         TriggerClientEvent('w_creators:client:respawn', src, pos, { kind = kind, point = point })
     else
         toWorld(src)
-        TriggerClientEvent('w_creators:client:spawn', src, pos, { kind = kind })
+        -- 1.0.8: «بيتي» on the bed: the client lies the player there and wakes him up (meta.bed)
+        local bed = point == HOME_ID and type(pos) == 'table' and pos.bed or nil
+        TriggerClientEvent('w_creators:client:spawn', src, pos, { kind = kind, bed = bed })
     end
     logSpawn(src, kind, point)
     return kind
@@ -296,6 +338,26 @@ function Spawn.finish(src, kind, isNew)
     if isNew == true or kind == 'initial' then pcall(Bridge.SetSurvival, src) end
 
     local spawnEvent = Config.Creator.spawnEvent
+    -- 1.0.8 (owner 2026-11-02): a returning character goes straight to his last location; a house owner chooses
+    -- «آخر مكان» / «بيتي» (with no valid last location: «بيتي» and the towns); no valid last location and no
+    -- house = the selector below. A new character always takes the selector.
+    if selectorEnabled() and not spawnEvent and not isNew and kind ~= 'initial' and directLast() then
+        local last = Spawn.lastPosition(src)
+        local home = Spawn.home(src)
+        if home then
+            Spawn.grant(src, kind)
+            if last then last.label = Spawn.nearestLabel(last) end
+            TriggerClientEvent('w_creators:client:selectSpawn', src, {
+                last = last, home = { x = home.x, y = home.y, z = home.z, heading = home.heading },
+                points = last and {} or Spawn.pointIds(), kind = kind,
+            })
+            return 'selector'
+        end
+        if last then
+            spawnNow(src, last, LAST_ID, kind)
+            return 'direct'
+        end
+    end
     if selectorEnabled() and not spawnEvent then
         Spawn.grant(src, kind)
         local last = (not isNew) and Spawn.lastPosition(src) or nil

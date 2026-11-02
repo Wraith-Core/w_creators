@@ -110,7 +110,8 @@ local function options(flow, data, loc)
 end
 
 --- Open a wardrobe: a location id, or nil for a remote wardrobe (job resources, housing; the
---  server decides with Config.Wardrobe.allowRemote). Yields; returns true once the editor is open,
+--  server decides with Config.Wardrobe.allowRemote), or 'home:<piece id>' (1.0.8: a wardrobe placed in a
+--  w_housing house; the server asks w_housing). Yields; returns true once the editor is open,
 --  or false, code (the failure's message has been shown, except to a dead player). A refusal
 --  because another flow holds the player is shown here: WCServiceFlow.run only logs it, and on the
 --  remote paths (the OpenWardrobe exports) nothing else would.

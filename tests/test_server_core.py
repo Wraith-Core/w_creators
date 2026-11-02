@@ -576,6 +576,8 @@ class SpawnTests(unittest.TestCase):
         self.rt.run('Bridge.GetLastPosition = function() return { x = 5, y = 6, z = 7, heading = 8 } end')
 
     def test_disabled_points_and_one_shot_grant(self):
+        # 1.0.8: the selector for a returning character is now the config choice lastLocation.direct = false
+        self.rt.run('Config.Spawn.lastLocation.direct = false')
         self.assertIsNotNone(self.e('Bridge.FindSpawnPoint("rhodes")'))
         self.rt.run('Config.Spawn.points[3].enabled = false')
         self.assertIsNone(self.e('Bridge.FindSpawnPoint("rhodes")'))

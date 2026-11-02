@@ -393,13 +393,38 @@ end
 --  The two flows
 -- ---------------------------------------------------------------------
 
+--- 1.0.8: «بيتي» on a bed: the player lies in it (Config.Spawn.home.sleepScenario, the game's lying-in-bed
+--  scenario, warped in). true when the scenario was started.
+function Sp.lieInBed(bed)
+    if type(bed) ~= 'table' then return false end
+    local x, y, z = WCUtil.xyz(bed)
+    local ped = PlayerPedId()
+    if not x or not pedExists(ped) then return false end
+    local cfg = (Config.Spawn and Config.Spawn.home) or {}
+    local scenario = type(cfg.sleepScenario) == 'string' and cfg.sleepScenario or 'PROP_HUMAN_SLEEP_BED_PILLOW'
+    local ok = pcall(TaskStartScenarioAtPosition, ped, joaat(scenario), x + 0.0, y + 0.0, z + 0.0,
+        (headingOf(bed) or 0.0) + 0.0, -1, false, true)
+    return ok
+end
+
+--- 1.0.8: wake up: the scenario's own exit (the game's get-out-of-bed clips amb_rest@prop_human_sleep_bed@pillow@
+--  male_a / female_a@stand_exit). Nothing when he already left the bed (the stick ends the scenario too).
+function Sp.getUp()
+    local ped = PlayerPedId()
+    if not pedExists(ped) then return end
+    local using = true
+    if type(IsPedUsingAnyScenario) == 'function' then using = IsPedUsingAnyScenario(ped) end
+    if using == true or using == 1 then ClearPedTasks(ped) end
+end
+
 --- w_creators:client:spawn — the character enters the world.
 ---@param pos table { x, y, z, heading }
----@param meta table|nil { kind }
+---@param meta table|nil { kind, bed = { x, y, z, heading } | nil (1.0.8: «بيتي» on a bed) }
 function Sp.spawn(pos, meta)
     meta = type(meta) == 'table' and meta or {}
     local kind = LOGIN_KINDS[meta.kind] and meta.kind or 'login'
     local mine = acquire()
+    local inBed = false
     local ok, err = pcall(function()
         darken()
         closeSelector()
@@ -408,6 +433,8 @@ function Sp.spawn(pos, meta)
         WCDebug.log('spawn', '%s spawn at %.1f %.1f %.1f%s', kind, placed.x, placed.y, placed.z,
             fellBack and ' (fallback)' or '')
         releasePed(true)
+        -- 1.0.8: «بيتي» on the bed (not after a fallback: the bed is not where he ended up)
+        if not fellBack then inBed = Sp.lieInBed(meta.bed) end
         leaveScene()
         restoreUi()
         DismissLoadingScreen()
@@ -422,6 +449,14 @@ function Sp.spawn(pos, meta)
     finish(mine)
     if kind == 'initial' and Config.Creator and Config.Creator.enableCutscene then
         TriggerEvent('W:CREATOR:FirstSpawn')
+    end
+    if ok and inBed then
+        -- 1.0.8: he wakes up a moment after the screen comes back
+        local wakeMs = WCUtil.int((Config.Spawn and Config.Spawn.home or {}).wakeMs, 0, 60000, 2500)
+        CreateThread(function()
+            Wait(wakeMs)
+            Sp.getUp()
+        end)
     end
     return ok
 end

@@ -310,8 +310,9 @@ local function wardrobeSession(src, token)
         local loc = WCLocations.byId(s.location.id)
         if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return nil, WCLocations.closedCode(loc) end
         if not withinRange(src, s.location) then return nil, 'TOO_FAR' end
-    elseif not (Config.Wardrobe and Config.Wardrobe.allowRemote == true) then
-        -- A remote session opened before remote wardrobes were turned off (same as the commit).
+    elseif not WCSessions.remoteAllowed(src, s) then
+        -- A remote session opened before remote wardrobes were turned off (same as the commit); 1.0.8: a home
+        -- wardrobe the player may no longer use there.
         return nil, 'LOCATION_NOT_FOUND'
     end
     return s

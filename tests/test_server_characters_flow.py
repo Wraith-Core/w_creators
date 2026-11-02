@@ -203,6 +203,8 @@ class SelectTests(Base):
         self.assertEqual(self.call('characters:select', 1, 'x' * 65).code, 'INVALID_PAYLOAD')
 
     def test_select_waits_for_the_framework_then_loaded_activates(self):
+        # 1.0.8: the selector for a returning character is now the config choice lastLocation.direct = false
+        self.rt.run('Config.Spawn.lastLocation.direct = false')
         self.rt.run('loginDelay = 300; lastPos = { x = 1230.0, y = -1290.0, z = 76.0 }')
         self.rt.run('CreateThread(function() r1 = cb("characters:select", 1, "vorp:1") end)')
         self.assertIsNone(self.e('r1'))                             # waiting for GetCharId == charid

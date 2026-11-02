@@ -69,7 +69,7 @@ local function wardrobeSession(src, token)
         if not loc or not loc.enabled or not WCLocations.isOpen(loc) then return nil, WCLocations.closedCode(loc) end
         if not WCSessions.withinRange(src, s.location) then return nil, 'TOO_FAR' end
         if not WCSessions.accessAllowed(src, loc) then return nil, 'ACCESS_DENIED' end
-    elseif not (Config.Wardrobe and Config.Wardrobe.allowRemote == true) then
+    elseif not WCSessions.remoteAllowed(src, s) then -- 1.0.8: or a home wardrobe
         return nil, 'LOCATION_NOT_FOUND'
     end
     return s
