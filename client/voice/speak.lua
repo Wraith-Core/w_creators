@@ -10,13 +10,18 @@
 --  our rows sat in the person's prompt group on the same keys and the player could not let go of a grabbed person.
 -- =====================================================================
 
+--  1.0.9 (2026-11-03, owner): the game's own prompts (Emote, Melee, the "Stranger" name) were drawn under ours.
+--  They are switched off for the frame while our card shows, and our card carries those two as well: melee on F
+--  and emote on 1 stay the game's own keys (shown, the game still acts on them). Antagonize moves off F (it was
+--  the melee key too) to its own key, read through w_lib's key listener.
+
 local SPEAK = (Config.Voice or {}).speak or {}
 local CONTROLS = {
     greet = GetHashKey(SPEAK.greetControl or 'INPUT_INTERACT_LOCKON_POS'),
-    antagonize = GetHashKey(SPEAK.antagonizeControl or 'INPUT_INTERACT_LOCKON_NEG'),
 }
--- the letters drawn beside the rows: the game's default keys of the two controls
-local KEYS = { greet = SPEAK.greetKey or 'R', antagonize = SPEAK.antagonizeKey or 'F' }
+-- the letters on the card: greet = the game's control key; antagonize = our own key; melee / emote = the game's keys
+local KEYS = { greet = SPEAK.greetKey or 'R', antagonize = SPEAK.antagonizeKey or 'G',
+    melee = SPEAK.meleeKey or 'F', emote = SPEAK.emoteKey or '1' }
 local groupId, shown = nil, false
 local readyAt = 0
 
@@ -31,6 +36,8 @@ local function ensureGroup()
     if not groupId then return nil end
     lib('AddPrompt', groupId, KEYS.greet, locale('تحية'), false)
     lib('AddPrompt', groupId, KEYS.antagonize, locale('استفزاز'), false)
+    lib('AddPrompt', groupId, KEYS.melee, locale('ضرب'), false)
+    lib('AddPrompt', groupId, KEYS.emote, locale('إيموت'), false)
     return groupId
 end
 
@@ -78,12 +85,14 @@ CreateThread(function()
         if target then
             WCNative.ped.muteGreet(target, 1000)
             WCNative.ped.muteAntagonize(target, 1000)
+            WCNative.ui.hidePromptsThisFrame() -- 1.0.9: the game's prompts under ours
             show(true)
             local now = GetGameTimer()
             local live = now >= readyAt
             setLive(live)
             if live then
-                local kind = (pressed(CONTROLS.greet) and 'greet') or (pressed(CONTROLS.antagonize) and 'antagonize') or nil
+                local kind = (pressed(CONTROLS.greet) and 'greet')
+                    or (groupId and lib('IsCompleted', groupId, KEYS.antagonize) == true and 'antagonize') or nil
                 if kind then
                     readyAt = now + (tonumber(SPEAK.cooldownMs) or 2500)
                     local net = NetworkGetEntityIsNetworked(target) and NetworkGetNetworkIdFromEntity(target) or 0

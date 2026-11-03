@@ -18,6 +18,17 @@ function WCNative.ui.varString(text)
     return str
 end
 
+--- _UI_PROMPT_DISABLE_PROMPTS_THIS_FRAME (1.0.9: the game's focus prompts under our voice card)
+-- hash: 0xF1622CE88A1946FB · confidence: In use (w_stables client/natives.lua N.blindFrame)
+-- params: none · returns: nothing
+-- limitations: this frame only (call every frame); the game's controls still act (melee, emote)
+-- tested models: n/a · MP safe: yes (local UI) · OneSync tested here: no
+function WCNative.ui.hidePromptsThisFrame()
+    local ok = H.invoke(0xF1622CE88A1946FB)
+    if not ok then return H.fail('hidePromptsThisFrame', 'failed') end
+    return true
+end
+
 --- _UILOG_SET_CACHED_OBJECTIVE
 -- hash: 0xFA233F8FE190514C · confidence: Verified (pre-v3 creator state loop)
 -- params: text (var string handle, or 0 to clear) · returns: nothing

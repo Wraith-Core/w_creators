@@ -16,7 +16,10 @@ Config.Voice = {
         antagonizeControl = 'INPUT_INTERACT_LOCKON_NEG',
         -- 1.0.7: the letters w_lib's prompt frame draws beside the two rows (the controls' default keys)
         greetKey = 'R',
-        antagonizeKey = 'F',
+        -- 1.0.9: antagonize has its own key (F is the game's melee); the melee / emote rows show the game's keys
+        antagonizeKey = 'G',
+        meleeKey = 'F',
+        emoteKey = '1',
         -- lines every voice of AppearanceSchema.SPEECH_VOICES has (checked against the game's voice banks);
         -- male / female = the sex of the person spoken to
         lines = {
