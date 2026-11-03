@@ -59,7 +59,10 @@ Config.Spawn = {
         -- 1.0.8 (owner 2026-11-02): a returning character (login / switch) spawns at his valid last location with
         -- no selector; a missing / rejected one opens the selector. A new character always gets the selector.
         -- false = the selector for every login, the last location preselected (as before 1.0.8).
-        direct = true,
+        -- 2026-11-04: OFF - spawning a returning character straight at his last location crashed the game at
+        -- spawn (RAGE error 0x9952DB5E:212 / 0x496AC5DF:961, Red River + Studio); the selector with the last location
+        -- first works. Back on only after that path is fixed.
+        direct = false,
     },
 
     -- 1.0.8 (owner 2026-11-02): a character who OWNS a house (w_housing's GetHomeSpawn; key holders never) chooses
