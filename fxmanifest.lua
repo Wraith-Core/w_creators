@@ -2,7 +2,7 @@ fx_version "adamant"
 games { "rdr3" }
 rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships.'
 lua54 'yes'
-version '1.0.9' -- 1.0.1 = the VIP character slot; 1.0.2 (2026-10-21) = store slots + name change; 1.0.3 (2026-10-23) = the chair picker's marks in the game's glitter (w_lib 4.1.0); 1.0.5 (2026-11-01) = no automatic hair/beard growth, the store camera stays in front of walls, a beard colour keeps the beard (beards 019-024 by name); 1.0.6 (2026-11-01) = refusals say the reason (opening hours, the job, the price and the balance); 1.0.7 (2026-11-02) = greet / antagonize drawn by w_lib (Arabic), hidden in a melee or grapple; 1.0.8 (2026-11-02) = a returning character spawns at his last location, a house owner chooses his last place or his home (w_housing GetHomeSpawn, waking up in bed), home wardrobes (w_housing CanUseWardrobe); 1.0.9 (2026-11-03) = the game's focus prompts hidden under ours, melee F + emote 1 on our card, antagonize on G
+version '1.0.10' -- 1.0.1 = the VIP character slot; 1.0.2 (2026-10-21) = store slots + name change; 1.0.3 (2026-10-23) = the chair picker's marks in the game's glitter (w_lib 4.1.0); 1.0.5 (2026-11-01) = no automatic hair/beard growth, the store camera stays in front of walls, a beard colour keeps the beard (beards 019-024 by name); 1.0.6 (2026-11-01) = refusals say the reason (opening hours, the job, the price and the balance); 1.0.7 (2026-11-02) = greet / antagonize drawn by w_lib (Arabic), hidden in a melee or grapple; 1.0.8 (2026-11-02) = a returning character spawns at his last location, a house owner chooses his last place or his home (w_housing GetHomeSpawn, waking up in bed), home wardrobes (w_housing CanUseWardrobe); 1.0.9 (2026-11-03) = the game's focus prompts hidden under ours, melee F + emote 1 on our card, antagonize on G; 1.0.10 (2026-11-03) = the staff's /promptlab (client/lab, server/lab; nothing changes for players)
 
 -- =====================================================================
 --  w_creators v3 - the character lifecycle authority: account -> characters -> selection ->
@@ -49,6 +49,7 @@ client_scripts {
     'client/natives/respawn.lua',
     'client/natives/scene.lua',
     'client/natives/ui.lua',
+    'client/natives/promptlab.lua', -- the staff's /promptlab only (remove with client/lab/promptlab.lua)
     -- core
     'client/core/locale.lua',
     'client/core/ui.lua',
@@ -85,6 +86,7 @@ client_scripts {
     'client/spawn/spawn.lua',
     'client/respawn/respawn.lua',
     'client/dev/tools.lua',
+    'client/lab/promptlab.lua',   -- 2026-11-03: the staff's game prompts lab (/promptlab)
     -- public API
     'client/api.lua',
 }
@@ -124,6 +126,7 @@ server_scripts {
     'server/spawn/spawn.lua',
     'server/respawn/respawn.lua',
     'server/dev/tools.lua',
+    'server/lab/promptlab.lua',   -- 2026-11-03: the staff's game prompts lab (/promptlab)
     -- public API
     'server/api.lua',
 }

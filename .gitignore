@@ -9,3 +9,6 @@ node_modules/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# the staff lab report (/promptlab), written by the server
+/promptlab.jsonl
