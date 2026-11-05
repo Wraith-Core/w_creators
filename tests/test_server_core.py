@@ -586,7 +586,7 @@ class SpawnTests(unittest.TestCase):
         self.assertEqual(sel[0].args[1].last.x, 5)
         self.rt.run('fireEvent("w_creators:server:spawnAt", 1, "rhodes")')
         spawn = self.rt.client_events('w_creators:client:spawn')
-        self.assertAlmostEqual(spawn[0].args[1].x, -274.09)  # disabled point -> first spawn
+        self.assertAlmostEqual(spawn[0].args[1].x, 5)  # 1.0.15: a town for a returning character -> his last location
         self.rt.run('fireEvent("w_creators:server:spawnAt", 1, "valentine")')
         self.assertEqual(len(self.rt.client_events('w_creators:client:spawn')), 1)
 

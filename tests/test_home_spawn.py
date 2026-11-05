@@ -1,7 +1,7 @@
 """1.0.8 (owner 2026-11-02): the spawn rule and the home wardrobe.
 
   ServerSpawnRuleTests  WCSpawnServer.finish / the spawn:choose callback: a new character gets the selector; a
-                        returning one spawns at his last location with no selector (an invalid one -> the selector);
+                        returning one (1.0.15) gets only «آخر مكان» (an invalid one -> the one fallback point);
                         a house OWNER (w_housing GetHomeSpawn, simulated) chooses «آخر مكان» / «بيتي»; «بيتي» on a
                         bed sends meta.bed; key holders / no w_housing / a broken answer = no home.
   HomeWardrobeTests     w_creators:wardrobe:open('home:<piece>') and every later write of that session ask
@@ -53,7 +53,7 @@ class ServerSpawnRuleTests(unittest.TestCase):
         return self.e('WCSpawnServer.finish(1, %s, %s)' % (kind, 'true' if is_new else 'false'))
 
     def test_the_shipped_config(self):
-        self.assertTrue(self.e('Config.Spawn.lastLocation.direct'))
+        self.assertFalse(self.e('Config.Spawn.lastLocation.direct'))   # off since the 2026-11-04 crash
         self.assertTrue(self.e('Config.Spawn.home.enabled'))
         self.assertEqual(self.e('Config.Spawn.home.resource'), 'w_housing')
 
@@ -65,23 +65,52 @@ class ServerSpawnRuleTests(unittest.TestCase):
         self.assertIsNone(payload.home)
         self.assertGreater(len(payload.points), 0)
         self.assertEqual(len(self.spawns()), 0)
+        self.assertTrue(self.choose('valentine').ok)             # a new character picks any town
 
-    def test_a_returning_character_goes_straight_to_his_last_location(self):
+    # 1.0.15 (owner 2026-11-05): a returning character never picks a town
+    def test_a_returning_character_sees_only_his_last_location(self):
         for kind in ('nil', '"login"', '"switch"'):
-            self.assertEqual(self.finish(kind=kind), 'direct')
-        self.assertEqual(len(self.selects()), 0)
+            self.rt.run('WCSpawnServer.cancel(1)')
+            self.assertEqual(self.finish(kind=kind), 'selector')
+            payload = self.selects()[-1].args[1]
+            self.assertEqual(payload.last.x, 5)
+            self.assertIsNone(payload.home)
+            self.assertEqual(len(payload.points), 0)
+        self.assertEqual(self.choose('valentine').code, 'INVALID_SPAWN')
+        self.assertEqual(self.choose('__home').code, 'INVALID_SPAWN')
+        self.assertTrue(self.e('SpawnPending[1]'))               # a refused choice keeps the grant
+        r = self.choose('__last')
+        self.assertTrue(r.ok, r.code)
         spawn = self.spawns()[-1]
         self.assertEqual((spawn.args[1].x, spawn.args[1].heading), (5, 8))
         self.assertEqual(spawn.args[2].kind, 'switch')
         self.assertIsNone(spawn.args[2].bed)
-        self.assertIsNone(self.e('SpawnPending[1]'))            # no grant left behind
+        self.assertIsNone(self.e('SpawnPending[1]'))
 
-    def test_an_invalid_last_location_opens_the_selector(self):
+    def test_the_legacy_event_cannot_pick_a_town(self):
+        self.finish()
+        self.rt.run('fireEvent("w_creators:server:spawnAt", 1, "valentine")')
+        self.assertEqual(self.spawns()[-1].args[1].x, 5)
+
+    def test_direct_spawn_is_still_a_config_choice(self):
+        self.rt.run('Config.Spawn.lastLocation.direct = true')
+        self.assertEqual(self.finish(), 'direct')
+        self.assertEqual(len(self.selects()), 0)
+        self.assertEqual(self.spawns()[-1].args[1].x, 5)
+        self.assertIsNone(self.e('SpawnPending[1]'))
+        self.rt.run('HOME = %s' % BED_HOME)
+        self.assertEqual(self.finish(), 'selector')              # a house owner still chooses
+
+    def test_an_invalid_last_location_gets_the_one_fallback_point(self):
+        first = self.e('WCSpawnServer.pointIds()[1]')
         for bad in ('nil', '{ x = 0, y = 0, z = 0 }', '{ x = 9000, y = 0, z = 0 }', '{ x = 0/0, y = 1, z = 1 }'):
             self.rt.run('last = %s; WCSpawnServer.cancel(1)' % bad)
             self.assertEqual(self.finish(), 'selector', bad)
-            self.assertIsNone(self.selects()[-1].args[1].last)
-        self.assertEqual(len(self.spawns()), 0)
+            payload = self.selects()[-1].args[1]
+            self.assertIsNone(payload.last)
+            self.assertEqual(list(payload.points.values()), [first])
+        self.assertEqual(self.choose('annesburg').code, 'INVALID_SPAWN')
+        self.assertTrue(self.choose(first).ok)
 
     def test_a_house_owner_chooses_his_last_place_or_his_home(self):
         self.rt.run('HOME = %s' % BED_HOME)
@@ -90,6 +119,7 @@ class ServerSpawnRuleTests(unittest.TestCase):
         self.assertEqual((payload.last.x, payload.home.x, payload.home.z), (5, 900.9, 115.5))
         self.assertEqual(len(payload.points), 0)                 # two choices only
         self.assertEqual(self.e('HomeAsked[1]'), 1)              # asked by the player's server id
+        self.assertEqual(self.choose('valentine').code, 'INVALID_SPAWN')
         r = self.choose('__home')
         self.assertTrue(r.ok, r.code)
         spawn = self.spawns()[-1]
@@ -114,30 +144,34 @@ class ServerSpawnRuleTests(unittest.TestCase):
         self.assertEqual((spawn.args[1].x, spawn.args[1].heading), (900.3, 180.0))
         self.assertIsNone(spawn.args[2].bed)
 
-    def test_an_owner_without_a_valid_last_location_gets_his_home_and_the_towns(self):
+    def test_an_owner_without_a_valid_last_location_gets_only_his_home(self):
         self.rt.run('HOME = %s; last = nil' % BED_HOME)
         self.assertEqual(self.finish(), 'selector')
         payload = self.selects()[-1].args[1]
         self.assertIsNone(payload.last)
         self.assertEqual(payload.home.x, 900.9)
-        self.assertEqual(list(payload.points.values()), list(self.e('WCSpawnServer.pointIds()').values()))
+        self.assertEqual(len(payload.points), 0)
+        self.assertEqual(self.choose('__last').code, 'INVALID_SPAWN')
+        self.assertTrue(self.choose('__home').ok)
 
     def test_no_home_when_w_housing_says_none_is_stopped_or_breaks(self):
-        # a key holder: w_housing answers nil (owner only)
-        self.assertEqual(self.finish(), 'direct')
+        def no_home():
+            self.rt.run('WCSpawnServer.cancel(1)')
+            self.assertEqual(self.finish(), 'selector')
+            self.assertIsNone(self.selects()[-1].args[1].home)
+        no_home()                                                # a key holder: w_housing answers nil
         self.rt.run('HOME = %s; HousingState = "stopped"' % BED_HOME)
-        self.assertEqual(self.finish(), 'direct')
+        no_home()
         self.rt.run('HousingState = "started"; HOME = "throw"')
-        self.assertEqual(self.finish(), 'direct')
+        no_home()
         self.rt.run('HOME = { x = 0/0, y = 1, z = 1 }')
-        self.assertEqual(self.finish(), 'direct')
-        self.rt.run('HOME = { x = 900.9, y = 258.7, z = 115.5, bed = { x = 1/0, y = 1, z = 1 } }')
+        no_home()
+        self.rt.run('WCSpawnServer.cancel(1); HOME = { x = 900.9, y = 258.7, z = 115.5, bed = { x = 1/0, y = 1, z = 1 } }')
         self.finish()
         self.assertTrue(self.choose('__home').ok)
         self.assertIsNone(self.spawns()[-1].args[2].bed)         # a broken bed: just the spot
         self.rt.run('Config.Spawn.home.enabled = false; HOME = %s' % BED_HOME)
-        self.assertEqual(self.finish(), 'direct')
-        self.assertEqual(len(self.selects()), 1)
+        no_home()
 
     def test_a_house_sold_meanwhile_is_refused_and_the_grant_kept(self):
         self.rt.run('HOME = %s' % BED_HOME)
@@ -150,13 +184,6 @@ class ServerSpawnRuleTests(unittest.TestCase):
     def test_home_is_never_a_choice_without_a_grant(self):
         self.rt.run('HOME = %s' % BED_HOME)
         self.assertEqual(self.choose('__home').code, 'SPAWN_NOT_PENDING')
-
-    def test_the_old_rule_is_still_a_config_choice(self):
-        self.rt.run('Config.Spawn.lastLocation.direct = false; HOME = %s' % BED_HOME)
-        self.assertEqual(self.finish(), 'selector')
-        payload = self.selects()[-1].args[1]
-        self.assertEqual(payload.last.x, 5)
-        self.assertIsNone(payload.home)
 
 
 class HomeWardrobeTests(unittest.TestCase):

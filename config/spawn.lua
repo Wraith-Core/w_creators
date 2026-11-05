@@ -62,12 +62,14 @@ Config.Spawn = {
         -- 2026-11-04: OFF - spawning a returning character straight at his last location crashed the game at
         -- spawn (RAGE error 0x9952DB5E:212 / 0x496AC5DF:961, Red River + Studio); the selector with the last location
         -- first works. Back on only after that path is fixed.
+        -- 1.0.15 (owner 2026-11-05): either way a returning character never picks a town: the selector shows only
+        -- «آخر مكان» (+ «بيتي» for a house owner); no valid last location = «بيتي» or the first enabled point alone.
         direct = false,
     },
 
     -- 1.0.8 (owner 2026-11-02): a character who OWNS a house (w_housing's GetHomeSpawn; key holders never) chooses
     -- between two at login: «آخر مكان» and «بيتي» (his bed, waking up with the game's own get-out-of-bed; no bed =
-    -- just inside the door). Without a valid last location: «بيتي» and the towns. Needs lastLocation.direct.
+    -- just inside the door). Without a valid last location: «بيتي» alone (1.0.15; works with direct on or off).
     --   wakeMs = how long he lies in bed after the screen fades in before he gets up (ms)
     --   sleepScenario = the game's lying-in-bed scenario (amb_rest.meta); he gets up through its own exit, the
     --                   game's clips amb_rest@prop_human_sleep_bed@pillow@male_a / female_a@stand_exit

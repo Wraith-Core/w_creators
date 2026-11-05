@@ -228,31 +228,33 @@ class SpawnTests(Base):
         self.rt.run('Config.Spawn.points[3].enabled = false')                 # rhodes
         self.assertEqual(self.choose('rhodes').code, 'INVALID_SPAWN')
         self.assertTrue(self.e('SpawnPending[1]'))
+        self.assertEqual(self.choose('saintdenis').code, 'INVALID_SPAWN')   # 1.0.15: no town for a returning one
         self.later()
-        r = self.choose('saintdenis')
+        r = self.choose('valentine')                                          # the one fallback point
         self.assertTrue(r.ok, r.code)
-        self.assertAlmostEqual(r.data.pos.x, 2645.11)
+        self.assertAlmostEqual(r.data.pos.x, -274.09)
         self.assertEqual(r.data.kind, 'login')
         self.assertEqual(self.bucket(), 0)
         self.assertFalse(self.e('WCScene.isIsolated(1)'))
         spawn = self.spawns()[-1]
         self.assertEqual(spawn.args[2].kind, 'login')
         self.assertEqual(self.e('countLogs("character_spawned")'), 1)
-        self.assertEqual(self.choose('saintdenis').code, 'SPAWN_NOT_PENDING')
+        self.assertEqual(self.choose('valentine').code, 'SPAWN_NOT_PENDING')
 
     def test_selector_lists_enabled_points_in_order(self):
         self.rt.run('Config.Spawn.points[1].enabled = false; Config.Spawn.points[2].order = 50')
         self.activate()
         payload = self.rt.client_events('w_creators:client:selectSpawn')[-1].args[1]
-        self.assertEqual(list(payload.points.values()),
-                         ['rhodes', 'blackwater', 'strawberry', 'armadillo', 'tumbleweed', 'vanhorn', 'annesburg', 'saintdenis'])
+        # 1.0.15: a returning character with no valid last location sees only the first enabled point
+        self.assertEqual(list(payload.points.values()), ['rhodes'])
 
     def test_last_location_out_of_bounds_is_never_used(self):
         self.rt.run('lastPos = { x = 9000.0, y = 0.0, z = 50.0 }')
         self.activate()
         payload = self.rt.client_events('w_creators:client:selectSpawn')[-1].args[1]
         self.assertIsNone(payload.last)
-        r = self.choose('__last')
+        self.assertEqual(self.choose('__last').code, 'INVALID_SPAWN')         # 1.0.15: not shown, not allowed
+        r = self.choose('valentine')
         self.assertTrue(r.ok, r.code)
         self.assertAlmostEqual(r.data.pos.x, -274.09)                         # the first enabled point
 

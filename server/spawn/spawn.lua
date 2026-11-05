@@ -63,9 +63,14 @@ Spawn.HOME_ID = '__home'
 local HOME_ID = Spawn.HOME_ID
 local MAX_ID_LEN = 64
 
+-- 1.0.15 (owner 2026-11-05): the only ids a returning character's grant accepts (an ordered list: «آخر مكان»,
+-- «بيتي», or the one fallback point). nil = any enabled point (a new character, the admin selector).
+local grantAllow = {} -- [src] = { id, ... }
+
 AddEventHandler('playerDropped', function()
     SpawnPending[source] = nil
     pendingKind[source] = nil
+    grantAllow[source] = nil
 end)
 
 local function selectorEnabled()
@@ -281,6 +286,7 @@ local IN_WORLD = { admin = true, death = true }
 local function spawnNow(src, pos, point, kind)
     SpawnPending[src] = nil
     pendingKind[src] = nil
+    grantAllow[src] = nil
     if IN_WORLD[kind] then
         TriggerClientEvent('w_creators:client:respawn', src, pos, { kind = kind, point = point })
     else
@@ -299,7 +305,18 @@ function Spawn.grant(src, kind)
     if not src then return false end
     SpawnPending[src] = true
     pendingKind[src] = Spawn.KINDS[kind] and kind or 'login'
+    grantAllow[src] = nil
     return true
+end
+
+--- 1.0.15: may the pending grant spawn at this id? (a returning character: only the ids he was shown)
+function Spawn.allowed(src, pointId)
+    local allow = grantAllow[src]
+    if not allow then return true end
+    for _, id in ipairs(allow) do
+        if id == pointId then return true end
+    end
+    return false
 end
 
 --- The kind of the player's pending spawn grant, or nil.
@@ -311,6 +328,7 @@ end
 function Spawn.cancel(src)
     SpawnPending[src] = nil
     pendingKind[src] = nil
+    grantAllow[src] = nil
 end
 
 --- Withdraw a pending login-kind grant (initial / login / switch); an in-world one is kept.
@@ -339,24 +357,33 @@ function Spawn.finish(src, kind, isNew)
 
     local spawnEvent = Config.Creator.spawnEvent
     -- 1.0.8 (owner 2026-11-02): a returning character goes straight to his last location; a house owner chooses
-    -- «آخر مكان» / «بيتي» (with no valid last location: «بيتي» and the towns); no valid last location and no
-    -- house = the selector below. A new character always takes the selector.
-    if selectorEnabled() and not spawnEvent and not isNew and kind ~= 'initial' and directLast() then
+    -- «آخر مكان» / «بيتي». A new character always takes the selector with the towns.
+    -- 1.0.15 (owner 2026-11-05): a returning character never picks a town: «آخر مكان» only, plus «بيتي» for a
+    -- house owner. With direct off (the 2026-11-04 crash) the last location alone is still shown in the selector
+    -- (the path that works). No valid last location: «بيتي», else the one fallback point. The grant accepts only
+    -- the ids shown (Spawn.allowed).
+    if selectorEnabled() and not spawnEvent and not isNew and kind ~= 'initial' then
         local last = Spawn.lastPosition(src)
         local home = Spawn.home(src)
-        if home then
-            Spawn.grant(src, kind)
-            if last then last.label = Spawn.nearestLabel(last) end
-            TriggerClientEvent('w_creators:client:selectSpawn', src, {
-                last = last, home = { x = home.x, y = home.y, z = home.z, heading = home.heading },
-                points = last and {} or Spawn.pointIds(), kind = kind,
-            })
-            return 'selector'
-        end
-        if last then
+        if last and not home and directLast() then
             spawnNow(src, last, LAST_ID, kind)
             return 'direct'
         end
+        local allow, points = {}, {}
+        if last then allow[#allow + 1] = LAST_ID end
+        if home then allow[#allow + 1] = HOME_ID end
+        if #allow == 0 then
+            local _, id = fallback()
+            if id then allow[1] = id; points[1] = id end
+        end
+        Spawn.grant(src, kind)
+        grantAllow[src] = allow
+        if last then last.label = Spawn.nearestLabel(last) end
+        TriggerClientEvent('w_creators:client:selectSpawn', src, {
+            last = last, home = home and { x = home.x, y = home.y, z = home.z, heading = home.heading } or nil,
+            points = points, kind = kind,
+        })
+        return 'selector'
     end
     if selectorEnabled() and not spawnEvent then
         Spawn.grant(src, kind)
@@ -412,6 +439,7 @@ w.callback.register('w_creators:spawn:choose', function(src, pointId)
     end
     local pos, point = Spawn.resolve(pointId, src)
     if not pos then return WCResult.fail(point) end
+    if not Spawn.allowed(src, pointId) then return WCResult.fail('INVALID_SPAWN') end
     local kind = spawnNow(src, pos, point, pendingKind[src] or 'login')
     return WCResult.ok({ pos = pos, kind = kind })
 end)
@@ -428,7 +456,10 @@ RegisterNetEvent('w_creators:server:spawnAt', function(pointId)
         denied(src, pointId)
         return
     end
-    local pos, point = Spawn.resolve(pointId, src)
+    -- 1.0.15: a returning character's id outside what he was shown -> the first id he was shown
+    if not Spawn.allowed(src, pointId) then pointId = grantAllow[src][1] end
+    local pos, point
+    if pointId then pos, point = Spawn.resolve(pointId, src) end
     if not pos then pos, point = fallback() end
     spawnNow(src, pos, point, pendingKind[src] or 'login')
 end)

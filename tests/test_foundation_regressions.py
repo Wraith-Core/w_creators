@@ -417,21 +417,22 @@ class SpawnServiceTests(unittest.TestCase):
         self.rt.run('Config.Spawn.lastLocation.direct = false')
         self.rt.run('Config.Spawn.points[2].enabled = false; Config.Spawn.points[1].order = 99; Bridge.FinishCharacter(1, false)')
         payload = self.rt.client_events('w_creators:client:selectSpawn')[0].args[1]
-        self.assertEqual(list(payload.points.values()),
-                         ['rhodes', 'blackwater', 'strawberry', 'armadillo', 'tumbleweed', 'vanhorn', 'annesburg', 'valentine'])
+        self.assertEqual(list(payload.points.values()), [])        # 1.0.15: a returning character, no towns
         self.assertEqual(payload.kind, 'login')
         self.assertEqual(payload.last.x, 5)
         self.assertEqual(payload.last.label, 'فالنتاين')
-        self.rt.run('Bridge.FinishCharacter(1, true)')
+        self.rt.run('WCSpawnServer.cancel(1); Bridge.FinishCharacter(1, true)')
         payload = self.rt.client_events('w_creators:client:selectSpawn')[1].args[1]
         self.assertEqual(payload.kind, 'initial')
         self.assertIsNone(payload.last)
+        self.assertEqual(list(payload.points.values()),
+                         ['rhodes', 'blackwater', 'strawberry', 'armadillo', 'tumbleweed', 'vanhorn', 'annesburg', 'valentine'])
 
     def test_choose_callback(self):
         # 1.0.8: the selector for a returning character is now the config choice lastLocation.direct = false
         self.rt.run('Config.Spawn.lastLocation.direct = false')
         self.assertEqual(self.choose('rhodes').code, 'SPAWN_NOT_PENDING')
-        self.rt.run('Bridge.FinishCharacter(1, false, "switch")')
+        self.rt.run('Bridge.FinishCharacter(1, true, "switch")')        # 1.0.15: towns = a new character
         self.assertEqual(self.choose('nowhere').code, 'INVALID_SPAWN')
         self.assertEqual(self.choose(42).code, 'INVALID_PAYLOAD')
         self.assertTrue(self.e('SpawnPending[1]'))                     # a refused choice keeps the grant
@@ -455,8 +456,11 @@ class SpawnServiceTests(unittest.TestCase):
                '{ x = 2550, y = -1300, z = 48 }', '{ x = 0, y = 0, z = 0 }', 'nil', '"garbage"')  # 9 m from it
         for i, value in enumerate(bad):
             self.rt.run('last = %s; Clock.now = Clock.now + 6000; Bridge.FinishCharacter(1, false)' % value)
-            self.assertIsNone(self.rt.client_events('w_creators:client:selectSpawn')[i].args[1].last, value)
-            r = self.choose('__last')
+            payload = self.rt.client_events('w_creators:client:selectSpawn')[i].args[1]
+            self.assertIsNone(payload.last, value)
+            self.assertEqual(list(payload.points.values()), ['saintdenis'], value)   # 1.0.15: the one fallback
+            self.assertEqual(self.choose('rhodes').code, 'INVALID_SPAWN', value)
+            r = self.choose('saintdenis')
             self.assertTrue(r.ok, value)
             self.assertAlmostEqual(r.data.pos.x, 2645.11, msg=value)
             self.assertAlmostEqual(self.e('Bridge.GetSpawnCoords(1).x'), 2645.11, msg=value)
