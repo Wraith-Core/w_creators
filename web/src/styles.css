@@ -122,7 +122,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
   inset: 0;
   pointer-events: none;
   background: linear-gradient(var(--w-deg-end),
-    rgba(10, 10, 10, .74) 0%, rgba(10, 10, 10, .55) 20%, rgba(10, 10, 10, .22) 34%, rgba(10, 10, 10, .06) 44%, rgba(10, 10, 10, 0) 52%);
+    rgba(11, 10, 10, .74) 0%, rgba(11, 10, 10, .55) 20%, rgba(11, 10, 10, .22) 34%, rgba(11, 10, 10, .06) 44%, rgba(11, 10, 10, 0) 52%);
 }
 
 /* The board: at the start side of the screen, as the pause menu's (in Arabic it stands on the right) */
@@ -230,6 +230,12 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .atelier-sections > button:hover:not(:disabled), .atelier-sections > button:focus-visible, .atelier-sections > button.selected { color: var(--w-ink); }
 .atelier-sections > button:hover:not(:disabled)::before, .atelier-sections > button:focus-visible::before, .atelier-sections > button.selected::before { opacity: 1; }
 .atelier-sections > button:active:not(:disabled)::before { background: var(--w-paper-dim); }
+/* 2026-11-05 (owner): the site's look -- the active stage is the red mark with light text (the cursor on another stays paper) */
+.atelier-sections > button.selected { color: var(--w-mark-ink, #F2F2F2); }
+.atelier-sections > button.selected::before { background: var(--w-mark, #D0161B); }
+.atelier-sections > button.selected:hover:not(:disabled)::before, .atelier-sections > button.selected:focus-visible::before { background: var(--w-mark-lit, #E01A1F); }
+.atelier-sections > button.selected:active:not(:disabled)::before { background: var(--w-mark-deep, #8F0B0E); }
+.atelier-sections > button.selected i { background: var(--w-mark-ink, #F2F2F2); }
 .atelier-sections > button:disabled { opacity: .4; }
 .atelier-sections b {
   flex: none;
@@ -246,8 +252,8 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .atelier-sections i { flex: none; width: .34rem; height: .34rem; background: var(--w-red); }
 /* the loading screen's progress: a hairline, the paper fill to the current stage, the red tick */
 .wc-progress { position: absolute; left: .3rem; right: .3rem; bottom: .2rem; height: 1px; background: var(--w-rule); }
-.wc-progress-fill { position: absolute; top: -.5px; inset-inline-start: 0; width: var(--p, 0%); height: 2px; background: var(--w-paper); transition: width 220ms var(--w-ease); }
-.wc-progress-fill::after { content: ''; position: absolute; inset-inline-end: -1px; top: -3.5px; width: 2px; height: 9px; background: var(--w-red); }
+.wc-progress-fill { position: absolute; top: -.5px; inset-inline-start: 0; width: var(--p, 0%); height: 2px; background: var(--w-red, #D0161B); transition: width 220ms var(--w-ease); }
+.wc-progress-fill::after { content: ''; position: absolute; inset-inline-end: -1px; top: -3.5px; width: 2px; height: 9px; background: var(--w-paper); }
 
 /* ── Card B: the heading and the workspace ── */
 .wc-work { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; padding: .8rem 1.05rem .9rem; }
@@ -366,13 +372,13 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
   letter-spacing: calc(var(--w-label-track) * .6);
   color: var(--w-paper-dim);
 }
-.row-value[data-badge=equipped] { background: var(--w-paper); border-color: var(--w-paper); color: var(--w-ink); }
+.row-value[data-badge=equipped] { background: var(--w-mark, #D0161B); border-color: var(--w-mark, #D0161B); color: var(--w-mark-ink, #F2F2F2); }
 .row-value[data-badge=locked] { opacity: .55; }
 .row-value[data-badge=new] { border-color: var(--w-paper); color: var(--w-paper); } /* "new" is not one of red's uses: a full paper hairline, brighter than owned */
-.menu-row:hover:not(:disabled) .row-value[data-badge], .menu-row:focus-visible .row-value[data-badge] { border-color: rgba(10, 10, 10, .45); color: var(--w-ink); }
-.menu-row:hover:not(:disabled) .row-value[data-badge=equipped], .menu-row:focus-visible .row-value[data-badge=equipped] { background: var(--w-ink); border-color: var(--w-ink); color: var(--w-paper); }
+.menu-row:hover:not(:disabled) .row-value[data-badge], .menu-row:focus-visible .row-value[data-badge] { border-color: rgba(11, 10, 10, .45); color: var(--w-ink); }
+.menu-row:hover:not(:disabled) .row-value[data-badge=equipped], .menu-row:focus-visible .row-value[data-badge=equipped] { background: var(--w-mark, #D0161B); border-color: var(--w-mark, #D0161B); color: var(--w-mark-ink, #F2F2F2); }
 .menu-list:hover .menu-row:focus-visible:not(:hover) .row-value[data-badge], .component:hover ~ .menu-list .menu-row:focus-visible .row-value[data-badge] { border-color: rgba(242, 242, 242, .35); color: var(--w-paper-dim); }
-.menu-list:hover .menu-row:focus-visible:not(:hover) .row-value[data-badge=equipped], .component:hover ~ .menu-list .menu-row:focus-visible .row-value[data-badge=equipped] { background: var(--w-paper); border-color: var(--w-paper); color: var(--w-ink); }
+.menu-list:hover .menu-row:focus-visible:not(:hover) .row-value[data-badge=equipped], .component:hover ~ .menu-list .menu-row:focus-visible .row-value[data-badge=equipped] { background: var(--w-mark, #D0161B); border-color: var(--w-mark, #D0161B); color: var(--w-mark-ink, #F2F2F2); }
 .row-art { width: 1.2rem; height: 1.2rem; opacity: .85; }
 .row-arrow { width: .62rem; height: .62rem; opacity: .7; }
 /* the game's clothing icon (a white sketch) in an ink disc: it stays readable on the paper band */
@@ -385,7 +391,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
   background: var(--row-icon) center / 72% no-repeat, var(--w-ink);
   box-shadow: inset 0 0 0 1px var(--w-rule-2);
 }
-.menu-row:hover:not(:disabled) .row-icon, .menu-row:focus-visible .row-icon { box-shadow: inset 0 0 0 1px var(--w-ink), 0 0 0 2px rgba(10, 10, 10, .2); }
+.menu-row:hover:not(:disabled) .row-icon, .menu-row:focus-visible .row-icon { box-shadow: inset 0 0 0 1px var(--w-ink), 0 0 0 2px rgba(11, 10, 10, .2); }
 .editor-workspace .menu-row { animation: wc-fade 200ms var(--w-ease) both; }
 .editor-workspace .menu-row:nth-child(2) { animation-delay: 34ms; }
 .editor-workspace .menu-row:nth-child(3) { animation-delay: 68ms; }
@@ -431,13 +437,13 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .choice-control { display: grid; grid-template-columns: 1.7rem minmax(0, 1fr) 1.7rem; align-items: center; direction: ltr; }
 .choice-control > button { display: grid; place-items: center; height: 2rem; color: var(--w-paper-dim); transition: color var(--w-t-fast) var(--w-ease); }
 .choice-control > button:hover:not(:disabled) { color: var(--w-paper); }
-.choice:hover .choice-control > button, .choice:focus-within .choice-control > button { color: rgba(10, 10, 10, .6); }
+.choice:hover .choice-control > button, .choice:focus-within .choice-control > button { color: rgba(11, 10, 10, .6); }
 .choice:hover .choice-control > button:hover:not(:disabled), .choice:focus-within .choice-control > button:focus-visible { color: var(--w-ink); }
 .choice-control > button:disabled { opacity: .3; }
 .choice-control .wc-glyph { width: .7rem; height: .7rem; }
 .choice-value { display: block; min-width: 0; border: 1px solid rgba(242, 242, 242, .35); transition: border-color var(--w-t-fast) var(--w-ease); }
 [dir=rtl] .choice-value { direction: rtl; }
-.choice:hover .choice-value, .choice:focus-within .choice-value { border-color: rgba(10, 10, 10, .5); }
+.choice:hover .choice-value, .choice:focus-within .choice-value { border-color: rgba(11, 10, 10, .5); }
 .choice-value select {
   display: block;
   width: 100%;
@@ -496,7 +502,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
   unicode-bidi: isolate;
 }
 .range-track { position: relative; display: block; height: 1.1rem; direction: ltr; --track: rgba(242, 242, 242, .25); --fill: var(--w-paper); }
-.slider-field:hover .range-track, .slider-field:focus-within .range-track { --track: rgba(10, 10, 10, .3); --fill: var(--w-ink); }
+.slider-field:hover .range-track, .slider-field:focus-within .range-track { --track: rgba(11, 10, 10, .3); --fill: var(--w-ink); }
 .slider-field[data-off=true]:hover .range-track { --track: rgba(242, 242, 242, .25); --fill: var(--w-paper); }
 /* one cursor (as the menu rows): while the mouse is over the controls, or over the rows that follow
    them, only the row under it carries the band; a row that kept focus from an earlier click or key
@@ -850,8 +856,8 @@ input[type=range]:disabled { cursor: default; }
   letter-spacing: 0;
   color: var(--w-paper-faint);
 }
-.identity-choice.is-on { color: var(--w-ink); }
-.identity-choice.is-on::before { opacity: 1; }
+.identity-choice.is-on { color: var(--w-mark-ink, #F2F2F2); }
+.identity-choice.is-on::before { opacity: 1; background: var(--w-mark, #D0161B); }
 /* a text field with its own action (the wardrobe's new outfit): a secondary button under it */
 .identity > .wst-button {
   margin-top: .75rem;
@@ -926,7 +932,8 @@ input[type=range]:disabled { cursor: default; }
 .date-chooser.is-m .date-cell { font-family: var(--w-f-action); font-weight: var(--w-wt-action); font-size: calc(.88rem * var(--w-k-action)); line-height: var(--w-lh-action); }
 .date-cell.is-decade { color: var(--w-paper); }
 .date-cell:hover:not(:disabled), .date-cell:focus-visible { background: var(--w-ink-4); color: var(--w-paper); }
-.date-cell.is-on, .date-cell.is-on:hover, .date-cell.is-on:focus-visible { background: var(--w-paper); color: var(--w-ink); }
+.date-cell.is-on, .date-cell.is-on:focus-visible { background: var(--w-mark, #D0161B); color: var(--w-mark-ink, #F2F2F2); }
+.date-cell.is-on:hover { background: var(--w-mark-lit, #E01A1F); color: var(--w-mark-ink, #F2F2F2); }
 .date-cell:disabled { opacity: .3; cursor: default; }
 
 /* ── Card C: the action strip ── */
@@ -979,10 +986,11 @@ input[type=range]:disabled { cursor: default; }
 .commit > button:not(.primary)::before { background: var(--w-ink-4); opacity: 1; }
 .commit > button:not(.primary):hover:not(:disabled), .commit > button:not(.primary):focus-visible { color: var(--w-ink); }
 .commit > button:not(.primary):hover:not(:disabled)::before, .commit > button:not(.primary):focus-visible::before { background: var(--w-paper); }
-.commit > .primary { flex: 1; min-width: 0; color: var(--w-ink); }
-.commit > .primary::before { opacity: 1; }
-.commit > .primary:hover:not(:disabled)::before, .commit > .primary:focus-visible::before { background: var(--w-paper-lit); }
+.commit > .primary { flex: 1; min-width: 0; color: var(--w-mark-ink, #F2F2F2); }
+.commit > .primary::before { opacity: 1; background: var(--w-mark, #D0161B); }
+.commit > .primary:hover:not(:disabled)::before, .commit > .primary:focus-visible::before { background: var(--w-mark-lit, #E01A1F); }
 .commit > button:active:not(:disabled)::before { background: var(--w-paper-dim); }
+.commit > .primary:active:not(:disabled)::before { background: var(--w-mark-deep, #8F0B0E); }
 .commit > button:disabled { opacity: .45; }
 .commit > .primary:disabled { opacity: .35; }
 /* the amount sits at the far end of the slip (it is its own ltr / auto run, so the side is set by the page) */
@@ -999,7 +1007,7 @@ input[type=range]:disabled { cursor: default; }
 [dir=rtl] .commit .primary span { margin-left: 0; margin-right: auto; }
 
 /* ══════════════════ Are you sure? The pause menu's paper note ══════════════════ */
-.modal-shade { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: rgba(10, 10, 10, .55); animation: wc-fade 160ms var(--w-ease) both; }
+.modal-shade { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; background: rgba(11, 10, 10, .55); animation: wc-fade 160ms var(--w-ease) both; }
 .confirmation {
   width: 27rem;
   max-width: calc(100vw - 2rem);
@@ -1189,7 +1197,7 @@ input[type=range]:disabled { cursor: default; }
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: linear-gradient(90deg, rgba(10, 10, 10, .72) 0%, rgba(10, 10, 10, .5) 18%, rgba(10, 10, 10, .18) 32%, rgba(10, 10, 10, 0) 44%);
+  background: linear-gradient(90deg, rgba(11, 10, 10, .72) 0%, rgba(11, 10, 10, .5) 18%, rgba(11, 10, 10, .18) 32%, rgba(11, 10, 10, 0) 44%);
 }
 .cc-sheet { display: flex; flex-direction: column; padding: 1.5rem 1.75rem 1.3rem; }
 .cc-bar { display: flex; align-items: stretch; padding: 1.05rem 1.5rem 1.1rem; }

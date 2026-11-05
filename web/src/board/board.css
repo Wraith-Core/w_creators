@@ -15,16 +15,16 @@
 
 /* ══════════════════ The root: the kit's tokens, read from the theme ══════════════════ */
 .wcb-root {
-  --ink: var(--w-ink, #0A0A0A);
-  --ink-2: var(--w-ink-2, #111111);
-  --ink-3: var(--w-ink-3, #191919);
-  --ink-4: var(--w-ink-4, #222222);
+  --ink: var(--w-ink, #0B0A0A);
+  --ink-2: var(--w-ink-2, #151313);
+  --ink-3: var(--w-ink-3, #1C1919);
+  --ink-4: var(--w-ink-4, #242020);
   --paper: var(--w-paper, #F2F2F2);
   --paper-dim: var(--w-paper-dim, #B4B4B4);
   --paper-faint: var(--w-paper-faint, #7A7A7A);
   --rule: var(--w-rule, rgba(242, 242, 242, 0.16));
   --rule-2: var(--w-rule-2, rgba(242, 242, 242, 0.32));
-  --red: var(--w-red, #CB0101);
+  --red: var(--w-red, #D0161B);
   --note: var(--w-note, #E9E9E9);
   --note-ink: var(--w-note-ink, #111111);
   --note-dim: var(--w-note-dim, #555555);
@@ -91,8 +91,8 @@
   inset: 0;
   pointer-events: none;
   background: linear-gradient(90deg,
-    rgba(10, 10, 10, 0.82) 0%, rgba(10, 10, 10, 0.64) 28%, rgba(10, 10, 10, 0.32) 48%,
-    rgba(10, 10, 10, 0.08) 62%, rgba(10, 10, 10, 0) 72%);
+    rgba(11, 10, 10, 0.82) 0%, rgba(11, 10, 10, 0.64) 28%, rgba(11, 10, 10, 0.32) 48%,
+    rgba(11, 10, 10, 0.08) 62%, rgba(11, 10, 10, 0) 72%);
   animation: wcb-fade 220ms var(--ease) both;
 }
 .wcb-root[dir='rtl'] .wf-scrim { transform: scaleX(-1); }
@@ -313,6 +313,14 @@
   inset-inline-end: 0.15rem; top: 28%; bottom: 28%;
   width: 2px; background: var(--paper);
 }
+/* 2026-11-05 (owner): the site's look -- the selected row is the red band with light text (no frame, no tick);
+ * the cursor on another row stays the paper band, on the selected one the band lights up. */
+.wcb-root .wf-row.is-picked { background: transparent; box-shadow: none; color: var(--w-mark-ink, #F2F2F2); border-bottom-color: transparent; }
+.wcb-root .wf-row.is-picked::before { opacity: 1; background: var(--w-mark, #D0161B); }
+.wcb-root .wf-row.is-picked.is-here::before { background: var(--w-mark-lit, #E01A1F); }
+.wcb-root .wf-row.is-picked::after { display: none; }
+.wcb-root .wf-row.is-picked :is(.wf-row-state, .wf-row-meta, .wcb-chip, .wcb-chip.is-on) { color: var(--w-mark-ink, #F2F2F2); }
+.wcb-root .wf-row.is-picked .wf-tag { border-color: rgba(242, 242, 242, 0.6); color: var(--w-mark-ink, #F2F2F2); }
 .wcb-root .wf-row-state { flex: none; width: 1.25rem; height: 1.25rem; color: var(--paper-dim); }
 .wcb-root .wf-row.is-here .wf-row-state { color: var(--ink); }
 .wcb-root .wf-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.12rem; }
@@ -326,7 +334,7 @@
   overflow: hidden;
 }
 .wcb-root:not(.is-rtl) .wf-row-meta { font-variant-caps: all-small-caps; letter-spacing: 0.08em; font-size: 0.92rem; }
-.wcb-root .wf-row.is-here .wf-row-meta { color: rgba(17, 17, 17, 0.62); }
+.wcb-root .wf-row.is-here .wf-row-meta { color: rgba(21, 19, 19, 0.62); }
 .wcb-root .wf-row-end { flex: none; font: 500 0.85rem/1 var(--f-label); color: var(--paper-dim); white-space: nowrap; }
 .wcb-root .wf-row.is-here .wf-row-end { color: var(--ink); }
 
@@ -371,9 +379,9 @@
   white-space: nowrap;
 }
 .wcb-root .wf-row .wf-tag { margin-inline-start: 0; }
-.wcb-root .wf-row.is-here .wf-tag { border-color: rgba(17, 17, 17, 0.5); color: var(--ink); }
+.wcb-root .wf-row.is-here .wf-tag { border-color: rgba(21, 19, 19, 0.5); color: var(--ink); }
 .wcb-root .wf-tag.is-hush { border-style: dashed; color: var(--paper-faint); border-color: rgba(242, 242, 242, 0.28); }
-.wcb-root .wf-tag.is-solid { background: var(--paper); border-color: var(--paper); color: var(--ink); }
+.wcb-root .wf-tag.is-solid { background: var(--w-green, #9FC79A); border-color: var(--w-green, #9FC79A); color: var(--ink); }
 .wcb-root .wf-row.is-here .wf-tag.is-solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
 /* ── Fields ── */
@@ -459,7 +467,7 @@
   letter-spacing: 0.08em;
   color: var(--paper-dim);
 }
-.wcb-root .wf-switch[data-on='true'] { background: var(--paper); border-color: var(--paper); color: var(--ink); }
+.wcb-root .wf-switch[data-on='true'] { background: var(--w-mark, #D0161B); border-color: var(--w-mark, #D0161B); color: var(--w-mark-ink, #F2F2F2); }
 .wcb-root .wf-switch-row.is-here .wf-switch { border-color: var(--paper); box-shadow: inset 0 -0.14rem 0 var(--red); }
 
 /* A choice among a few (◀ value ▶): the game's own selection arrows */
@@ -701,10 +709,12 @@
   opacity: 0;
   transition: opacity 120ms var(--ease);
 }
-.wcb-root .wf-bd-side.is-active { color: var(--paper); }
-.wcb-root .wf-bd-side.is-active::after { opacity: 1; }
+.wcb-root .wf-bd-side.is-active { color: var(--w-mark-ink, #F2F2F2); }
+.wcb-root .wf-bd-side.is-active::before { opacity: 1; background: var(--w-mark, #D0161B); } /* 2026-11-05: the open section is the red mark */
+.wcb-root .wf-bd-side.is-active.is-here::before { background: var(--w-mark-lit, #E01A1F); }
 .wcb-root .wf-bd-side.is-here { color: var(--ink); }
 .wcb-root .wf-bd-side.is-here::before { opacity: 1; }
+.wcb-root .wf-bd-side.is-active.is-here { color: var(--w-mark-ink, #F2F2F2); }
 .wcb-root .wf-bd-side-ico { flex: none; width: 1.2rem; height: 1.2rem; }
 .wcb-root .wf-bd-side-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .wcb-root .wf-bd-side-num { flex: none; font-size: 0.92rem; opacity: 0.75; }
@@ -739,7 +749,7 @@
 }
 .wcb-root .wcb-chip .wf-glyph { width: 0.75rem; height: 0.75rem; }
 .wcb-root .wcb-chip.is-on { color: var(--paper-dim); }
-.wcb-root .wf-row.is-here .wcb-chip { color: rgba(17, 17, 17, 0.5); }
+.wcb-root .wf-row.is-here .wcb-chip { color: rgba(21, 19, 19, 0.5); }
 .wcb-root .wf-row.is-here .wcb-chip.is-on { color: var(--ink); }
 
 /* the selected place's card */
