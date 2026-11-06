@@ -127,6 +127,9 @@ class Base(unittest.TestCase):
         self.rt = server_runtime()
         self.e = self.rt.eval
         self.cb = self.e('cb')
+        # the shipped config allows ONE character (owner 2026-11-06); the fixtures own two, so the flows run with 3
+        self.shipped_slots = self.e('Config.Characters.defaultSlots')
+        self.rt.run('Config.Characters.defaultSlots = 3')
 
     def call(self, name, src, *args):
         return self.cb(name, src, *args)
@@ -294,6 +297,13 @@ class CreateTests(Base):
         self.rt.run('Clock.now = Clock.now + 30 * 60 * 1000 + 1')
         app = self.e('S.default("male")')
         self.assertEqual(self.call('characters:create', 1, token, identity(self.rt), app).code, 'CREATION_NOT_GRANTED')
+
+    def test_one_character_per_person_shipped(self):
+        self.assertEqual(self.shipped_slots, 1)
+        self.assertEqual(self.e('next(Config.Characters.slotPermissions)'), None)
+        self.rt.run('Config.Characters.defaultSlots = 1')
+        self.assertEqual(self.call('characters:beginCreate', 1).code, 'CHARACTER_SLOT_LIMIT')
+        self.assertFalse(self.call('characters:list', 1).data.canCreate)
 
     def test_slot_limit(self):
         self.rt.run('Config.Characters.defaultSlots = 2')

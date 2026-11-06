@@ -48,11 +48,11 @@ Config.Services = {
 -- ---------------------------------------------------------------------
 Config.Characters = {
     -- Character slots per account.
-    defaultSlots = 3,
-    -- Extra slots by ACE permission: { ['w_creators.slots.vip'] = 5 }. The highest granted value wins.
-    -- 2026-10-21: every VIP tier (w_vip grants this node to the group vip.bronze, inherited by every higher
-    -- tier) has 4 characters in total (owner: ONE extra slot only). Without w_vip nobody holds the node.
-    slotPermissions = { ['w_creators.slots.vip'] = 4 },
+    -- owner 2026-11-06: ONE character per person, VIP included (no VIP slot, no store slot any more).
+    defaultSlots = 1,
+    -- Extra slots by ACE permission: { ['w_creators.slots.x'] = 2 }. The highest granted value wins.
+    -- Empty since 2026-11-06 (it held the VIP's 4).
+    slotPermissions = {},
     -- Switching characters mid-game (/characters). Refused while dead, in an editor or in a session.
     allowSwitch = true,
 

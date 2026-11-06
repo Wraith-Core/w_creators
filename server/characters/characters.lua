@@ -198,13 +198,8 @@ function Chars.slots(src)
             if allowed and granted then slots = n end
         end
     end
-    -- 2026-10-21: + the character slots bought in the server store (w_vip 1.1.0 Perk = tier + extras; a soft
-    -- dependency: without w_vip the ACE answer above stands)
-    if GetResourceState('w_vip') == 'started' then
-        local ok, n = pcall(function() return exports.w_vip:Perk(src, 'char_slots', slots) end)
-        n = ok and WCUtil.int(n, 0, 100, nil)
-        if n and n > slots then slots = n end
-    end
+    -- 2026-11-06 (owner): one character per person - the VIP tier and the store's slot no longer add any
+    -- (w_vip's char_slots is not read here any more)
     return slots
 end
 
