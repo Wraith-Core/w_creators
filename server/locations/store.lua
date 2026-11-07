@@ -268,7 +268,10 @@ function ops.create(src, args)
     if not ped or ped == 0 then return false, 'invalid' end
     local id = newId(placeType)
     if not id then return false, 'invalid' end
-    local at = spot(GetEntityCoords(ped), false)
+    -- GetEntityCoords gives a vector3 (type() is 'vector3', not 'table'), so spot() refused it and every
+    -- new place failed with 'invalid'
+    local c = GetEntityCoords(ped)
+    local at = spot({ x = c.x, y = c.y, z = c.z }, false)
     if not at then return false, 'invalid' end
     local place = { id = id, type = placeType, enabled = true, label = text(args.label, TYPE_LABELS[placeType]),
                     town = text(args.town, ''), coords = at, npc = false }
