@@ -7,12 +7,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>w_creators</title>
   </head>
-  <body class="wst-root wst-creators" style="background: transparent !important; background-color: transparent !important;">
+  <body style="background: transparent !important; background-color: transparent !important;">
     <div id="app"></div>
     <div id="board"></div>
+    <!-- 1.1.0: no sheet from w_lib any more: the board kit (src/kit.css) and its own fonts and textures
+         (web/public, injected by src/main.jsx) draw every view of this page. -->
     <script type="module" src="/src/main.jsx"></script>
-    <!-- The server's one theme (w_lib/nui/theme: tokens, the Arabic and Latin faces, the w-* parts),
-         linked at run time after the app's own CSS. Not imported from src/: Vite would rewrite the URL. -->
-    <link rel="stylesheet" href="https://cfx-nui-w_lib/nui/assets/wraith-theme.css" />
   </body>
 </html>

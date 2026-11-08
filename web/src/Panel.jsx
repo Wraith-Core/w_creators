@@ -1,10 +1,10 @@
 import React, {useEffect, useReducer, useRef, useState} from 'react';
 import {nuiSend} from './nui';
-import {BRAND} from './brand';
+import {brandOf} from './brand';
 import {Frame, Glyph} from './Chrome';
 import {NodeView} from './TreeView';
 import {
-  createMemory, filterChildren, headingFor, idleRequest, isPending, modalFor, openPath, popPath, recall, remember,
+  createMemory, filterChildren, hasArabic, headingFor, idleRequest, isPending, modalFor, openPath, popPath, recall, remember,
   requestReducer, resolvePath,
 } from './treeState';
 
@@ -70,6 +70,8 @@ export default function Panel({payload, onPayload, onClose}) {
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, []);
+  const brand = brandOf(S);
+  const rtl = (session.dir || (session.locale === 'ar' ? 'rtl' : 'ltr')) === 'rtl';
   const viewKey = validPath.join('/') || 'root';
   useEffect(() => {
     const rows = main.current ? Array.from(main.current.querySelectorAll('.menu-row')) : [];
@@ -78,7 +80,7 @@ export default function Panel({payload, onPayload, onClose}) {
 
   return <div className="editor-shell" dir={session.dir || (session.locale === 'ar' ? 'rtl' : 'ltr')}>
     <section className="wst-panel atelier" aria-label={session.title} aria-busy={busy}>
-      <div className="wc-mast"><span className="wc-mark" dir="ltr">{BRAND}</span><span className="wc-mast-rule" aria-hidden="true"/></div>
+      <div className="wc-mast wf-mast">{brand && <span className="wc-mark wf-mark">{hasArabic(brand) ? <span className="wf-ar">{brand}</span> : brand}</span>}<span className="wc-mast-rule wf-mast-rule" aria-hidden="true"/></div>
       <div className="wc-card wc-head"><Frame/>
       <header className="wst-header"><h1>{session.title}</h1></header>
       </div>
@@ -102,13 +104,14 @@ export default function Panel({payload, onPayload, onClose}) {
       </footer>
       </div>
     </section>
-    {modal && <div className="modal-shade"><section className="wst-panel confirmation" role="dialog" aria-modal="true" aria-labelledby="confirmation-title"><Frame/>
-      <h2 id="confirmation-title">{modal.title}</h2><div className="wst-rule wc-hr"/>
-      <p>{modal.body}</p>
-      <div className="confirmation-actions">
-        <button className="wst-button" disabled={busy} onClick={() => setConfirm(null)}>{S.stay}</button>
-        <button className="wst-button primary destructive danger" disabled={busy} onClick={() => control(confirm.node.control)}>{busy ? S.saving : S.confirm}</button>
+    {/* 1.1.0: the kit's paper note, as the editor's */}
+    {modal && <div className="modal-shade"><div className={'wf-note' + (rtl ? ' is-rtl' : '')}><section className="wst-panel confirmation wf-note-plate" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
+      <h2 id="confirmation-title" className="wf-note-q">{modal.title}</h2>
+      <p className="wf-note-sub">{modal.body}</p>
+      <div className="confirmation-actions wf-note-row">
+        <button className="wst-button wf-choice" disabled={busy} onClick={() => setConfirm(null)}>{S.stay}</button>
+        <button className="wst-button wf-choice primary destructive danger" disabled={busy} onClick={() => control(confirm.node.control)}>{busy ? S.saving : S.confirm}</button>
       </div>
-    </section></div>}
+    </section></div></div>}
   </div>;
 }

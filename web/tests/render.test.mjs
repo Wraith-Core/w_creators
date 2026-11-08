@@ -74,9 +74,10 @@ for (const mode of ['creatorMale', 'creatorFemale', 'surgery', 'surgeryHair', 'b
     const html = R.editor(p);
     assert.match(html, /class="wst-panel atelier"/);
     assert.ok(html.includes(`<h1>${p.session.title}</h1>`));
-    // the wordmark is the fixed Latin brand mark in both languages, never a translated string
-    assert.ok(html.includes('RED RIVER · CHARACTER STUDIO'));
-    assert.ok(!html.includes('ريد ريفر'));
+    // 1.1.0: the wordmark comes from the locales (strings.brand), in the kit's masthead
+    assert.ok(p.strings.brand);
+    assert.match(html, new RegExp(`class="wc-mark wf-mark"><span class="wf-ar">${p.strings.brand}</span>`));
+    assert.ok(!html.includes('RED RIVER'));
     const rows = p.tree.children.filter(c => ['group', 'identity', 'review', 'action'].includes(c.kind)).length + (p.canRandom ? 1 : 0);
     // every row, with or without the round clothing icon (class "... menu-row has-icon")
     assert.equal(count(html, 'class="wst-card menu-row'), rows);
@@ -177,7 +178,7 @@ test('panel: tree, heading and Close button', () => {
   const html = R.panel(copy(p));
   assert.match(html, /class="wst-panel atelier"/);
   assert.ok(html.includes(p.strings.close));
-  assert.ok(html.includes('RED RIVER · CHARACTER STUDIO'));
+  assert.ok(html.includes(p.strings.brand));
   assert.equal(count(html, 'scene-touch'), 0);
   const first = p.tree.children[0];
   const inner = R.panel(copy(p), [first.id, first.children[0].id]);
@@ -444,8 +445,18 @@ test('character card: the pause player card with its money bar and the blocked b
 });
 
 test('no heading uses RDR Lino: its "›" is a Rockstar badge (the "R* CREATED" in the heading)', () => {
+  // 1.1.0: the wordmark face is the kit's (.wf-mark, --f-mark); the page's own sheet never names it
   const css = readFileSync(join(web, 'src', 'styles.css'), 'utf8');
   const rules = css.replace(/\/\*[\s\S]*?\*\//g, '').split('}');
-  const lino = rules.filter(r => /RDR Lino|--w-f-display/.test(r)).map(r => r.split('{')[0].trim());
-  assert.deepEqual(lino, ['.wc-mark']);
+  const lino = rules.filter(r => /RDR Lino|--f-mark|--w-f-display/.test(r)).map(r => r.split('{')[0].trim());
+  assert.deepEqual(lino, []);
+});
+
+test("1.1.0: the page stands on the board kit, never on w_lib's theme", () => {
+  const html = readFileSync(join(web, 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /cfx-nui-w_lib|nui:\/\/w_lib|wraith-theme|wst-root/);
+  const main = readFileSync(join(web, 'src', 'main.jsx'), 'utf8');
+  assert.match(main, /import '\.\/kit\.css';\r?\nimport '\.\/styles\.css';/);
+  const css = readFileSync(join(web, 'src', 'styles.css'), 'utf8');
+  assert.doesNotMatch(css, /--w-[a-z]/);
 });

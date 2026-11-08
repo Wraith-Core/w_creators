@@ -37,10 +37,8 @@
   --f-input: var(--w-f-input, 'EB Garamond', 'Tajawal', Georgia, serif);
   --f-fig: 'EB Garamond', Georgia, serif;
 
-  --tex-tear: var(--w-tex-tear);
-  --tex-grain: var(--w-tex-grain);
-  --tex-band: var(--w-tex-band);
-  --tex-band-sm: var(--w-tex-band-sm);
+  /* --tex-tear / -grain / -band / -band-sm: the page's own (main.jsx sets them on the root since 1.1.0,
+     when the page stopped linking w_lib's theme) */
 
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --edge: 1.35rem;

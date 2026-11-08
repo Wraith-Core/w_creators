@@ -1,6 +1,8 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
+// 1.1.0: the board kit first (byte-identical to w_train's kit.css), the page's own sheet after it wins the ties
+import './kit.css';
 import './styles.css';
 
 // ── The asset bridge (taken from w_crafting) ─────────────────────────────────────────
@@ -42,12 +44,33 @@ for (const n of UI_TEXTURES) root.setProperty(`--tex-${n}`, tex(`tex/ui/${n}.png
 const CLOTH_ICONS = ['bandolier', 'belt', 'boots', 'bracelet', 'bracers', 'chaps', 'cloak', 'coat', 'dress', 'glasses', 'glove', 'gunbelt', 'hair_accs', 'hat', 'holster', 'm_sweater', 'mask', 'neckerchief', 'outfit', 'pants', 'poncho', 'ring', 'satchel', 'scarf', 'shirt', 'skirt', 'socks', 'spats', 'spurs', 'suspenders', 'vest'];
 for (const n of CLOTH_ICONS) root.setProperty(`--cloth-${n}`, tex(`tex/cloth/${n}.png`));
 
-// The faces are not declared here: index.html links the server's one theme at run time
-// (https://cfx-nui-w_lib/nui/assets/wraith-theme.css = w_lib/nui/theme tokens.css + fonts.css +
-// base.css), the same Lalezar / Amiri / Tajawal / EB Garamond / RDR Lino files the loading screen and
-// the pause menu use, with their licences. It is linked from index.html and not imported here because
-// Vite would rewrite its absolute URL; the torn edge and the paper grain come from it too
-// (--w-tex-tear, --w-tex-grain).
+// ── The board kit's faces and textures (1.1.0) ──────────────────────────────────────────
+// The page no longer links w_lib's theme: the kit's own files (web/public, byte-identical to w_train's)
+// are declared here, with ABS_BASE as everything above.
+//   EB Garamond    Latin text, titles, labels in small caps   (SIL OFL 1.1, fonts/OFL-EBGaramond.txt)
+//   Lalezar        every Arabic face                          (SIL OFL 1.1, fonts/OFL-Lalezar.txt)
+//   RDR Lino       the wordmark only
+//   RDR Catalogue  the big figures (the character card's money)
+// One Arabic face server-wide (owner, 2026-10-22): the role names the kit's stacks use for Arabic
+// (Amiri, Tajawal, Noto Sans Arabic, Aref Ruqaa) draw Lalezar's file, so every stack keeps working.
+// The torn edge, the grain and the brushed bands are the game's own art (the kit's --tex-* names).
+try {
+  const FONTS = asset('fonts/');
+  const AR = 'U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC,U+200C-200E,U+2010-2011,U+0660-0669';
+  const lalezar = name => `@font-face { font-family: "${name}"; font-weight: 100 900; src: url("${FONTS}Lalezar-400-arabic.woff2") format("woff2"); unicode-range: ${AR}; font-display: swap; }`;
+  const style = document.createElement('style');
+  style.textContent = `
+    @font-face { font-family: "EB Garamond"; font-style: normal; font-weight: 400 800; src: url("${FONTS}EBGaramond-latin.woff2") format("woff2"); font-display: swap; }
+    @font-face { font-family: "EB Garamond"; font-style: italic; font-weight: 400 800; src: url("${FONTS}EBGaramond-Italic-latin.woff2") format("woff2"); font-display: swap; }
+    @font-face { font-family: "RDR Lino"; font-weight: 100 900; src: url("${FONTS}RDRLino-Regular.woff2") format("woff2"); font-display: swap; }
+    @font-face { font-family: "RDR Catalogue"; font-weight: 100 900; src: url("${FONTS}RDRCatalogueBold-Bold.woff2") format("woff2"); font-display: swap; }
+    ${['Lalezar', 'Amiri', 'Tajawal', 'Noto Sans Arabic', 'Aref Ruqaa'].map(lalezar).join(' ')}
+  `;
+  document.head.appendChild(style);
+} catch (e) {
+  /* a fallback face is enough: the page is never dropped for a font */
+}
+for (const n of ['tear', 'grain', 'band', 'band-sm']) root.setProperty(`--tex-${n}`, tex(`tex/${n}.png`));
 
 // ── The RDR menu sounds ──────────────────────────────────────────────────────
 // They are preloaded and cloned when played so fast clicks overlap with no cutting out.

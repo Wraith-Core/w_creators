@@ -1,3 +1,4 @@
-// The header wordmark: a brand mark, not UI copy. It stays this fixed Latin text in every
-// language, as in the pre-v3 UI (ARCHITECTURE.md §0.7 exception); everything else comes from Lua.
-export const BRAND = 'RED RIVER · CHARACTER STUDIO';
+// The masthead's wordmark. 1.1.0: it comes from the locales like every other word (payload.strings.brand,
+// client/editor/editor.lua STRINGS.brand): "ريد ريفر · استوديو الشخصيات" in Arabic, the Latin mark in English.
+// No fixed English text on the page any more.
+export const brandOf = S => (S && S.brand) || '';

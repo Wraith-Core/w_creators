@@ -56,6 +56,8 @@ local STRINGS = {
     center = 'توسيط',
     padHelp = 'اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع',
     advanced = 'تفاصيل إضافية',
+    -- 1.1.0: the board's wordmark (the masthead of the editor and the clothing panel), from the locales
+    brand = 'ريد ريفر · استوديو الشخصيات',
     -- ★ The per-field identity messages. They SAY THE RULE: the old single 'INVALID_NAME' left the
     --   player guessing why "test2" was refused (the digit), after the whole character was built.
     INVALID_NAME = 'حروف فقط — بلا أرقام أو رموز (تُقبل المسافة والفاصلة العليا والشرطة)',

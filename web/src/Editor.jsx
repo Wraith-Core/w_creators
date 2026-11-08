@@ -1,11 +1,11 @@
 import React, {useEffect, useReducer, useRef, useState} from 'react';
 import {nuiSend} from './nui';
-import {BRAND} from './brand';
+import {brandOf} from './brand';
 import {Frame, Glyph} from './Chrome';
 import SceneCamera from './SceneCamera';
 import {MenuRow, NodeView} from './TreeView';
 import {
-  backAction, cameraFor, createMemory, filterChildren, formatMoney, headingFor, identityDirty, idleRequest, initialIdentity,
+  backAction, cameraFor, createMemory, filterChildren, formatMoney, hasArabic, headingFor, identityDirty, idleRequest, initialIdentity,
   isPending, priceLines, LEAVE_SAVE_NEXT, missingIdentity, modalFor, confirmRequest, nextOpId, openPath, popTarget, recall, searchOrigin, remember, requestReducer, resolvePath, selectedStage,
 } from './treeState';
 
@@ -198,6 +198,8 @@ export default function Editor({payload, onPayload, onClose}) {
     : [confirmCopy.body, lines.length ? '' : total].filter(Boolean).join(' — ');
   const modal = modalFor(confirm, {strings: S, copy: confirmCopy, saveBody, lines, total: price ? money(price.total) : ''});
   const outfitField = confirm === 'save' && payload.saveOutfit;
+  const brand = brandOf(S);
+  const rtl = (session.dir || (session.locale === 'ar' ? 'rtl' : 'ltr')) === 'rtl';
   const confirmAction = () => {
     const next = confirmRequest(confirm);
     if (next?.op === 'save') save();
@@ -208,7 +210,7 @@ export default function Editor({payload, onPayload, onClose}) {
     <SceneCamera camera={camera} part={cameraPart} text={S} disabled={busy || !!confirm}
       hide={payload.canHide ? {hidden, onToggle: next => camera({hide: next})} : null}/>
     <section className="wst-panel atelier" aria-label={session.title} aria-busy={busy}>
-      <div className="wc-mast"><span className="wc-mark" dir="ltr">{BRAND}</span><span className="wc-mast-rule" aria-hidden="true"/>{stageIndex >= 0 && <span className="wc-mast-step" dir="ltr"><b>{pad2(stageIndex + 1)}</b> / {pad2(stages.length)}</span>}</div>
+      <div className="wc-mast wf-mast">{brand && <span className="wc-mark wf-mark">{hasArabic(brand) ? <span className="wf-ar">{brand}</span> : brand}</span>}<span className="wc-mast-rule wf-mast-rule" aria-hidden="true"/>{stageIndex >= 0 && <span className="wc-mast-step wf-mast-item" dir="ltr"><b>{pad2(stageIndex + 1)}</b> / {pad2(stages.length)}</span>}</div>
       <div className="wc-card wc-head"><Frame/>
       <header className="wst-header"><h1>{session.title}</h1>{session.subtitle && <p className="wc-sub">{session.subtitle}</p>}</header>
       {stages && <nav className="atelier-sections" aria-label={S.appearance} style={{'--p': `${stageIndex >= 0 ? (stageIndex + 1) / stages.length * 100 : 0}%`}}>{stages.map((s, i) => <button key={s.id} type="button" disabled={busy || s.disabled} className={`wst-tab ${stage === s.id ? 'selected' : ''}`} aria-current={stage === s.id ? 'page' : undefined} onClick={() => chooseStage(s.id)}><b>{String(i + 1).padStart(2, '0')}</b>{s.label}{s.id === 'identity' && missing && <i/>}</button>)}<span className="wc-progress" aria-hidden="true"><span className="wc-progress-fill"/></span></nav>}
@@ -238,21 +240,22 @@ export default function Editor({payload, onPayload, onClose}) {
       </footer>
       </div>
     </section>
-    {modal && <div className="modal-shade"><section className="wst-panel confirmation" role="dialog" aria-modal="true" aria-labelledby="confirmation-title"><Frame/>
-      <h2 id="confirmation-title">{modal.title}</h2><div className="wst-rule wc-hr"/>
-      <p>{modal.body}</p>
+    {/* 1.1.0: the kit's paper note (wf-note-plate, wf-note-q / -sub, wf-choice), the board dimmed behind it */}
+    {modal && <div className="modal-shade"><div className={'wf-note' + (rtl ? ' is-rtl' : '')}><section className="wst-panel confirmation wf-note-plate" role="dialog" aria-modal="true" aria-labelledby="confirmation-title">
+      <h2 id="confirmation-title" className="wf-note-q">{modal.title}</h2>
+      <p className="wf-note-sub">{modal.body}</p>
       {modal.lines && <dl className="price-lines">{modal.lines.map((l, i) => <div key={i}><dt>{l.label}</dt><dd dir={amountDir}>{l.value}</dd></div>)}<div className="price-total"><dt>{S.total}</dt><dd dir={amountDir}>{modal.total}</dd></div></dl>}
       {outfitField && <label className="save-outfit">{payload.saveOutfit.label}<span className="wst-field input-plate"><input className="wst-input" autoComplete="off" maxLength={payload.saveOutfit.maxLength || undefined} placeholder={payload.saveOutfit.placeholder || undefined} disabled={busy} value={outfitName} onChange={e => setOutfitName(e.target.value)}/></span></label>}
       {confirm === 'leave'
-        ? <div className="confirmation-actions">
-            <button className="wst-button" disabled={busy} onClick={() => setConfirm(null)}>{S.stay}</button>
-            <button className="wst-button destructive danger" disabled={busy} onClick={() => action({op: 'cancel', identity})}>{S.discard}</button>
-            <button className="wst-button primary" disabled={busy || !payload.canSave || missing} onClick={() => setConfirm(LEAVE_SAVE_NEXT)}>{payload.saveLabel}{price && <span dir={amountDir}>{money(price.total)}</span>}</button>
+        ? <div className="confirmation-actions wf-note-row">
+            <button className="wst-button wf-choice" disabled={busy} onClick={() => setConfirm(null)}>{S.stay}</button>
+            <button className="wst-button wf-choice destructive danger" disabled={busy} onClick={() => action({op: 'cancel', identity})}>{S.discard}</button>
+            <button className="wst-button wf-choice primary" disabled={busy || !payload.canSave || missing} onClick={() => setConfirm(LEAVE_SAVE_NEXT)}>{payload.saveLabel}{price && <span dir={amountDir}>{money(price.total)}</span>}</button>
           </div>
-        : <div className="confirmation-actions">
-            <button className="wst-button" disabled={busy} onClick={() => setConfirm(null)}>{S.stay}</button>
-            <button className={`wst-button primary ${confirm === 'save' ? '' : 'destructive danger'}`} disabled={busy} onClick={confirmAction}>{busy ? S.saving : (confirm === 'save' ? confirmCopy.confirmLabel : S.confirm)}</button>
+        : <div className="confirmation-actions wf-note-row">
+            <button className="wst-button wf-choice" disabled={busy} onClick={() => setConfirm(null)}>{S.stay}</button>
+            <button className={`wst-button wf-choice primary ${confirm === 'save' ? '' : 'destructive danger'}`} disabled={busy} onClick={confirmAction}>{busy ? S.saving : (confirm === 'save' ? confirmCopy.confirmLabel : S.confirm)}</button>
           </div>}
-    </section></div>}
+    </section></div></div>}
   </div>;
 }
