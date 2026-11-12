@@ -1,17 +1,21 @@
 /* ════════════════════════════════════════════════════════════════════════════
- * w_creators · board/Board.tsx - the services board (ops/local/plans/creators-board-contract.md), on the board
- * kit's shell (w_centralbank board/Board.tsx)
+ * w_creators · board/Board.tsx - the services board as the builders' notebook (2026-11-12; page contract
+ * ops/local/plans/creators-board-contract.md, the notebook parts: docs/BUILDER_COMPAT.md)
  *
- *   masthead     the board's name, and the flash line under it after an answer
- *   side rail    متاجر الملابس · الحلاقون · عيادات التجميل · الخزائن with their counts (Q / E turn them)
- *   a section    its head card («مكان جديد هنا»: a note asks the name -> op create), the list of its places
- *                (name, town, on / off, the spots it has) beside the selected place's card (PlaceCard.tsx),
- *                and the actions strip: حفظ (op save) · انتقل (op teleport) · حذف المكان (asks -> op delete) · إغلاق
- * Selecting: a hover only lights a row; a click, Enter or the keyboard landing on a row selects it (the keyboard
- * only while nothing is left unsaved). Unsaved edits ask before another place, another section or a close.
+ *   the column   docked at the PHYSICAL right in both languages, the world stays seen beside it
+ *   masthead     the board's name, the flash line under it after an answer
+ *   head card    the section (clothing stores · barbers · clinics · wardrobes) as one row of tabs (Q / E),
+ *                «مكان جديد هنا» (a note asks the name -> op create)
+ *   the list     every place of the section as a line: its name, where it is in words and what it still needs;
+ *                nearest first. A click / Enter opens it
+ *   one place    PlaceCard.tsx: the story of its spots, the basics, «خيارات متقدمة»; above it «كل الأماكن» back
+ *   readiness    «ينقصه: …» + «أصلحه» (the save's own checks, then the spots a player meets), or «جاهز»
+ *   actions      حفظ · في العالم · انتقل · حذف المكان · إغلاق, and the keys row
+ *   world mode   TAB / «في العالم»: Lua runs w_lib's lib.worldEdit (J «ماذا يحدث هنا؟», J on a pin), the column
+ *                dims and the game has the keys until TAB comes back (boardWorld). Only with w_lib 4.5.0+.
  * Every call is nuiSend('board:action', { op, args }); an answer's `data` replaces the board at once (an older
- * answer never overwrites a newer one, and a `board` message counts as the newest). A refused op is worded from
- * err.<code> (err.generic otherwise). Escape closes a note first, then the board (nuiSend('board:close')).
+ * answer never overwrites a newer one, and a `board` message counts as the newest). Unsaved edits ask before
+ * another place, another section, the list or a close. Escape: a note first, then the place, then the board.
  * ════════════════════════════════════════════════════════════════════════════ */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -19,14 +23,15 @@ import { nuiSend } from '../nui';
 import { useCursor } from './cursor';
 import { Add } from './fields';
 import { cls, Txt, useI18n } from './i18n';
-import { GlyphDash, GlyphTick, IconOff, IconOn, TYPE_ICONS } from './icons';
+import { IconOff, IconOn, TYPE_ICONS } from './icons';
 import {
-  asBoard, formOf, formOk, hasSpot, LABEL_MAX, labelOk, obj, sameForm, saveArgs, SPOTS, TYPES,
+  asBoard, formOf, formOk, formProblems, LABEL_MAX, labelOk, missingSpots, obj, sameForm, saveArgs, townOk, TYPES,
   type BoardData, type Form, type Place, type PlaceType, type SpotKind,
 } from './model';
 import { ConfirmNote, InputNote } from './notes';
 import { ActionStrip, Flash, StateLine, useErrorText, useFlash, type Action } from './parts';
 import PlaceCard, { type PlaceWhat } from './PlaceCard';
+import type { Live } from './Root';
 import { cue } from './sound';
 
 interface Answer { ok: boolean; error?: string; data: BoardData | null }
@@ -36,9 +41,12 @@ interface AskSpec { question: string; sub?: string; yes: string; no: string; run
 interface Draft { id: string; base: Form; form: Form }
 
 /* where the admin was, kept between two openings of the board (this page's life only) */
-const memory: { section: PlaceType; sel: Partial<Record<PlaceType, string>> } = { section: 'clothing', sel: {} };
+const memory: { section: PlaceType; sel: Partial<Record<PlaceType, string>>; inPlace: boolean } = { section: 'clothing', sel: {}, inPlace: false };
 
-export default function Board({ data, rev, hidden, close }: { data: unknown; rev: number; hidden: boolean; close: () => void }) {
+/* the field a problem of formProblems() sits in (for «أصلحه») */
+const FIELD_OF: Record<string, string> = { label: 'f:label', town: 'f:town', radius: 'f:reach', npcModel: 'a:npcText' };
+
+export default function Board({ data, rev, hidden, close, live }: { data: unknown; rev: number; hidden: boolean; close: () => void; live: Live }) {
   const { t, rtl, lang } = useI18n();
   const errText = useErrorText();
 
@@ -55,10 +63,20 @@ export default function Board({ data, rev, hidden, close }: { data: unknown; rev
 
   const [section, setSection] = useState<PlaceType>(memory.section);
   const [sel, setSel] = useState<Partial<Record<PlaceType, string>>>(memory.sel);
-  useEffect(() => { memory.section = section; memory.sel = sel; }, [section, sel]);
+  const [inPlace, setInPlace] = useState(memory.inPlace);
+  const [adv, setAdv] = useState(false);
+  useEffect(() => { memory.section = section; memory.sel = sel; memory.inPlace = inPlace; }, [section, sel, inPlace]);
 
-  const places = st ? st.places.filter((p) => p.type === section) : [];
-  const picked: Place | null = places.find((p) => p.id === sel[section]) ?? places[0] ?? null;
+  const where = live.where;
+  const distance = (p: Place) => where[p.id]?.coords?.m ?? Number.MAX_SAFE_INTEGER;
+  const places = st ? st.places.filter((p) => p.type === section).slice().sort((a, b) => distance(a) - distance(b)) : [];
+  const picked: Place | null = places.find((p) => p.id === sel[section]) ?? null;
+  const shown = inPlace && picked ? picked : null;
+
+  /* ── Lua marks the shown place's spots in the world (and J's rows are for it) ── */
+  useEffect(() => {
+    nuiSend('board:sel', { id: shown ? shown.id : '' }).catch(() => undefined);
+  }, [shown?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── the card's draft: kept while it holds unsaved edits, otherwise it follows the data ── */
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -77,6 +95,8 @@ export default function Board({ data, rev, hidden, close }: { data: unknown; rev
       return { ...cur, form: { ...cur.form, ...p } };
     });
   }, [picked, st]);
+  const [chairModel, setChairModel] = useState('');
+  useEffect(() => { if (st && !st.chairModels.includes(chairModel)) setChairModel(st.chairModels[0] ?? ''); }, [st, chairModel]);
 
   /* ── notes, calls, the flash line ── */
   const [ask, setAsk] = useState<AskSpec | null>(null);
@@ -135,25 +155,63 @@ export default function Board({ data, rev, hidden, close }: { data: unknown; rev
     guard(() => {
       cue('select');
       setSection(s);
+      setInPlace(false);
       cursor.setCursor(`side:${s}`);
     });
   };
-  const select = (id: string) => {
-    if (picked && id === picked.id) { cue('select'); return; }
-    guard(() => { cue('select'); setSel((v) => ({ ...v, [section]: id })); });
+  const openPlace = (id: string) => {
+    const go = () => { cue('select'); setSel((v) => ({ ...v, [section]: id })); setInPlace(true); setAdv(false); cursor.setCursor('pv:back'); };
+    if (picked && id === picked.id) { setInPlace(true); cursor.setCursor('pv:back'); cue('select'); return; }
+    guard(go);
   };
+  const toList = () => guard(() => {
+    cue('back');
+    setInPlace(false);
+    cursor.setCursor(picked ? `pl:${picked.id}` : `side:${section}`);
+  });
   const leave = () => guard(() => { cue('close'); close(); });
 
   const back = () => {
     if (ask) { cue('back'); setAsk(null); backFromNote(); return; }
     if (creating) { cue('back'); setCreating(false); backFromNote(); return; }
+    if (shown) { toList(); return; }
     leave();
   };
 
+  /* ── a place opened from the world (J on a pin «افتح المكان», or a new one made there) ── */
+  const openRev = useRef(live.openRev);
+  useEffect(() => {
+    if (live.openRev === openRev.current) return;
+    openRev.current = live.openRev;
+    const p = st?.places.find((x) => x.id === live.openId);
+    if (!p) return;
+    setSection(p.type);
+    setSel((v) => ({ ...v, [p.type]: p.id }));
+    setInPlace(true);
+    setAdv(false);
+    cursor.setCursor('pv:back');
+  }, [live.openRev, live.openId, st]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── the world mode: TAB here, TAB in the world comes back (Lua's boardWorld) ── */
+  const inWorld = live.world;
+  const toWorld = useCallback(async () => {
+    if (!live.canWorld) { cue('locked'); say(t('err.no_world'), true); return; }
+    if (busy || noted) return;
+    cue('select');
+    let res: unknown = null;
+    try { res = await nuiSend('board:world', { on: true }); } catch { res = null; }
+    const o = obj(res);
+    if (!o || o.ok !== true) {
+      const code = o && typeof o.error === 'string' ? o.error : '';
+      // a refused switch right after the last one (w_lib's 300 ms gap) is silent: the board simply stays
+      if (code && code !== 'busy') say(errText(code), true);
+    }
+  }, [live.canWorld, busy, noted, say, t, errText]);
+
   const cursor = useCursor({
-    open: !hidden,
+    open: !hidden && !inWorld,
     rtl,
-    initial: picked ? `pl:${picked.id}` : `side:${section}`,
+    initial: shown ? 'pv:back' : picked ? `pl:${picked.id}` : `side:${section}`,
     layer: () => (noted ? 'n:' : null),
     back,
     turn: (delta) => {
@@ -164,17 +222,25 @@ export default function Board({ data, rev, hidden, close }: { data: unknown; rev
     fallback: () => {
       if (ask) return 'n:no';
       if (creating) return 'n:input';
-      return picked ? `pl:${picked.id}` : `side:${section}`;
+      if (shown) return 'pv:back';
+      return places[0] ? `pl:${places[0].id}` : `side:${section}`;
     },
   });
   const { nav, focus } = cursor;
 
-  // the keyboard / pad landing on a row selects it (never the mouse passing over it, never over unsaved edits)
+  // TAB on the board (never while typing in a field, never under a note)
   useEffect(() => {
-    if (cursor.byMouse() || dirty || !focus.startsWith('pl:')) return;
-    const id = focus.slice(3);
-    if (picked && id !== picked.id && places.some((p) => p.id === id)) setSel((v) => ({ ...v, [section]: id }));
-  }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (hidden || inWorld) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+      e.preventDefault();
+      const el = document.activeElement;
+      if (noted || (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA'))) return;
+      void toWorld();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [hidden, inWorld, noted, toWorld]);
 
   /* ── the ops ── */
   const save = async () => {
@@ -194,7 +260,8 @@ export default function Board({ data, rev, hidden, close }: { data: unknown; rev
       ?? res?.data?.places.find((p) => p.type === type && !before.has(p.id));
     if (made) {
       setSel((v) => ({ ...v, [type]: made.id }));
-      cursor.setCursor(`pl:${made.id}`);
+      setInPlace(true);
+      cursor.setCursor('pv:back');
     } else {
       cursor.setCursor('new');
     }
@@ -213,6 +280,7 @@ export default function Board({ data, rev, hidden, close }: { data: unknown; rev
           if (!res) { cursor.setCursor('act:delete'); return; }
           setSel((v) => ({ ...v, [p.type]: undefined }));
           setDraft(null);
+          setInPlace(false);
           cursor.setCursor('new');
         });
       },
@@ -222,7 +290,7 @@ export default function Board({ data, rev, hidden, close }: { data: unknown; rev
   const place = async (what: PlaceWhat, model?: string) => {
     if (!picked || !form || busy) return;
     const p = picked;
-    // unsaved edits (an NPC model chosen above, a new name) are saved first, so the spot is placed with them
+    // unsaved edits (an NPC look chosen above, a new name) are saved first, so the spot is placed with them
     if (dirty) {
       if (!formOk(form)) { cue('locked'); say(t('err.invalid'), true); return; }
       const saved = await run('save', saveArgs(p, form));
@@ -248,136 +316,202 @@ export default function Board({ data, rev, hidden, close }: { data: unknown; rev
     void run('teleport', { id: picked.id }, 'ok.teleported');
   };
 
+  /* ── readiness: the save's checks first, then the spots a player meets ── */
+  const problems = form ? formProblems(form) : [];
+  const missing = shown ? missingSpots(shown) : [];
+  const needs: { text: string; fix: () => void }[] = [
+    ...problems.map((k) => ({
+      text: t(`rd.${k}`),
+      fix: () => { if (k === 'npcModel') setAdv(true); cursor.setCursor(FIELD_OF[k]); },
+    })),
+  ];
+  // a spot left unset is optional (no NPC stands there / the player stays where he is): told softly, never "missing"
+  const optional = missing.map((w) => ({ text: t(`what.${w}`), fix: () => cursor.setCursor(`sp:${w}:place`) }));
+  const listNeeds = (p: Place) => [
+    ...(labelOk(p.label) ? [] : [t('rd.label')]),
+    ...(townOk(p.town) ? [] : [t('rd.town')]),
+  ];
+  const listOpt = (p: Place) => missingSpots(p).map((w) => t(`what.${w}`));
+
   /* ── drawing ── */
-  const onRail = focus.startsWith('side:') && !noted;
-  const onHead = focus === 'new' && !noted;
+  const onHead = (focus.startsWith('side:') || focus === 'new') && !noted;
   const onList = focus.startsWith('pl:') && !noted;
-  const onCard = (focus.startsWith('f:') || focus.startsWith('sp:')) && !noted;
+  const onCard = (focus.startsWith('f:') || focus.startsWith('a:') || focus.startsWith('sp:') || focus === 'pv:back') && !noted;
+  const onReady = (focus === 'rd:fix' || focus === 'rd:add') && !noted;
   const onActs = focus.startsWith('act:') && !noted;
   const SectionIcon = TYPE_ICONS[section];
+  const total = st ? TYPES.reduce((n, s) => n + st.counts[s], 0) : 0;
 
-  const actions: Action[] = [
-    { id: 'act:save', label: t('btn.save'), primary: true, disabled: !picked || !dirty || !form || !formOk(form), run: () => { void save(); } },
-    { id: 'act:teleport', label: t('btn.teleport'), disabled: !picked, run: () => { cue('select'); teleport(); } },
-    { id: 'act:delete', label: t('btn.delete'), disabled: !picked, run: askDelete },
+  const actions: Action[] = shown ? [
+    { id: 'act:save', label: t('btn.save'), primary: true, disabled: !dirty || !form || !formOk(form), run: () => { void save(); } },
+    ...(live.canWorld ? [{ id: 'act:world', label: t('btn.world'), run: () => { void toWorld(); } }] : []),
+    { id: 'act:teleport', label: t('btn.teleport'), run: () => { cue('select'); teleport(); } },
+    { id: 'act:delete', label: t('btn.delete'), run: askDelete },
+    { id: 'act:close', label: t('btn.close'), run: leave },
+  ] : [
+    ...(live.canWorld ? [{ id: 'act:world', label: t('btn.world'), primary: true, run: () => { void toWorld(); } }] : []),
     { id: 'act:close', label: t('btn.close'), run: leave },
   ];
 
+  const keys: [string, string][] = [
+    ...(live.canWorld ? [['TAB', t('key.world')] as [string, string]] : []),
+    ['Q E', t('key.sections')],
+    ['Enter', t('key.pick')],
+    ['Esc', shown ? t('key.list') : t('btn.close')],
+  ];
+
   return (
-    <div className={cls('wcb-root wf wf-bd', rtl && 'is-rtl', hidden && 'is-hidden')} dir={rtl ? 'rtl' : 'ltr'} lang={lang}>
+    <div className={cls('wcb-root wf wf-bd is-nb', rtl && 'is-rtl', hidden && 'is-hidden', inWorld && 'is-world')} dir={rtl ? 'rtl' : 'ltr'} lang={lang}>
       <div className="wf-scrim" aria-hidden="true" />
       <main className={cls('wf-panel', noted && 'is-dim')}>
-        <i className="wf-strip" aria-hidden="true" />
-
         <header className="wf-mast wf-in" style={{ ['--i' as string]: 0 }}>
           <span className="wf-mark">{t('board.title')}</span>
           <span className="wf-mast-rule" aria-hidden="true" />
+          {st && <span className="wf-mast-item"><b className="wf-num">{total}</b>{t('mast.places')}</span>}
         </header>
         <Flash flash={flash} />
 
-        <div className="wf-bd-body">
-          <nav className={cls('wf-wrap wf-bd-rail wf-in', onRail && 'is-focus')} style={{ ['--i' as string]: 1 }} aria-label={t('board.title')}>
+        {inWorld && (
+          <section className="wf-wrap wcb-worldcard">
+            <div className="wf-card"><div className="wf-card-body">
+              <div className="wf-kicker">{t('btn.world')}</div>
+              <p className="wcb-world-line">{t('world.on')}</p>
+              {shown && <p className="wcb-world-place"><Txt s={shown.label || shown.id} /></p>}
+            </div></div>
+          </section>
+        )}
+
+        <section className={cls('wf-wrap wf-head-wrap wf-in wcb-headw', onHead && 'is-focus')} style={{ ['--i' as string]: 1 }}>
+          <div className="wf-card wf-head">
+            <div className="wf-card-body">
+              <div className="wf-card-head">
+                <div style={{ minWidth: 0 }}>
+                  <div className="wf-kicker">{t('board.kicker')}</div>
+                  <h2 className="wf-h">{t(`type.${section}`)}</h2>
+                </div>
+                <div className="wcb-head-end">
+                  <Add id="new" nav={nav} label={t('btn.create')} disabled={busy || !st}
+                    onClick={() => guard(() => { resume.current = focus; setCreating(true); })} />
+                  <SectionIcon />
+                </div>
+              </div>
+              <div className="wcb-tabs" role="tablist">
+                {TYPES.map((s) => {
+                  const id = `side:${s}`;
+                  return (
+                    <button key={s} type="button" role="tab" ref={nav.reg(id)} onMouseEnter={nav.hover(id)}
+                      aria-selected={section === s}
+                      className={cls('wcb-tab', section === s && 'is-active', nav.here(id) && 'is-here')}
+                      onClick={() => switchTo(s)}>
+                      <span>{t(`tab.${s}`)}</span>
+                      {st && <span className="wf-num">{st.counts[s]}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <i className="wf-tick" aria-hidden="true" />
+        </section>
+
+        {!shown ? (
+          <section className={cls('wf-wrap wcb-listw wf-in', onList && 'is-focus')} style={{ ['--i' as string]: 2 }}>
             <div className="wf-card">
               <div className="wf-card-body">
-                <div className="wf-bd-sides" role="tablist" aria-orientation="vertical">
-                  {TYPES.map((s) => {
-                    const id = `side:${s}`;
-                    const Icon = TYPE_ICONS[s];
-                    return (
-                      <button key={s} type="button" role="tab" ref={nav.reg(id)} onMouseEnter={nav.hover(id)}
-                        aria-selected={section === s}
-                        className={cls('wf-bd-side', section === s && 'is-active', nav.here(id) && 'is-here')}
-                        onClick={() => switchTo(s)}>
-                        <Icon className="wf-bd-side-ico" />
-                        <span className="wf-bd-side-name">{t(`type.${s}`)}</span>
-                        {st && <span className="wf-bd-side-num wf-num">{st.counts[s]}</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-                <p className="wf-bd-rail-hint">{t('hint.rail')}</p>
+                {!st ? <StateLine kind="error" text={errText('generic')} />
+                  : places.length === 0 ? <StateLine kind="empty" text={t('empty.places')} />
+                    : (
+                      <ul className="wf-rows is-scroll">
+                        {places.map((p) => {
+                          const id = `pl:${p.id}`;
+                          const need = listNeeds(p);
+                          const opt = listOpt(p);
+                          const at = where[p.id]?.coords?.t || p.town;
+                          return (
+                            <li key={p.id} ref={nav.reg(id)} onMouseEnter={nav.hover(id)}
+                              className={cls('wf-row wcb-row', nav.here(id) && 'is-here', picked?.id === p.id && 'is-picked')}
+                              onClick={() => openPlace(p.id)}>
+                              {p.enabled ? <IconOn /> : <IconOff />}
+                              <div className="wf-row-main">
+                                <span className="wf-row-name"><Txt s={p.label || p.id} /></span>
+                                <span className="wcb-row-where"><Txt s={at || t('where.set')} /></span>
+                                <span className={cls('wcb-row-need', need.length > 0 && 'is-miss')}>
+                                  {!p.enabled ? t('list.off') : need.length > 0 ? t('rd.need', need.join(t('rd.sep'))) : t('list.ready')}
+                                </span>
+                                {need.length === 0 && opt.length > 0 && <span className="wcb-row-opt">{t('rd.opt', opt.join(t('rd.sep')))}</span>}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
               </div>
             </div>
             <i className="wf-tick" aria-hidden="true" />
-          </nav>
-
-          <div className="wf-bd-main">
-            <section className={cls('wf-wrap wf-head-wrap wf-in', onHead && 'is-focus')} style={{ ['--i' as string]: 2 }}>
-              <div className="wf-card wf-head">
+          </section>
+        ) : (
+          <>
+            <section className={cls('wf-wrap wcb-placew wf-in', onCard && 'is-focus')} style={{ ['--i' as string]: 2 }}>
+              <div className="wf-card">
                 <div className="wf-card-body">
-                  <div className="wf-card-head">
-                    <div style={{ minWidth: 0 }}>
-                      <div className="wf-kicker">{t('board.title')}</div>
-                      <h2 className="wf-h">{t(`type.${section}`)}</h2>
-                    </div>
-                    <div className="wcb-head-end">
-                      <Add id="new" nav={nav} label={t('btn.create')} disabled={busy || !st}
-                        onClick={() => guard(() => { resume.current = focus; setCreating(true); })} />
-                      <SectionIcon />
+                  <div className="wcb-pv-head">
+                    <button type="button" ref={nav.reg('pv:back')} onMouseEnter={nav.hover('pv:back')}
+                      className={cls('wcb-back', nav.here('pv:back') && 'is-here')} onClick={toList}>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d={rtl ? 'M9 6l6 6-6 6' : 'M15 6l-6 6 6 6'} /></svg>
+                      <span>{t('pv.back')}</span>
+                    </button>
+                    <div className="wcb-title">
+                      <span className="wcb-title-name"><Txt s={(form?.label.trim() || shown.label || shown.id)} /></span>
+                      <span className={cls('wf-tag', shown.enabled && 'is-solid')}>{t(shown.enabled ? 'state.on' : 'state.off')}</span>
+                      {shown.usable && <span className="wf-tag">{t('state.usable')}</span>}
+                      {dirty && <span className="wf-tag is-hush">{t('tag.unsaved')}</span>}
                     </div>
                   </div>
+                  {st && form && (
+                    <PlaceCard key={shown.id} place={shown} form={form} board={st} where={where} nav={nav} busy={busy}
+                      adv={adv} setAdv={setAdv} chairModel={chairModel} setChairModel={setChairModel}
+                      patch={patch} onPlace={(w, m) => { void place(w, m); }} onClear={(w) => { void clear(w); }} />
+                  )}
                 </div>
               </div>
               <i className="wf-tick" aria-hidden="true" />
             </section>
 
-            <div className="wcb-split">
-              <section className={cls('wf-wrap wcb-list wf-in', onList && 'is-focus')} style={{ ['--i' as string]: 3 }}>
-                <div className="wf-card">
-                  <div className="wf-card-body">
-                    {!st ? <StateLine kind="error" text={errText('generic')} />
-                      : places.length === 0 ? <StateLine kind="empty" text={t('empty.places')} />
-                        : (
-                          <ul className="wf-rows is-scroll">
-                            {places.map((p) => {
-                              const id = `pl:${p.id}`;
-                              return (
-                                <li key={p.id} ref={nav.reg(id)} onMouseEnter={nav.hover(id)}
-                                  className={cls('wf-row wcb-row', nav.here(id) && 'is-here', picked?.id === p.id && 'is-picked')}
-                                  onClick={() => select(p.id)}>
-                                  {p.enabled ? <IconOn /> : <IconOff />}
-                                  <div className="wf-row-main">
-                                    <span className="wf-row-name"><Txt s={p.label || p.id} /></span>
-                                    <span className="wf-row-meta">
-                                      <span className={cls('wf-tag', p.enabled && 'is-solid')}>{t(p.enabled ? 'state.on' : 'state.off')}</span>
-                                      {p.town && <span className="wcb-town"><Txt s={p.town} /></span>}
-                                    </span>
-                                    <span className="wcb-chips">
-                                      {SPOTS[p.type].map((w) => (
-                                        <span key={w} className={cls('wcb-chip', hasSpot(p, w) && 'is-on')}>
-                                          {hasSpot(p, w) ? <GlyphTick /> : <GlyphDash />}
-                                          {t(`spot.${w}`)}
-                                        </span>
-                                      ))}
-                                    </span>
-                                  </div>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        )}
+            <section className={cls('wf-wrap wcb-readyw', onReady && 'is-focus')}>
+              <div className="wf-card"><div className="wf-card-body">
+                {needs.length > 0 ? (
+                  <div className="wcb-ready is-miss">
+                    <i className="wcb-dot" aria-hidden="true" />
+                    <span>{t('rd.need', needs.map((n) => n.text).join(t('rd.sep')))}</span>
+                    <button type="button" ref={nav.reg('rd:fix')} onMouseEnter={nav.hover('rd:fix')}
+                      className={cls('wcb-fix', nav.here('rd:fix') && 'is-here')} onClick={() => { cue('select'); needs[0].fix(); }}>
+                      {t('rd.fix')}
+                    </button>
                   </div>
-                </div>
-                <i className="wf-tick" aria-hidden="true" />
-              </section>
-
-              <section className={cls('wf-wrap wcb-place wf-in', onCard && 'is-focus')} style={{ ['--i' as string]: 4 }}>
-                <div className="wf-card">
-                  <div className="wf-card-body">
-                    {st && picked && form ? (
-                      <PlaceCard key={picked.id} place={picked} form={form} board={st} nav={nav} busy={busy}
-                        patch={patch} onPlace={(w, m) => { void place(w, m); }} onClear={(w) => { void clear(w); }} />
-                    ) : (
-                      <StateLine kind="empty" text={t('hint.pick')} />
-                    )}
+                ) : (
+                  <div className="wcb-ready">
+                    <i className="wcb-dot is-ok" aria-hidden="true" />
+                    <span>{shown.enabled ? t('rd.ok') : t('rd.okOff')}</span>
                   </div>
-                </div>
-                <i className="wf-tick" aria-hidden="true" />
-              </section>
-            </div>
+                )}
+                {optional.length > 0 && (
+                  <div className="wcb-ready is-opt">
+                    <i className="wcb-dot is-soft" aria-hidden="true" />
+                    <span>{t('rd.opt', optional.map((n) => n.text).join(t('rd.sep')))}</span>
+                    <button type="button" ref={nav.reg('rd:add')} onMouseEnter={nav.hover('rd:add')}
+                      className={cls('wcb-fix is-soft', nav.here('rd:add') && 'is-here')} onClick={() => { cue('select'); optional[0].fix(); }}>
+                      {t('rd.add')}
+                    </button>
+                  </div>
+                )}
+              </div></div>
+            </section>
+          </>
+        )}
 
-            <ActionStrip actions={actions} nav={nav} focused={onActs} busy={busy} i={5} />
-          </div>
+        <ActionStrip actions={actions} nav={nav} focused={onActs} busy={busy} i={4} />
+        <div className="wcb-keys" aria-hidden="true">
+          {keys.map(([k, label]) => <span key={k}><span className="wcb-key">{k}</span>{label}</span>)}
         </div>
 
         {ask && (

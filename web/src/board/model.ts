@@ -220,3 +220,54 @@ export function withValue(options: string[], value: string): string[] {
   const v = value.trim();
   return v === '' || options.includes(v) ? options : [...options, v];
 }
+
+/* ── 2026-11-12: the notebook (the builders' look) ── */
+
+/** a spot in words, from Lua's lib.place (boardWhere): «فالنتاين · 12 م منك» and the metres */
+export interface Where { t: string; m: number }
+export type WhereMap = Record<string, Partial<Record<'coords' | SpotKind, Where>>>
+
+export function asWhere(raw: unknown): WhereMap {
+  const out: WhereMap = {};
+  const o = obj(raw);
+  if (!o) return out;
+  for (const [id, v] of Object.entries(o)) {
+    const row = obj(v);
+    if (!row) continue;
+    const r: Partial<Record<'coords' | SpotKind, Where>> = {};
+    for (const k of ['coords', 'npc', 'preview', 'book', 'chair'] as const) {
+      const w = obj(row[k]);
+      const t = w ? str(w.t) : '';
+      if (t !== '') r[k] = { t, m: num(w?.m) ?? 0 };
+    }
+    out[id] = r;
+  }
+  return out;
+}
+
+/** the spots each type has, in the order the story tells them (the service point first) */
+export type StoryKind = 'coords' | SpotKind;
+export const STORY: Record<PlaceType, StoryKind[]> = {
+  clothing: ['coords', 'npc', 'preview', 'book'],
+  barber: ['coords', 'npc', 'preview', 'chair'],
+  surgery: ['coords', 'npc', 'preview'],
+  wardrobe: ['coords', 'npc', 'preview'],
+};
+
+/** the interaction radius as three plain choices (any other saved value stays, as «مخصصة») */
+export const REACH = [1, 2, 4];
+
+/** what the place still needs to work well (the spots a player meets), in the story's order */
+export function missingSpots(p: Place): SpotKind[] {
+  return SPOTS[p.type].filter((w) => p[w] === null);
+}
+
+/** what blocks «حفظ» (the server's own checks: name, town, radius, model), as field ids */
+export function formProblems(f: Form): string[] {
+  const out: string[] = [];
+  if (!labelOk(f.label)) out.push('label');
+  if (!townOk(f.town)) out.push('town');
+  if (!radiusOk(f.radius)) out.push('radius');
+  if (!modelOk(f.npcModel)) out.push('npcModel');
+  return out;
+}
