@@ -5,8 +5,8 @@
 --  interpolates from the active one, so framing changes glide instead of cutting.
 --  The viewing direction is taken from the actor's heading when the camera opens (or the actor
 --  changes) and then kept: rotating the actor, changing a category or zooming never swings the
---  camera around with it. The lateral offset is mirrored for right-to-left languages so the
---  actor stays clear of the panel.
+--  camera around with it. The lateral offset keeps the actor clear of the panel: the editor's
+--  column is on the right in both languages (Cam.open opts.panel), other opens follow the language.
 --  A service flow can fix that direction and the framings first (Cam.anchor): the clothing store
 --  and the wardrobe frame from the fitting stand's own heading with the store framings
 --  (Cam.SETS.shop), never from whatever heading the player happens to have when the camera opens.
@@ -130,9 +130,19 @@ local st = {
     pose = nil, poseBase = nil,   -- 'profile' while the actor is turned by Cam.pose, its heading before
     set = nil,                    -- the Cam.SETS framing set of this open (Cam.anchor), or nil
     pedHeading = nil,             -- the heading the actor is held on (Cam.anchor's hold)
+    panel = nil,                  -- 'right' | 'left': the screen side of the open's panel (Cam.open opts)
 }
 local pending = nil               -- Cam.anchor: how the next Cam.open of one ped frames it
 local holdGen = 0                 -- bumped by every open / close: an older hold stops
+
+--- -1 when the actor must stand clear of a panel on the right of the screen, 1 for one on the left.
+--  The editor's column stands at the right in both languages (the owner's placement rule), so it
+--  passes panel = 'right'; an open without a panel keeps the language's side (right in Arabic).
+local function mirrorSign()
+    if st.panel == 'right' then return -1 end
+    if st.panel == 'left' then return 1 end
+    return UiDir() == 'rtl' and -1 or 1
+end
 
 local function camExists(cam)
     return cam ~= nil and cam ~= 0 and not not DoesCamExist(cam)
@@ -322,7 +332,7 @@ local function frame(presetName)
         -- a named bone (one hand): the camera looks at the bone from the fixed viewing direction
         local bx, by, bz = namedBone(ped, d.bone)
         if bx then
-            local side = d.side * (UiDir() == 'rtl' and -1 or 1)
+            local side = d.side * mirrorSign()
             local angle = math.rad(st.heading)
             local rightX, rightY = math.cos(angle), math.sin(angle)
             local frontX, frontY = -math.sin(angle), math.cos(angle)
@@ -356,7 +366,7 @@ local function frame(presetName)
         if rise < 0.15 or rise > 2.20 then rise = Cam.HEAD_RISE_FALLBACK end
         height = rise + (d.offset or 0.0)
     end
-    local mirror = UiDir() == 'rtl' and -1 or 1
+    local mirror = mirrorSign()
     local side = d.side * mirror
     -- the camera stands as far to the side as its target unless the preset says otherwise
     -- (camSide: the store's boots view looks at the feet a little from the side)
@@ -387,10 +397,13 @@ local function frame(presetName)
 end
 
 --- Open the camera on an actor (or move an open camera to a new actor) at a preset.
+--  opts.panel = 'right' | 'left': the screen side of the panel the actor must stay clear of
+--  (default: the language's side).
 ---@param ped integer
 ---@param preset? string (default 'fullBody')
+---@param opts? table
 ---@return boolean
-function Cam.open(ped, preset)
+function Cam.open(ped, preset, opts)
     if not pedExists(ped) then return false end
     local name = resolve(preset) or Cam.DEFAULT
     local anchor = pending
@@ -411,6 +424,8 @@ function Cam.open(ped, preset)
     end
     st.ped, st.initial, st.open = ped, name, true
     st.zoom, st.height = 0.0, 0.0
+    local panel = type(opts) == 'table' and opts.panel or nil
+    st.panel = (panel == 'right' or panel == 'left') and panel or nil
     if anchor and anchor.heading then hold(ped, anchor.heading, anchor.hold) end
     return frame(name)
 end
@@ -626,6 +641,7 @@ function Cam.close()
     st.zoom, st.height, st.open = 0.0, 0.0, false
     st.glide, st.pose, st.poseBase = nil, nil, nil
     st.set, st.pedHeading, pending = nil, nil, nil
+    st.panel = nil
     holdGen = holdGen + 1
 end
 
