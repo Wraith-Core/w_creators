@@ -63,6 +63,19 @@ local function inMelee(ped, target)
         or yes(IsPedInCombat(ped, target))
 end
 
+--- 2026-11-12: another script's card on this person comes first. w_lib shows one prompt card at a time, so ours
+--- pushed w_policejob's law card off the screen on the lock-on (and its G is the cuff key). w_policejob sets
+--- LocalPlayer.state['w:personCard'] (this client only) while its card is up; a cuffed or carried player is that
+--- card's person too, before its flag arrives.
+local function anotherCard(target)
+    if LocalPlayer.state['w:personCard'] == true then return true end
+    if not IsPedAPlayer(target) then return false end
+    local index = NetworkGetPlayerIndexFromPed(target)
+    if not index or index == -1 then return false end
+    local state = Player(GetPlayerServerId(index)).state
+    return state.isHandcuffed == true or state.isEscorted == true
+end
+
 local function focusedPerson()
     local player = PlayerId()
     if not IsPlayerFreeFocusing(player) then return nil end
@@ -71,6 +84,7 @@ local function focusedPerson()
     if not ok or not target or target == 0 or target == ped then return nil end
     if not IsEntityAPed(target) or not IsPedHuman(target) or IsPedDeadOrDying(target, true) then return nil end
     if inMelee(ped, target) then return nil end
+    if anotherCard(target) then return nil end
     return target
 end
 
