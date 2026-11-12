@@ -8,7 +8,7 @@ import {
   identityDirty, priceLines, popPath, textBlocked, pushPath, recall, remember, requestReducer, resolvePath, rowValue, segments, selectedStage, toDisplay,
   skipValue, stripFraction, stripWindow, TINT_MAX, trackPath,
   cardMoney, clampDateParts, composeIsoDate, dateBounds, dateOptionAllowed, daysInMonth, DATE_FALLBACK, hasArabic, identityName,
-  parseIsoDate, reviewItems, stepDatePart,
+  parseIsoDate, reviewItems, stepDatePart, leadParts, readiness, walletAmount,
 } from '../src/treeState.js';
 
 const tree = {
@@ -384,4 +384,55 @@ test('identityName / hasArabic / cardMoney: the signature, the Arabic mark and t
   assert.equal(cardMoney('34.86', true), '$34.86');
   assert.equal(cardMoney(undefined, true), '—');
   assert.equal(cardMoney('', true), '—');
+});
+
+// -- the notebook lines (head sentence, readiness line) --
+const NB = { 'lead.barber': 'قصة وتسريحة', sumTotal: 'المجموع %s', youHave: 'معك %s', missingFor: 'ينقصه: %s',
+  needsFix: 'يحتاج تصحيحًا: %s', shortBy: 'ينقصك %s', readyPay: 'جاهز · ستدفع %s', willPay: 'ستدفع %s', ready: 'جاهز',
+  readyFree: 'جاهز · بلا تكلفة', noChange: 'لم تغيّر شيئًا بعد' };
+const usd = n => '$' + Number(n).toFixed(2);
+
+test('walletAmount: the visit currency, null when unknown', () => {
+  assert.equal(walletAmount({cash: 85, gold: 2}, 'cash'), 85);
+  assert.equal(walletAmount({cash: 85, gold: 2}, undefined), 85);
+  assert.equal(walletAmount({cash: 85, gold: 2}, 'gold'), 2);
+  assert.equal(walletAmount({gold: 2}, 'cash'), null);
+  assert.equal(walletAmount(null, 'cash'), null);
+  assert.equal(walletAmount({cash: 'x'}, 'cash'), null);
+});
+
+test('leadParts: what the screen does, the total and the money in hand', () => {
+  const price = {lines: [], total: 12};
+  assert.deepEqual(leadParts({mode: 'barber', strings: NB, price, wallet: {cash: 85}, money: usd}),
+    ['قصة وتسريحة', {text: 'المجموع %s', value: '$12.00'}, {text: 'معك %s', value: '$85.00'}]);
+  // nothing to pay yet: no total; the wallet unknown: no "you have"
+  assert.deepEqual(leadParts({mode: 'barber', strings: NB, price: {lines: [], total: 0}, money: usd}), ['قصة وتسريحة']);
+  // the creator: its sentence only
+  assert.deepEqual(leadParts({mode: 'creator', strings: {'lead.creator': 'X'}, money: usd}), ['X']);
+});
+
+test('readiness: the creator names the missing or refused fields', () => {
+  const identity = {fields: [{key: 'firstname', label: 'الاسم الأول'}, {key: 'lastname', label: 'اسم العائلة'}, {key: 'note', type: 'info', label: 'i'}]};
+  const base = {mode: 'creator', strings: NB, money: usd, rtl: true};
+  const r = readiness({...base, payload: {identity, canSave: true}, identity: {firstname: 'Sam', lastname: ' '}});
+  assert.deepEqual(r, {tone: 'miss', text: 'ينقصه: %s', value: 'اسم العائلة', plain: true, fix: true});
+  assert.equal(readiness({...base, payload: {identity, canSave: true}, identity: {}}).value, 'الاسم الأول، اسم العائلة');
+  assert.equal(readiness({...base, rtl: false, payload: {identity, canSave: true}, identity: {}}).value, 'الاسم الأول, اسم العائلة');
+  const bad = readiness({...base, payload: {identity, canSave: true}, identity: {firstname: 'S2', lastname: 'B'}, identityErrors: {firstname: 'no digits'}});
+  assert.equal(bad.text, 'يحتاج تصحيحًا: %s'); assert.equal(bad.value, 'الاسم الأول'); assert.ok(bad.fix);
+  assert.deepEqual(readiness({...base, payload: {identity, canSave: true}, identity: {firstname: 'S', lastname: 'B'}}), {tone: 'ok', text: 'جاهز'});
+});
+
+test('readiness: a paid visit says short by / ready to pay', () => {
+  const base = {mode: 'barber', strings: NB, money: usd};
+  const paid = {dirty: true, canSave: true, price: {lines: [], total: 12}};
+  assert.deepEqual(readiness({...base, payload: {...paid, wallet: {cash: 8}}}), {tone: 'miss', text: 'ينقصك %s', value: '$4.00'});
+  assert.deepEqual(readiness({...base, payload: {...paid, wallet: {cash: 85}}}), {tone: 'ok', text: 'جاهز · ستدفع %s', value: '$12.00'});
+  assert.deepEqual(readiness({...base, payload: paid}), {tone: 'warn', text: 'ستدفع %s', value: '$12.00'});
+  assert.deepEqual(readiness({...base, payload: {...paid, price: {lines: [], total: 0}}}), {tone: 'ok', text: 'جاهز · بلا تكلفة'});
+  assert.deepEqual(readiness({...base, payload: {dirty: false, canSave: false, price: paid.price}}), {tone: 'idle', text: 'لم تغيّر شيئًا بعد'});
+  // the currency refusal is already its own line
+  assert.equal(readiness({...base, payload: {...paid, saveBlocked: 'x'}}), null);
+  // the wardrobe: no price
+  assert.deepEqual(readiness({mode: 'wardrobe', strings: NB, money: usd, payload: {dirty: true, canSave: true}}), {tone: 'ok', text: 'جاهز'});
 });

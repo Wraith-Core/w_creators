@@ -328,6 +328,59 @@ export function missingIdentity(identity, form) {
     .some(f => !String(form?.[f.key] || '').trim());
 }
 
+// ── The notebook lines: the head sentence (what the screen does and costs) and the readiness line
+// above the buttons. A part is plain text or {text, value}: the text holds one '%s' where the value
+// goes; an amount is written as its own run (left to right in cash), a list of field names (plain)
+// in the page's direction.
+
+// The money the player carries in the visit's currency (payload.wallet, read by the client from the
+// framework); null when unknown (then only the price is said, never "you have").
+export function walletAmount(wallet, currency) {
+  if (!wallet || typeof wallet !== 'object') return null;
+  const raw = currency === 'gold' ? wallet.gold : wallet.cash;
+  if (raw === null || raw === undefined || raw === '') return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+// «قصة وتسريحة · المجموع $12.00 · معك $85.00»: the mode's sentence, the total when there is one to
+// pay, the player's money when known.
+export function leadParts({mode, strings: S = {}, price, wallet, money}) {
+  const out = [];
+  if (S['lead.' + mode]) out.push(S['lead.' + mode]);
+  if (price && Number(price.total) > 0 && S.sumTotal) out.push({text: S.sumTotal, value: money(price.total)});
+  const have = price ? walletAmount(wallet, price.currency) : null;
+  if (have !== null && S.youHave) out.push({text: S.youHave, value: money(have)});
+  return out;
+}
+
+// The readiness line: {tone: 'miss' | 'warn' | 'ok' | 'idle', text, value?, plain?, fix?} or null.
+// The creator says which identity fields are empty or refused (fix: «أصلحه» opens the identity);
+// a paid visit says how much is missing, or that it is ready and what it costs. A currency the
+// pieces are not sold in is already said by payload.saveBlocked, so it adds nothing then.
+export function readiness({mode, strings: S = {}, payload = {}, identity, identityErrors, money, rtl}) {
+  const sep = rtl ? '، ' : ', ';
+  if (mode === 'creator' && payload.identity) {
+    const fields = list(payload.identity.fields).filter(f => f.type !== 'info');
+    const empty = fields.filter(f => !String(identity?.[f.key] || '').trim()).map(f => f.label);
+    if (empty.length) return {tone: 'miss', text: S.missingFor, value: empty.join(sep), plain: true, fix: true};
+    const wrong = fields.filter(f => identityErrors && identityErrors[f.key]).map(f => f.label);
+    if (wrong.length) return {tone: 'miss', text: S.needsFix, value: wrong.join(sep), plain: true, fix: true};
+    return payload.canSave ? {tone: 'ok', text: S.ready} : null;
+  }
+  if (payload.saveBlocked) return null;
+  if (!payload.dirty) return {tone: 'idle', text: S.noChange};
+  if (!payload.canSave) return null;
+  const price = payload.price;
+  if (!price) return {tone: 'ok', text: S.ready};
+  const total = Number(price.total) || 0;
+  if (total <= 0) return {tone: 'ok', text: S.readyFree};
+  const have = walletAmount(payload.wallet, price.currency);
+  if (have !== null && have < total) return {tone: 'miss', text: S.shortBy, value: money(total - have)};
+  if (have !== null) return {tone: 'ok', text: S.readyPay, value: money(total)};
+  return {tone: 'warn', text: S.willPay, value: money(total)};
+}
+
 let opCounter = 0;
 export function nextOpId(sessionId) {
   opCounter = (opCounter + 1) % 1e6;

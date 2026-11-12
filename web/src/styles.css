@@ -236,6 +236,16 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
   line-height: var(--wc-lh-text);
   color: var(--paper-dim);
 }
+/* the head sentence: what this screen does and what it costs («قصة وتسريحة · المجموع $12.00 · معك $85.00») */
+.wc-lead {
+  margin-top: .45rem;
+  font-family: var(--f-serif);
+  font-size: calc(.95rem * var(--wc-k-text));
+  line-height: var(--wc-lh-text);
+  color: var(--paper-dim);
+}
+.wc-lead bdi { color: var(--paper); font-variant-numeric: lining-nums tabular-nums; }
+.wc-lead-dot { color: var(--paper-faint); }
 .atelier-sections {
   position: relative;
   display: flex;
@@ -540,6 +550,8 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
   opacity: .78;
   unicode-bidi: isolate;
 }
+.slider-ends { display: flex; justify-content: space-between; margin-top: .1rem; font-family: var(--f-label); font-size: .72rem; line-height: 1.2; color: var(--paper-faint); }
+.slider-field:hover .slider-ends, .slider-field:focus-within .slider-ends { color: inherit; opacity: .7; }
 .range-track { position: relative; display: block; height: 1.1rem; direction: ltr; --track: rgba(242, 242, 242, .25); --fill: var(--paper); }
 .slider-field:hover .range-track, .slider-field:focus-within .range-track { --track: rgba(11, 10, 10, .3); --fill: var(--ink); }
 .slider-field[data-off=true]:hover .range-track { --track: rgba(242, 242, 242, .25); --fill: var(--paper); }
@@ -1043,6 +1055,69 @@ input[type=range]:disabled { cursor: default; }
   opacity: .8;
 }
 [dir=rtl] .commit .primary span { margin-left: 0; margin-right: auto; }
+
+/* the readiness line above the buttons: a dot (green ready, red square missing, hollow unknown), the
+   sentence, and «أصلحه» where the fix is a page away (the creator's identity) */
+.wc-ready {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding-top: .55rem;
+  border-top: 1px solid var(--rule);
+  font-family: var(--f-serif);
+  font-size: calc(.95rem * var(--wc-k-text));
+  line-height: 1.4;
+  color: var(--paper);
+}
+.wc-ready-dot { flex: none; width: .5rem; height: .5rem; border-radius: 50%; background: var(--green); }
+.wc-ready.is-miss .wc-ready-dot { border-radius: 0; background: var(--red); }
+.wc-ready.is-warn .wc-ready-dot, .wc-ready.is-idle .wc-ready-dot { border-radius: 0; background: none; border: 1px solid var(--paper-dim); }
+.wc-ready.is-ok { color: var(--green); }
+.wc-ready.is-idle { color: var(--paper-faint); }
+.wc-ready-text { flex: 1; min-width: 0; }
+.wc-ready-text bdi { font-variant-numeric: lining-nums tabular-nums; }
+.wc-ready-fix {
+  flex: none;
+  height: 1.9rem;
+  padding-inline: .85rem;
+  font-family: var(--f-label);
+  font-weight: 600;
+  font-size: .88rem;
+  line-height: 1;
+  color: var(--mark-ink);
+  background: var(--mark);
+  border: 0;
+  cursor: pointer;
+}
+.wc-ready-fix:hover:not(:disabled), .wc-ready-fix:focus-visible { background: var(--mark-lit); }
+.wc-ready-fix:disabled { opacity: .45; cursor: default; }
+/* the keys row at the column's foot */
+.wc-keys {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .4rem 1.2rem;
+  padding-top: .15rem;
+  font-family: var(--f-label);
+  font-size: .82rem;
+  line-height: 1.3;
+  color: var(--paper-dim);
+}
+.wc-keys > span { display: inline-flex; align-items: center; gap: .45rem; }
+.wc-key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.75rem;
+  height: 1.5rem;
+  padding-inline: .4rem;
+  font-family: var(--f-label);
+  font-weight: 600;
+  font-size: .74rem;
+  line-height: 1;
+  color: var(--paper);
+  border: 1px solid var(--rule-2);
+  background: rgba(11, 10, 10, .55);
+}
 
 /* ══════════════════ Are you sure? The kit's paper note ══════════════════
    The plate, its title and text are the kit's (wf-note-plate / wf-note-q / wf-note-sub); here only the

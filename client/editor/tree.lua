@@ -91,6 +91,10 @@ local K = {
     browColor = 'لون الحاجبين', followHair = 'مثل لون الشعر', ownColor = 'لون مختار',
     extraScar = 'ندبة إضافية %s', eyeTint = 'لون العين المخصص', custom = 'مخصص',
     heightMetres = '%s م', heightFeet = '%s قدم',
+    -- the skin tones by shade (lightest first) and the words at the two ends of a slider
+    skinShades = { 'فاتح جدًا', 'فاتح', 'قمحي', 'أسمر', 'داكن' },
+    endLight = 'خفيف', endHeavy = 'كثيف', endShort = 'قصير', endTall = 'طويل',
+    endThin = 'نحيف', endFull = 'ممتلئ', endLess = 'أقل', endMore = 'أكثر',
     -- the clothing store / wardrobe
     undress = 'خلع كل الملابس', payment = 'الدفع', goldAmount = '%s ذهب',
     currencies = { cash = 'نقدًا', gold = 'ذهب' },
@@ -175,9 +179,18 @@ local function rangeChoice(reg, control, label, value, min, max, none, apply, ex
     return node
 end
 
+--- The words under a slider's two ends (low, high), by control; nil = none (a palette tint).
+local function sliderEnds(control)
+    if control:sub(-8) == '.opacity' then return { L(K.endLight), L(K.endHeavy) } end
+    if control == 'body.height' then return { L(K.endShort), L(K.endTall) } end
+    if control == 'body.weight' then return { L(K.endThin), L(K.endFull) } end
+    if control:sub(1, 6) == 'morph.' then return { L(K.endLess), L(K.endMore) } end
+    return nil
+end
+
 local function slider(reg, control, label, value, min, max, step, display, apply, extra)
     local node = { id = control, kind = 'slider', label = label, control = control, value = value,
-                   min = min, max = max, step = step, display = display }
+                   min = min, max = max, step = step, display = display, ends = sliderEnds(control) }
     for k, v in pairs(extra or {}) do node[k] = v end
     if not node.disabled then
         reg[control] = { kind = 'slider', min = min, max = max, integer = step >= 1, apply = apply }
@@ -418,7 +431,24 @@ local function baseHead(reg, s)
     end)
 end
 
-local function skinTone(reg, s)
+--- A skin tone named by its shade instead of the game's number: the i-th of n tones (lightest first)
+--  -> 'فاتح · 2'. The shades split the list evenly; the figure tells two tones of one shade apart
+--  (a shade with one tone has none).
+local function shadeBand(i, n)
+    local count = #K.skinShades
+    return math.min(count, math.max(1, math.ceil(i / math.max(n, 1) * count)))
+end
+function T.shadeLabel(i, n)
+    local band, first, last = shadeBand(i, n), i, i
+    while first > 1 and shadeBand(first - 1, n) == band do first = first - 1 end
+    while last < n and shadeBand(last + 1, n) == band do last = last + 1 end
+    if first == last then return L(K.skinShades[band]) end
+    return L(K.skinShades[band]) .. ' · ' .. tostring(i - first + 1)
+end
+
+--- The tones the character's head comes in, lightest first (Config.Swatches.skinOrder: the game
+--  numbers the tones, but not by shade). nil without a head.
+local function headTones(s)
     local cat = catalog(s, 'heads')
     local info = cat and cat.hashes[s.working.head.head]
     if not info then return nil end
@@ -430,7 +460,6 @@ local function skinTone(reg, s)
             tones[#tones + 1] = tone
         end
     end
-    -- lightest first (Config.Swatches.skinOrder): the game numbers the tones, but not by shade
     local sw = Config.Swatches or {}
     local rank = {}
     for i, tone in ipairs(type(sw.skinOrder) == 'table' and sw.skinOrder or {}) do rank[tone] = i end
@@ -438,10 +467,25 @@ local function skinTone(reg, s)
         local ra, rb = rank[a] or (100 + a), rank[b] or (100 + b)
         return ra < rb
     end)
-    if #tones == 0 then return nil end
+    return tones
+end
+
+--- The shade label of a tone of the character's head (the review row); the figure when unknown.
+local function toneLabel(s, tone)
+    local tones = headTones(s) or {}
+    for i, t in ipairs(tones) do
+        if t == tone then return T.shadeLabel(i, #tones) end
+    end
+    return pad2(tone)
+end
+
+local function skinTone(reg, s)
+    local tones = headTones(s)
+    if not tones or #tones == 0 then return nil end
+    local sw = Config.Swatches or {}
     local chips = type(sw.skin) == 'table' and sw.skin or {}
     local options = {}
-    for i, tone in ipairs(tones) do options[i] = { value = tone, label = pad2(tone), swatch = chips[tone] } end
+    for i, tone in ipairs(tones) do options[i] = { value = tone, label = T.shadeLabel(i, #tones), swatch = chips[tone] } end
     return choice(reg, 'skin.tone', L(K.skinTone), AppearanceSchema.skinTone(s.working) or 0, options,
         function(app, value)
             if not AppearanceSchema.setSkinTone(app, value) then return 'INVALID_COMPONENT' end
@@ -1530,7 +1574,7 @@ local function creatorReview(s)
     local head = heads and heads.hashes[app.head.head]
     if head then items[#items + 1] = { label = L(K.head), value = WCCatalog.styleLabel('heads', head.model) } end
     local tone = AppearanceSchema.skinTone(app)
-    if tone then items[#items + 1] = { label = L(K.skinTone), value = pad2(tone) } end
+    if tone then items[#items + 1] = { label = L(K.skinTone), value = toneLabel(s, tone) } end
     local hairCat = catalog(s, 'hair')
     local hair = app.hair.style ~= 0 and hairCat and hairCat.hashes[app.hair.style]
     items[#items + 1] = { label = L(K.hair), value = hair and (WCCatalog.styleName(app.sex, 'hair', hair.model) .. ' · ' .. colourLabel(hair.name, hair.variant)) or L('بدون') }

@@ -80,6 +80,8 @@ export function Slider({node,disabled,onChange,onPreview}) {
     <span className="range-track" style={style}>
       <input aria-label={node.label} type="range" min={min} max={max} step={step} value={draft} disabled={off} onChange={change} onPointerUp={commit} onKeyUp={commit} onBlur={commit}/>
     </span>
+    {/* the words at the two ends (low on the left, as the track runs): «خفيف / كثيف», «قصير / طويل» */}
+    {Array.isArray(node.ends)&&node.ends.length===2&&<span className="slider-ends" dir="ltr" aria-hidden="true"><span>{node.ends[0]}</span><span>{node.ends[1]}</span></span>}
   </label>;
 }
 

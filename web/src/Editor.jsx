@@ -1,17 +1,28 @@
 import React, {useEffect, useReducer, useRef, useState} from 'react';
 import {nuiSend} from './nui';
 import {brandOf} from './brand';
-import {Frame, Glyph} from './Chrome';
+import {Frame, Glyph, KeysRow} from './Chrome';
 import SceneCamera from './SceneCamera';
 import {MenuRow, NodeView} from './TreeView';
 import {
   backAction, cameraFor, createMemory, filterChildren, formatMoney, hasArabic, headingFor, identityDirty, idleRequest, initialIdentity,
-  isPending, priceLines, LEAVE_SAVE_NEXT, missingIdentity, modalFor, confirmRequest, nextOpId, openPath, popTarget, recall, searchOrigin, remember, requestReducer, resolvePath, selectedStage,
+  isPending, leadParts, priceLines, readiness, LEAVE_SAVE_NEXT, missingIdentity, modalFor, confirmRequest, nextOpId, openPath, popTarget, recall, searchOrigin, remember, requestReducer, resolvePath, selectedStage,
 } from './treeState';
 
 // Navigation memory per editor session id (same id = same path/search/identity after an update).
 const memory = createMemory();
 export const editorMemory = memory;
+
+// A notebook part (treeState.leadParts / readiness): plain text, or its text with the value in place
+// of '%s' (an amount as its own run, a plain value such as field names in the page's direction).
+function withAmount(part, amount) {
+  if (part === null || part === undefined) return null;
+  if (typeof part === 'string') return part;
+  const text = String(part.text || '');
+  const at = text.indexOf('%s');
+  if (at < 0 || part.value === undefined || part.value === null) return text;
+  return <>{text.slice(0, at)}{part.plain ? <bdi>{part.value}</bdi> : amount(part.value)}{text.slice(at + 2)}</>;
+}
 
 // The appearance editor: renders the Lua node tree generically (§8). Visual identity is the
 // original atelier panel; every text comes from payload.strings / the tree.
@@ -205,6 +216,11 @@ export default function Editor({payload, onPayload, onClose}) {
     if (next?.op === 'save') save();
     else if (next) action(next);
   };
+  // the notebook lines: what this screen does and costs (head), and whether it is ready (foot)
+  const amount = text => <bdi dir={amountDir}>{text}</bdi>;
+  const lead = leadParts({mode: session.mode, strings: S, price, wallet: payload.wallet, money});
+  const ready = readiness({mode: session.mode, strings: S, payload, identity, identityErrors, money, rtl});
+  const fixIdentity = () => chooseStage('identity');
 
   return <div className="editor-shell" dir={session.dir || (session.locale === 'ar' ? 'rtl' : 'ltr')}>
     <SceneCamera camera={camera} part={cameraPart} text={S} disabled={busy || !!confirm}
@@ -212,7 +228,8 @@ export default function Editor({payload, onPayload, onClose}) {
     <section className="wst-panel atelier" aria-label={session.title} aria-busy={busy}>
       <div className="wc-mast wf-mast">{brand && <span className="wc-mark wf-mark">{hasArabic(brand) ? <span className="wf-ar">{brand}</span> : brand}</span>}<span className="wc-mast-rule wf-mast-rule" aria-hidden="true"/>{stageIndex >= 0 && <span className="wc-mast-step wf-mast-item" dir="ltr"><b>{pad2(stageIndex + 1)}</b> / {pad2(stages.length)}</span>}</div>
       <div className="wc-card wc-head"><Frame/>
-      <header className="wst-header"><h1>{session.title}</h1>{session.subtitle && <p className="wc-sub">{session.subtitle}</p>}</header>
+      <header className="wst-header"><h1>{session.title}</h1>{session.subtitle && <p className="wc-sub">{session.subtitle}</p>}
+        {lead.length > 0 && <p className="wc-lead">{lead.map((part, i) => <React.Fragment key={i}>{i > 0 && <span className="wc-lead-dot" aria-hidden="true"> · </span>}{withAmount(part, amount)}</React.Fragment>)}</p>}</header>
       {stages && <nav className="atelier-sections" aria-label={S.appearance} style={{'--p': `${stageIndex >= 0 ? (stageIndex + 1) / stages.length * 100 : 0}%`}}>{stages.map((s, i) => <button key={s.id} type="button" disabled={busy || s.disabled} className={`wst-tab ${stage === s.id ? 'selected' : ''}`} aria-current={stage === s.id ? 'page' : undefined} onClick={() => chooseStage(s.id)}><b>{String(i + 1).padStart(2, '0')}</b>{s.label}{s.id === 'identity' && missing && <i/>}</button>)}<span className="wc-progress" aria-hidden="true"><span className="wc-progress-fill"/></span></nav>}
       </div>
       <div className="wc-card wc-work"><Frame/>
@@ -235,8 +252,10 @@ export default function Editor({payload, onPayload, onClose}) {
         {request.status === 'error' && request.error && <p className="error" role="alert">{request.error}</p>}
         {payload.saveBlocked && <p className="menu-help save-blocked" role="status">{payload.saveBlocked}</p>}
         {(!atRoot || !stages) && <div className="tools"><button className="wst-button" disabled={busy || !payload.canUndo} onClick={() => action({op: 'undo'})}>{S.undo}</button><button className="wst-button" disabled={busy || !payload.dirty} onClick={() => setConfirm('reset')}>{S.reset}</button></div>}
-        {atRoot && stages && <p className="menu-help">{missing ? S.nameHint : S.details}</p>}
+        {atRoot && stages && !missing && <p className="menu-help">{S.details}</p>}
+        {ready && <div className={'wc-ready is-' + ready.tone} role="status"><i className="wc-ready-dot" aria-hidden="true"/><span className="wc-ready-text">{withAmount(ready, amount)}</span>{ready.fix && stages && <button type="button" className="wc-ready-fix" disabled={busy} onClick={fixIdentity}>{S.fixIt}</button>}</div>}
         <div className="commit"><button className="wst-button" disabled={busy} onClick={back}>{atRoot && payload.backLabel ? payload.backLabel : S.back}</button><button className="wst-button primary" disabled={busy || !payload.canSave || missing} onClick={() => setConfirm('save')}>{busy ? S.saving : payload.saveLabel}{price && <span dir={amountDir}>{money(price.total)}</span>}</button></div>
+        <KeysRow strings={S}/>
       </footer>
       </div>
     </section>

@@ -13,6 +13,16 @@ export function Glyph({tex, className=''}) {
   return <span aria-hidden="true" className={`wc-glyph ${className}`} style={{WebkitMaskImage:`var(--tex-${tex})`,maskImage:`var(--tex-${tex})`}}/>;
 }
 
+// The keys row at the column's foot: the keys this page answers (arrows move between rows, Enter
+// picks, Esc goes back), words from the payload strings.
+export function KeysRow({strings: S = {}}) {
+  return <p className="wc-keys" aria-hidden="true">
+    <span><kbd className="wc-key">↑ ↓</kbd>{S.keyMove}</span>
+    <span><kbd className="wc-key">Enter</kbd>{S.keyPick}</span>
+    <span><kbd className="wc-key">Esc</kbd>{S.back}</span>
+  </p>;
+}
+
 export function Choice({label,caption=label,value,options,onChange,disabled=false}) {
   const index=options.findIndex(o=>Number(o.value)===Number(value));
   // a colour choice (skin tone, hair colour) shows the chosen colour as a chip beside its name

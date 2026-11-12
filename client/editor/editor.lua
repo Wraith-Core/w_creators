@@ -55,7 +55,27 @@ local STRINGS = {
     free = 'مجاني',
     center = 'توسيط',
     padHelp = 'اسحب النقطة أو استخدم الأسهم · Shift لضبط أسرع',
-    advanced = 'تفاصيل إضافية',
+    advanced = 'خيارات متقدمة',
+    -- the notebook lines (web/src/Editor.jsx): the head sentence per mode, the money in it, the
+    -- readiness line above the buttons ('%s' is a list of fields or an amount) and the keys row
+    ['lead.creator'] = 'اصنع شخصيتك خطوة بعد خطوة، ثم اعتمدها',
+    ['lead.surgery'] = 'غيّر ملامح الوجه والجسد',
+    ['lead.barber'] = 'قصة وتسريحة',
+    ['lead.store'] = 'جرّب الملابس وادفع لما تشتريه فقط',
+    ['lead.wardrobe'] = 'البس من ملابسك واحفظ أطقمك',
+    sumTotal = 'المجموع %s',
+    youHave = 'معك %s',
+    missingFor = 'ينقصه: %s',
+    needsFix = 'يحتاج تصحيحًا: %s',
+    fixIt = 'أصلحه',
+    shortBy = 'ينقصك %s',
+    readyPay = 'جاهز · ستدفع %s',
+    willPay = 'ستدفع %s',
+    ready = 'جاهز',
+    readyFree = 'جاهز · بلا تكلفة',
+    noChange = 'لم تغيّر شيئًا بعد',
+    keyMove = 'تنقّل',
+    keyPick = 'اختيار',
     -- 1.1.0: the board's wordmark (the masthead of the editor and the clothing panel), from the locales
     brand = 'ريد ريفر · استوديو الشخصيات',
     -- ★ The per-field identity messages. They SAY THE RULE: the old single 'INVALID_NAME' left the
@@ -381,6 +401,23 @@ local function saveOutfitField(s)
 end
 
 --- Build the NUI payload of a session (rebuilds the tree and the control registry).
+-- The player's own money for the head sentence ("you have $85") and the readiness line ("$4 short")
+-- of a paid visit: the framework's local player data (RSG / QBR / w_core through w_lib), read at most
+-- every 2 s (a slider drag pushes many payloads). nil (VORP keeps no local data, an error) = not shown;
+-- the server still checks the money at the commit, this is only a hint.
+local WALLET_TTL = 2000
+local walletCache = { at = nil, value = nil }
+local function wallet()
+    local now = type(GetGameTimer) == 'function' and GetGameTimer() or 0
+    if walletCache.at and now - walletCache.at < WALLET_TTL and now >= walletCache.at then return walletCache.value end
+    walletCache.at = now
+    local ok, pd = pcall(function() return exports.w_lib:FwGetPlayerData() end)
+    local m = ok and type(pd) == 'table' and type(pd.money) == 'table' and pd.money or nil
+    local cash, gold = m and tonumber(m.cash), m and tonumber(m.gold)
+    walletCache.value = (cash or gold) and { cash = cash, gold = gold } or nil
+    return walletCache.value
+end
+
 function E.payload(s)
     s = s or current
     if not s then return nil end
@@ -399,6 +436,7 @@ function E.payload(s)
         stages = WCEditorTree.stages(s, root),
         tree = root,
         price = price,
+        wallet = price and s.mode ~= 'creator' and wallet() or nil,
         identity = s.mode == 'creator' and identityPayload(s) or nil,
         dirty = isDirty(s),
         canSave = canSave(s) and not blocked,

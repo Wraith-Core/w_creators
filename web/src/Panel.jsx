@@ -1,7 +1,7 @@
 import React, {useEffect, useReducer, useRef, useState} from 'react';
 import {nuiSend} from './nui';
 import {brandOf} from './brand';
-import {Frame, Glyph} from './Chrome';
+import {Frame, Glyph, KeysRow} from './Chrome';
 import {NodeView} from './TreeView';
 import {
   createMemory, filterChildren, hasArabic, headingFor, idleRequest, isPending, modalFor, openPath, popPath, recall, remember,
@@ -101,6 +101,7 @@ export default function Panel({payload, onPayload, onClose}) {
       <footer>
         {request.status === 'error' && request.error && <p className="error" role="alert">{request.error}</p>}
         <div className="commit">{validPath.length > 0 && <button className="wst-button" disabled={busy} onClick={back}>{S.back}</button>}<button className="wst-button primary" disabled={busy} onClick={close}>{S.close}</button></div>
+        <KeysRow strings={S}/>
       </footer>
       </div>
     </section>
