@@ -252,5 +252,88 @@ class OutfitTests(unittest.TestCase):
         self.assertEqual(self.e('res.code'), 'RATE_LIMITED')
 
 
+class StarterOutfitTests(unittest.TestCase):
+    """2026-11-13 (owner): the clothes a character was created in are one of his outfits, free and fixed."""
+
+    def setUp(self):
+        self.rt = wardrobe()
+        self.e = self.rt.eval
+        self.rt.run('''
+            boots = h('male', 'boots', 1)
+            own('vorp:1', 'boots', boots, nil, 'starter')
+            own('vorp:1', 'hats', hat)
+            eq = { hats = hat, boots = boots }
+            r = openWardrobe(1, 'valentine_wardrobe'); wardrobeToken = r.data.token
+        ''')
+        self.assertTrue(self.e('r.ok'), self.e('r.code'))
+
+    def starter_id(self):
+        return self.e('(function() for _, o in ipairs(r.data.outfits) do if o.data.starter then return o.id end end end)()')
+
+    def test_an_older_character_gets_it_once_from_his_starting_clothes(self):
+        self.assertEqual(self.e('#r.data.outfits'), 1)
+        self.assertEqual(self.e('r.data.outfits[1].name'), 'ملابس البداية')
+        self.assertTrue(self.e('r.data.outfits[1].data.starter'))
+        self.assertEqual(self.e('r.data.outfits[1].data.equipped.boots'), self.e('boots'))
+        self.assertIsNone(self.e('r.data.outfits[1].data.equipped.hats'))  # a bought hat is not a starting piece
+        self.rt.run('WCSessions.clear(1); r = openWardrobe(1, "valentine_wardrobe")')
+        self.assertEqual(self.e('#r.data.outfits'), 1)
+        self.assertEqual(self.e('#outfitRows'), 1)
+
+    def test_it_is_worn_and_renamed_never_updated_or_deleted(self):
+        sid = self.starter_id()
+        self.assertIsNotNone(sid)
+        self.rt.run('res = outfit("update", wardrobeToken, %d, eq, {})' % sid)
+        self.assertEqual(self.e('res.code'), 'OUTFIT_LOCKED')
+        self.rt.run('res = outfit("delete", wardrobeToken, %d)' % sid)
+        self.assertEqual(self.e('res.code'), 'OUTFIT_LOCKED')
+        self.assertEqual(self.e('#outfitRows'), 1)
+        self.rt.run('res = outfit("rename", wardrobeToken, %d, "أول لبس")' % sid)
+        self.assertTrue(self.e('res.ok'), self.e('res.code'))
+        self.assertTrue(self.e('res.data.outfit.data.starter'))
+
+    def test_it_does_not_count_against_the_limit(self):
+        self.rt.run('''
+            Config.Wardrobe.maxSavedOutfits = 1
+            a = outfit('save', wardrobeToken, 'one', eq, {})
+            b = outfit('save', wardrobeToken, 'two', eq, {})
+        ''')
+        self.assertTrue(self.e('a.ok'), self.e('a.code'))
+        self.assertEqual(self.e('b.code'), 'OUTFIT_LIMIT')
+
+    def test_a_saved_outfit_can_never_claim_to_be_the_starting_one(self):
+        self.rt.run('''
+            bad = outfit('save', wardrobeToken, 'fake', { boots = boots, starter = true }, {})
+            res = outfit('save', wardrobeToken, 'mine', { boots = boots }, {})
+            forged = json.decode(outfitRows[#outfitRows].data).starter
+        ''')
+        self.assertFalse(self.e('bad.ok'))
+        self.assertTrue(self.e('res.ok'), self.e('res.code'))
+        self.assertEqual(self.e('outfitRows[#outfitRows].name'), 'mine')
+        self.assertIsNone(self.e('forged'))
+
+    def test_off_in_the_config(self):
+        self.rt.run('''
+            outfitRows = {}; Config.Wardrobe.starterOutfit.enabled = false
+            WCSessions.clear(1); r = openWardrobe(1, 'valentine_wardrobe')
+        ''')
+        self.assertEqual(self.e('#r.data.outfits'), 0)
+
+    def test_a_new_character_gets_it_in_the_creation_transaction(self):
+        self.rt.run('''
+            app = { clothing = { equipped = { boots = boots, hats = hat },
+                                 tints = { hats = { palette = 'metaped_tint_hat', tint0 = 7, tint1 = 8, tint2 = 9 } } } }
+            q = WCOutfits.starterQuery('vorp:9', app)
+            d = json.decode(q.values[3])
+        ''')
+        self.assertIn('INSERT INTO w_creators_outfits', self.e('q.query'))
+        self.assertEqual(self.e('q.values[2]'), 'ملابس البداية')
+        self.assertTrue(self.e('d.starter'))
+        self.assertEqual(self.e('d.equipped.boots'), self.e('boots'))
+        self.assertFalse(self.e('d.tints.boots'))
+        self.assertEqual(self.e('d.tints.hats.tint1'), 8)
+        self.assertIsNone(self.e('WCOutfits.starterQuery("vorp:9", { clothing = { equipped = {} } })'))
+
+
 if __name__ == '__main__':
     unittest.main()

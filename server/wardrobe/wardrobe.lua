@@ -76,7 +76,8 @@ function Wardrobe.open(src, locationId)
             WCSessions.close(src, s.token)
             return fail(listCode or 'DATABASE_ERROR')
         end
-        outfits = list
+        -- 2026-11-13: a character made before keeps his starting clothes as an outfit (WCOutfits.ensureStarter)
+        outfits = WCOutfits.ensureStarter(s.charid, s.sex, list, owned)
     end
     return WCResult.ok({
         token = s.token,

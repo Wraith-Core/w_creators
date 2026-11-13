@@ -56,6 +56,7 @@ local MESSAGES = {
     OUTFITS_DISABLED             = 'حفظ الأطقم غير متاح',
     OUTFIT_LIMIT                 = 'وصلت إلى الحد الأقصى من الأطقم',
     OUTFIT_NOT_FOUND             = 'الطقم غير موجود',
+    OUTFIT_LOCKED                = 'ملابس البداية ثابتة: يمكنك ارتداؤها وتغيير اسمها فقط',
     INVALID_OUTFIT_NAME          = 'اسم الطقم غير صالح',
     STATE_NOT_SUPPORTED          = 'هذه الحالة غير مدعومة',
     STATE_NOT_APPLICABLE         = 'لا يمكن تطبيق هذه الحالة الآن',

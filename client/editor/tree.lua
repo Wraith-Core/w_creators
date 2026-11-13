@@ -1418,6 +1418,12 @@ local function outfitsOf(s)
     return type(list) == 'table' and list or {}
 end
 
+-- 2026-11-13: the starting outfit (the clothes the character was created in, server WCOutfits.isStarter) is
+-- free and fixed: worn, renamed or shared, never updated or deleted, and not counted against the limit
+local function isStarterOutfit(outfit)
+    return type(outfit) == 'table' and type(outfit.data) == 'table' and outfit.data.starter == true
+end
+
 local function outfitEquip(s, outfit)
     return function(app)
         local data = WCUtil.decode(outfit.data)
@@ -1495,22 +1501,28 @@ local function outfitsNode(reg, s)
                 apply = outfitEquip(s, outfit),
                 hook = s.opts.onOutfit and function(session) return s.opts.onOutfit('equip', oid, nil, session) end or nil,
             })
+            local starter = isStarterOutfit(outfit)
             if not equipOnly then
-                sub[#sub + 1] = action(reg, prefix .. '.update', L(K.outfitUpdate), {
-                    call = outfitCall('update', oid, function(session) return currentClothes(session) end),
-                })
+                if not starter then
+                    sub[#sub + 1] = action(reg, prefix .. '.update', L(K.outfitUpdate), {
+                        call = outfitCall('update', oid, function(session) return currentClothes(session) end),
+                    })
+                end
                 sub[#sub + 1] = text(reg, prefix .. '.rename', L(K.outfitRename), name, maxName, {
                     call = outfitCall('rename', oid),
                 })
                 if sharing then
                     sub[#sub + 1] = action(reg, prefix .. '.share', L(K.share), { call = outfitCall('share', oid) })
                 end
-                sub[#sub + 1] = action(reg, prefix .. '.delete', L(K.outfitDelete), { call = outfitCall('delete', oid) },
-                    { danger = true, confirmBody = L(K.outfitDeleteBody) })
+                if not starter then
+                    sub[#sub + 1] = action(reg, prefix .. '.delete', L(K.outfitDelete), { call = outfitCall('delete', oid) },
+                        { danger = true, confirmBody = L(K.outfitDeleteBody) })
+                end
             end
             local equipped = s.working.clothing.outfit == oid
             children[#children + 1] = group(prefix, name, sub, {
                 badge = equipped and 'equipped' or nil, badgeLabel = equipped and badgeLabel('equipped') or nil,
+                summary = starter and L(K.free) or nil,
             })
         end
     end
@@ -1519,7 +1531,11 @@ local function outfitsNode(reg, s)
         return group('outfits', L(K.savedOutfits), children, { camera = 'fullBody' })
     end
     local max = WCUtil.int(ctx.maxOutfits or (Config.Wardrobe and Config.Wardrobe.maxSavedOutfits), 0, nil, 0)
-    local full = #outfitsOf(s) >= max
+    local counted = 0
+    for _, outfit in ipairs(outfitsOf(s)) do
+        if not isStarterOutfit(outfit) then counted = counted + 1 end
+    end
+    local full = counted >= max
     -- One field and its Save button: what is typed is saved in the same step (the NUI keeps the
     -- typing locally, so a separate Save row could never see it). A refused save keeps the name.
     local draft = s.draft.outfitName or ''

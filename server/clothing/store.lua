@@ -362,7 +362,7 @@ local function outfitQuery(s, loc, saved, owned, plan, name)
     if not cleaned then return nil, 'INVALID_OUTFIT_NAME' end
     local list, listCode = WCOutfits.list(s.charid, s.sex)
     if not list then return nil, listCode or 'DATABASE_ERROR' end
-    if #list >= WCOutfits.max() then return nil, 'OUTFIT_LIMIT' end
+    if WCOutfits.counted(list) >= WCOutfits.max() then return nil, 'OUTFIT_LIMIT' end
     local clothing = plan.merged.clothing
     -- the outfit wears each item in the colour bought (false: its original colour)
     local tints = {}

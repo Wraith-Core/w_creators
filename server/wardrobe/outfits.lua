@@ -114,7 +114,7 @@ local function decodeData(raw, sex)
     for group, value in pairs(type(data.states) == 'table' and data.states or {}) do
         if WCClothingStates.isValid(group, value) then states[group] = value end
     end
-    local out = { equipped = equipped, states = states }
+    local out = { equipped = equipped, states = states, starter = data.starter == true or nil }
     -- the colour of each item (colourways): structurally valid stored tints of worn items only;
     -- `false` keeps an item's original colour
     if type(data.tints) == 'table' then
@@ -230,9 +230,93 @@ function Outfits.validateData(charid, sex, equipped, states, worn, owned, tints,
 end
 
 local function encodeData(data)
-    local encoded = WCUtil.encode({ equipped = data.equipped, states = data.states, tints = data.tints })
+    local encoded = WCUtil.encode({ equipped = data.equipped, states = data.states, tints = data.tints,
+                                    starter = data.starter == true or nil })
     if not encoded then return nil end
     return encoded
+end
+
+-- ---------------------------------------------------------------------
+--  The starting outfit (2026-11-13, owner): the clothes a character was created in are one of his outfits,
+--  free and always there (Config.Wardrobe.starterOutfit). It is saved with the new character
+--  (Outfits.starterQuery, in the creation transaction) and, for a character made before, the first time his
+--  wardrobe opens (Outfits.ensureStarter, from the clothes he owns as 'starter'). data.starter marks it: never
+--  updated or deleted (OUTFIT_LOCKED), renaming is fine, and it does not count against the outfit limit.
+-- ---------------------------------------------------------------------
+
+local function starterName()
+    local cfg = Config.Wardrobe and Config.Wardrobe.starterOutfit
+    if type(cfg) ~= 'table' or cfg.enabled == false then return nil end
+    return Outfits.validateName(cfg.name)
+end
+
+--- Is this outfit (a list() row) the starting one?
+function Outfits.isStarter(outfit)
+    return type(outfit) == 'table' and type(outfit.data) == 'table' and outfit.data.starter == true
+end
+
+--- The outfits of a list that count against Outfits.max() (the starting one does not).
+function Outfits.counted(list)
+    local n = 0
+    for _, outfit in ipairs(type(list) == 'table' and list or {}) do
+        if not Outfits.isStarter(outfit) then n = n + 1 end
+    end
+    return n
+end
+
+--- The INSERT of a new character's starting outfit from its creator appearance (a transaction query), or nil.
+function Outfits.starterQuery(charid, app)
+    local name = starterName()
+    local clothing = type(app) == 'table' and type(app.clothing) == 'table' and app.clothing or nil
+    if not name or not clothing or type(clothing.equipped) ~= 'table' or next(clothing.equipped) == nil then return nil end
+    local data = { equipped = {}, states = {}, tints = {}, starter = true }
+    for category, hash in pairs(clothing.equipped) do
+        data.equipped[category] = hash
+        local tint = type(clothing.tints) == 'table' and clothing.tints[category] or nil
+        -- each item in the colour it was created in; false is its original colour
+        data.tints[category] = WCOwnership.storedTint(category, tint) or false
+    end
+    return Outfits.insertQuery(charid, name, data)
+end
+
+--- A character made before the starting outfit existed: it is saved once from the clothes he owns as
+--  'starter' (owned = WCOwnership.list). Returns the outfit list, with it when it was saved.
+function Outfits.ensureStarter(charid, sex, list, owned)
+    local name = starterName()
+    if not name or type(list) ~= 'table' or type(owned) ~= 'table' then return list end
+    for _, outfit in ipairs(list) do
+        if Outfits.isStarter(outfit) then return list end
+    end
+    local equipped, tints = {}, {}
+    for _, k in ipairs(WCUtil.sortedKeys(owned)) do
+        local entry = owned[k]
+        local category = type(entry) == 'table' and entry.source == 'starter' and entry.category or nil
+        if category and WCCatalog.isClothing(category) and equipped[category] == nil then
+            local hash = WCCatalog.resolve(sex, category, k)
+            if hash then
+                equipped[category] = hash
+                tints[category] = WCOwnership.tintOf(owned, hash, category) or false
+            end
+        end
+    end
+    if next(equipped) == nil then return list end
+    local data = Outfits.validateData(charid, sex, equipped, {}, nil, owned, tints)
+    if not data then return list end
+    data.starter = true
+    local lockKey = 'outfits:' .. tostring(charid)
+    if not WCSecurity.lock(lockKey, LOCK_MS) then return list end
+    local ok, result = pcall(function()
+        local fresh = Outfits.list(charid, sex)
+        if not fresh then return nil end
+        for _, outfit in ipairs(fresh) do
+            if Outfits.isStarter(outfit) then return fresh end
+        end
+        if not Outfits.create(charid, name, data) then return fresh end
+        WCDebug.log('outfits', '%s got the starting outfit', tostring(charid))
+        return Outfits.list(charid, sex) or fresh
+    end)
+    WCSecurity.unlock(lockKey)
+    return (ok and type(result) == 'table') and result or list
 end
 
 --- The INSERT of a new outfit as a transaction query (a store purchase saved as an outfit: the
@@ -375,7 +459,7 @@ function Outfits.save(src, token, name, equipped, states, tints)
     return run(src, token, function(s, list)
         local cleaned = Outfits.validateName(name)
         if not cleaned then return fail('INVALID_OUTFIT_NAME') end
-        if #list >= Outfits.max() then return fail('OUTFIT_LIMIT') end
+        if Outfits.counted(list) >= Outfits.max() then return fail('OUTFIT_LIMIT') end
         local data, code, detail = contents(s, equipped, states, tints)
         if not data then return fail(code, detail and { category = detail } or nil) end
         local id, createCode = Outfits.create(s.charid, cleaned, data)
@@ -391,6 +475,7 @@ function Outfits.updateOutfit(src, token, id, equipped, states, tints)
     return run(src, token, function(s, list)
         id = outfitId(id)
         if not id or not find(list, id) then return fail('OUTFIT_NOT_FOUND') end
+        if Outfits.isStarter(find(list, id)) then return fail('OUTFIT_LOCKED') end
         local data, code, detail = contents(s, equipped, states, tints)
         if not data then return fail(code, detail and { category = detail } or nil) end
         local ok, writeCode = Outfits.update(s.charid, id, data)
@@ -419,6 +504,7 @@ function Outfits.deleteOutfit(src, token, id)
     return run(src, token, function(s, list)
         id = outfitId(id)
         if not id or not find(list, id) then return fail('OUTFIT_NOT_FOUND') end
+        if Outfits.isStarter(find(list, id)) then return fail('OUTFIT_LOCKED') end
         local ok, writeCode = Outfits.remove(s.charid, id)
         if not ok then return fail(writeCode) end
         local result = answer(s, nil)

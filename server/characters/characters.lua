@@ -757,7 +757,11 @@ end
 local function starterQueries(charid, app)
     local items = starterItems(app)
     if #items == 0 then return {} end
-    return WCOwnership.grantQueries(charid, items, 'starter')
+    local queries = WCOwnership.grantQueries(charid, items, 'starter')
+    -- 2026-11-13 (owner): the starting clothes are also saved as his first outfit, free (WCOutfits.starterQuery)
+    local outfit = WCOutfits and WCOutfits.starterQuery(charid, app) or nil
+    if outfit then queries[#queries + 1] = outfit end
+    return queries
 end
 
 -- ---------------------------------------------------------------------
