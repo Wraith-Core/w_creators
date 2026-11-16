@@ -19,10 +19,9 @@ Config.Voice = {
         -- 1.0.9: antagonize has its own key (F is the game's melee); the melee row shows the game's key
         antagonizeKey = 'G',
         meleeKey = 'F',
-        -- 2026-11-16: while this control is down (and meleeGraceMs after) the game's own prompts stay live and our
-        -- card steps aside, so the game's focus melee strikes (the emote row is gone, owner)
+        -- 2026-11-16: in the frames this control is down (and comes up) the game's prompts are not switched off,
+        -- so our card's F strikes through the game's focus melee; our card stays (the emote row is gone, owner)
         meleeControl = 'INPUT_MELEE_ATTACK',
-        meleeGraceMs = 1500,
         -- lines every voice of AppearanceSchema.SPEECH_VOICES has (checked against the game's voice banks);
         -- male / female = the sex of the person spoken to
         lines = {

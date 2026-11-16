@@ -4,14 +4,16 @@
 
 ## بطاقة «حديث»: الضرب يعمل، والإيموت حُذف (2026-11-16، الإصدار القادم)
 
-- **F يضرب من جديد:** بطاقتنا كانت تخفي أزرار اللعبة، والإخفاء يوقف عملها أيضًا، فكان F لا يضرب. الآن إذا ضغطت F
-  وأنت مركّز على شخص، تتنحى بطاقتنا لحظة (ثانية ونصف) وتأخذ اللعبة الزر فتضرب.
+- **F يضرب من زرّنا:** بطاقتنا كانت تخفي أزرار اللعبة، والإخفاء يوقف عملها أيضًا، فكان F لا يضرب. الآن بطاقتنا
+  تبقى ظاهرة، وإذا ضغطت F وأنت مركّز على شخص يضرب. لا تظهر بطاقة اللعبة مكانها.
+- إذا بدأ العراك نفسه تظهر أزرار اللعبة للعراك (الصد، المسك، الإفلات) لأنها هي التي تشغّله، كما كان من قبل.
 - **حذف «إيموت 1»** من البطاقة: لا إيموت هنا. البطاقة فيها الآن ثلاثة: تحية R، استفزاز G، ضرب F.
-- الإعداد في `config/voice.lua`: `meleeControl` و `meleeGraceMs` (ومُسح `emoteKey`).
-- التجربة: ركّز على شخص (زر الفأرة الأيمن)، اضغط F: يضرب. والبطاقة بلا سطر الإيموت.
+- الإعداد في `config/voice.lua`: `meleeControl` (ومُسح `emoteKey`).
+- التجربة: ركّز على شخص (زر الفأرة الأيمن)، اضغط F: يضرب وبطاقتنا باقية. والبطاقة بلا سطر الإيموت.
 
-(The blind switch takes the game prompts with their actions, so the focus melee never struck. While
-`INPUT_MELEE_ATTACK` is down and `meleeGraceMs` after it, no blind switch and our card is hidden. The emote row is removed.)
+(The blind switch takes the game prompts with their actions, so the focus melee never struck. Our card stays
+up; the blind switch is skipped only in the frames `INPUT_MELEE_ATTACK` is down or comes up, so the game's
+focus melee takes that press. The emote row is removed.)
 
 ## ملابس البداية في الخزانة (2026-11-13، الإصدار القادم)
 
