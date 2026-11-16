@@ -15,15 +15,22 @@
 --  and emote on 1 stay the game's own keys (shown, the game still acts on them). Antagonize moves off F (it was
 --  the melee key too) to its own key, read through w_lib's key listener.
 
+--  2026-11-16 (owner: "F does not hit, and hide the emote, there is no emote here"): the blind switch takes the
+--  game's prompts WITH their actions (client/natives/promptlab.lua, T1), so the focus melee on F never struck.
+--  While the melee key is down, and a short while after it (meleeGraceMs), the game's prompts are left alone and
+--  our card steps aside, so the game's own melee takes the key. The emote row is gone.
+
 local SPEAK = (Config.Voice or {}).speak or {}
 local CONTROLS = {
     greet = GetHashKey(SPEAK.greetControl or 'INPUT_INTERACT_LOCKON_POS'),
+    melee = GetHashKey(SPEAK.meleeControl or 'INPUT_MELEE_ATTACK'),
 }
--- the letters on the card: greet = the game's control key; antagonize = our own key; melee / emote = the game's keys
+-- the letters on the card: greet = the game's control key; antagonize = our own key; melee = the game's key
 local KEYS = { greet = SPEAK.greetKey or 'R', antagonize = SPEAK.antagonizeKey or 'G',
-    melee = SPEAK.meleeKey or 'F', emote = SPEAK.emoteKey or '1' }
+    melee = SPEAK.meleeKey or 'F' }
+local MELEE_GRACE = tonumber(SPEAK.meleeGraceMs) or 1500
 local groupId, shown = nil, false
-local readyAt = 0
+local readyAt, meleeUntil = 0, 0
 
 local function lib(name, ...)
     local ok, result = pcall(exports.w_lib[name], exports.w_lib, ...)
@@ -37,7 +44,6 @@ local function ensureGroup()
     lib('AddPrompt', groupId, KEYS.greet, locale('تحية'), false)
     lib('AddPrompt', groupId, KEYS.antagonize, locale('استفزاز'), false)
     lib('AddPrompt', groupId, KEYS.melee, locale('ضرب'), false)
-    lib('AddPrompt', groupId, KEYS.emote, locale('إيموت'), false)
     return groupId
 end
 
@@ -92,16 +98,27 @@ local function pressed(control)
     return IsControlJustPressed(0, control) or IsDisabledControlJustPressed(0, control)
 end
 
+local function held(control)
+    return IsControlPressed(0, control) or IsDisabledControlPressed(0, control)
+end
+
 CreateThread(function()
     if SPEAK.enabled == false then return end
     while true do
         local target = focusedPerson()
-        if target then
+        local now = GetGameTimer()
+        -- checked before the blind switch: the game's melee prompt must be live in the very frame F goes down
+        if target and held(CONTROLS.melee) then meleeUntil = now + MELEE_GRACE end
+        if target and now < meleeUntil then
+            WCNative.ped.muteGreet(target, 1000)
+            WCNative.ped.muteAntagonize(target, 1000)
+            show(false) -- the game's own melee has the key: no blind switch, our card steps aside
+            Wait(0)
+        elseif target then
             WCNative.ped.muteGreet(target, 1000)
             WCNative.ped.muteAntagonize(target, 1000)
             WCNative.ui.hidePromptsThisFrame() -- 1.0.9: the game's prompts under ours
             show(true)
-            local now = GetGameTimer()
             local live = now >= readyAt
             setLive(live)
             if live then

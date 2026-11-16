@@ -16,10 +16,13 @@ Config.Voice = {
         antagonizeControl = 'INPUT_INTERACT_LOCKON_NEG',
         -- 1.0.7: the letters w_lib's prompt frame draws beside the two rows (the controls' default keys)
         greetKey = 'R',
-        -- 1.0.9: antagonize has its own key (F is the game's melee); the melee / emote rows show the game's keys
+        -- 1.0.9: antagonize has its own key (F is the game's melee); the melee row shows the game's key
         antagonizeKey = 'G',
         meleeKey = 'F',
-        emoteKey = '1',
+        -- 2026-11-16: while this control is down (and meleeGraceMs after) the game's own prompts stay live and our
+        -- card steps aside, so the game's focus melee strikes (the emote row is gone, owner)
+        meleeControl = 'INPUT_MELEE_ATTACK',
+        meleeGraceMs = 1500,
         -- lines every voice of AppearanceSchema.SPEECH_VOICES has (checked against the game's voice banks);
         -- male / female = the sex of the person spoken to
         lines = {
