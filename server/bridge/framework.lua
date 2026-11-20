@@ -229,14 +229,11 @@ Bridge = {}
 local function detectFramework()
     local ok, status = pcall(function() return exports.w_lib:CompatStatus() end)
     if ok and status and status.inboundAliases then return 'rsg' end
-    local native = exports.w_lib:FwName()
-    if native then return native == 'rsgcore' and 'rsg' or native end
+    local okN, native = pcall(function() return exports.w_lib:FwName() end)
+    if okN and native then return native == 'rsgcore' and 'rsg' or native end
     if Config.Framework and Config.Framework ~= 'auto' then
         return Config.Framework
     end
-    if GetResourceState('vorp_core') == 'started' then return 'vorp' end
-    if GetResourceState('rsg-core') == 'started' then return 'rsg' end
-    if GetResourceState('qbr-core') == 'started' then return 'qbr' end
     return 'unknown'
 end
 
@@ -440,7 +437,8 @@ local function saveLoggedIn(source, Player)
     if not citizenid or type(save) ~= 'function' then return false, 'the core offers no save' end
     -- w_core keeps money in the central ledger and never writes the players.money projection.
     local fields = { 'job', 'gang', 'metadata' }
-    if GetResourceState('w_core') ~= 'started' then fields[#fields + 1] = 'money' end
+    local okB, backend = pcall(function() return exports.w_lib:FwBackend() end)
+    if not (okB and backend == 'wcore') then fields[#fields + 1] = 'money' end
     local expected = {}
     -- nil / JSON null reads back as {} (WCUtil.decode)
     for _, f in ipairs(fields) do expected[f] = jsonShape(data[f]) or {} end
@@ -472,7 +470,10 @@ end
 --  that cannot be confirmed refuses the login (false) and the character stays logged in.
 local function coreLogin(source, citizenid, newData)
     if Bridge.Name ~= 'rsg' and Bridge.Name ~= 'qbr' then return false end
-    if Bridge.Name == 'qbr' and GetResourceState('qbr-core') ~= 'started' then return false end
+    if Bridge.Name == 'qbr' then
+        local okR, ready = pcall(function() return exports.w_lib:FwReady() end)
+        if not (okR and ready == true) then return false end
+    end
     local found, Player = pcall(getFrameworkPlayer, source)
     Player = found and Player or nil
     if Player then
@@ -508,7 +509,8 @@ local function coreDelete(source, citizenid)
     if Bridge.Name == 'rsg' then
         called, answer, reason = pcall(function() return rsgCore().Player.DeleteCharacter(source, citizenid) end)
     elseif Bridge.Name == 'qbr' then
-        if GetResourceState('qbr-core') ~= 'started' then return false end
+        local okR, ready = pcall(function() return exports.w_lib:FwReady() end)
+        if not (okR and ready == true) then return false end
         called, answer, reason = pcall(function() return exports.w_lib:FwNativeCoreCall('DeleteCharacter', source, citizenid) end)
     else
         return false
@@ -605,14 +607,15 @@ end
 --  * w_core without a ready ledger: unknown (nil), never the stale column;
 --  * stock rsg-core / qbr-core: players.money (JSON; gold is the 'gold' or 'bloodmoney' type).
 local function ledgerReady()
-    if GetResourceState('w_centralbank') ~= 'started' then return false end
-    local ok, ready = pcall(function() return exports.w_centralbank:IsReady() end)
+    local okN, econ = pcall(function() return exports.w_lib:EconName() end)
+    if not okN or econ ~= 'w_centralbank' then return false end
+    local ok, ready = pcall(function() return exports.w_lib:EconIsReady() end)
     return ok and ready == true
 end
 
 local function ledgerBalance(citizenid, kind)
     local ok, balance = pcall(function()
-        return exports.w_centralbank:GetBalance(('player:%s:%s'):format(citizenid, kind))
+        return exports.w_lib:EconGetBalance(('player:%s:%s'):format(citizenid, kind))
     end)
     balance = ok and tonumber(balance) or nil
     return WCUtil.isFinite(balance) and balance or nil
@@ -631,7 +634,8 @@ local function coreBalances(citizenid, moneyColumn)
         return { cash = ledgerBalance(citizenid, 'cash'), bank = ledgerBalance(citizenid, 'bank'),
                  gold = ledgerBalance(citizenid, 'gold') }
     end
-    if GetResourceState('w_core') == 'started' then return {} end
+    local okB, backend = pcall(function() return exports.w_lib:FwBackend() end)
+    if okB and backend == 'wcore' then return {} end
     local money = type(moneyColumn) == 'string' and WCUtil.decode(moneyColumn)
         or (type(moneyColumn) == 'table' and moneyColumn) or {}
     return { cash = columnBalance(money, 'cash'), bank = columnBalance(money, 'bank'),

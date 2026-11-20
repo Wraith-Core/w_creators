@@ -16,11 +16,10 @@ local function capture(src)
     local ok, owner = pcall(Bridge.GetLicense, src)
     if not ok or type(owner) ~= 'string' or owner == '' then return nil end
     local binding = { charid = charid, owner = owner }
-    if GetResourceState('w_core') == 'started' then
-        local loaded, user = pcall(function() return w.framework:getUser(src) end)
-        local data = loaded and type(user) == 'table' and user.data and user.data.PlayerData
-        local id = data and data.id
-        if type(id) ~= 'number' or id ~= id or id < 1 or id % 1 ~= 0 or id == math.huge then return nil end
+    local okB, backend = pcall(function() return exports.w_lib:FwBackend() end)
+    if okB and backend == 'wcore' then
+        local loaded, _, id = pcall(function() return exports.w_lib:FwGetCharacterGeneration(src) end)
+        if not loaded or type(id) ~= 'number' or id ~= id or id < 1 or id % 1 ~= 0 or id == math.huge then return nil end
         binding.generationId = id
     end
     return binding
@@ -85,7 +84,7 @@ function R.guard(src, row, fn)
     end
     if row.generationId then
         local ok, result, reason = pcall(function()
-            return exports.w_core:WithCitizenGeneration(row.charid, row.generationId, function()
+            return exports.w_lib:FwWithCitizenGeneration(row.charid, row.generationId, function()
                 -- The generation lookup may yield; a connection can select another character meanwhile.
                 local current = capture(src)
                 if not current or current.charid ~= row.charid or current.owner ~= row.owner

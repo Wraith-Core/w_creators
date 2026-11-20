@@ -113,6 +113,7 @@ class SaveBeforeLogoutTests(unittest.TestCase):
         self.rt.run('''
             local real = GetResourceState
             GetResourceState = function(name) if name == 'w_core' then return 'started' end return real(name) end
+            rawset(exports, 'w_lib', { FwName = function() return 'w_core' end, FwBackend = function() return 'wcore' end })
             loggedIn.Functions.Save = function()
                 table.insert(calls, 'save')
                 pendingWrite = { at = Clock.now, row = { job = json.encode(loggedIn.PlayerData.job),

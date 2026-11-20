@@ -17,11 +17,10 @@ local function tokensLeft(src)
     return ok and math.floor(tonumber(n) or 0) or 0
 end
 
---- The w_core player of a connected source, or nil.
+--- The framework player snapshot of a connected source, or nil.
 local function corePlayer(src)
-    if GetResourceState('w_core') ~= 'started' then return nil end
-    local ok, player = pcall(function() return exports.w_core:GetCoreObject().Functions.GetPlayer(src) end)
-    if ok and type(player) == 'table' and type(player.PlayerData) == 'table' then return player end
+    local ok, pd = pcall(function() return exports.w_lib:FwGetPlayerData(src) end)
+    if ok and type(pd) == 'table' and pd.citizenid then return pd end
     return nil
 end
 
@@ -48,15 +47,12 @@ w.callback.register('w_creators:rename', function(src, first, last)
         local used = false
         pcall(function() used = exports.w_vip:UseToken(src, TOKEN) end)
         if not used then return { ok = false, error = 'no_token' } end
-        local info = {}
-        for k, v in pairs(type(player.PlayerData.charinfo) == 'table' and player.PlayerData.charinfo or {}) do info[k] = v end
+        local info = type(player.charinfo) == 'table' and player.charinfo or {}
         local before = WCUtil.trim(('%s %s'):format(info.firstname or '', info.lastname or ''))
-        info.firstname, info.lastname = f, l
-        player.Functions.SetPlayerData('charinfo', info)
-        player.Functions.Save()
+        exports.w_lib:FwSetCharInfo(src, { firstname = f, lastname = l })
         local after = ('%s %s'):format(f, l)
         pcall(CreatorLogs.Emit, 'character_renamed', {
-            playerSource = src, charid = player.PlayerData.citizenid, from = before, to = after,
+            playerSource = src, charid = player.citizenid, from = before, to = after,
         })
         return { ok = true, name = after }
     end)

@@ -16,6 +16,7 @@ from harness import Runtime
 from test_client_services_ambulance import CLIENT_STUBS, WCORE_STUBS, ambulance_source
 
 NATIVES = r'''
+function IsDuplicityVersion() return false end
 Natives = {}; NativeReturns = {}
 NotNatives = { Laststand = true, LaststandTime = true, InLaststand = true }
 -- any other capitalised global a script reads is a game native: recorded, typed default answer

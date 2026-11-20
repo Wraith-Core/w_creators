@@ -405,8 +405,7 @@ end
 --- The block staff put on a character (w_core_character_blocks, w_admin's characters page):
 --- { reason, blocked_by, blocked_at } or nil. Without w_core nothing is blocked.
 local function blockOf(charid)
-    if GetResourceState('w_core') ~= 'started' then return nil end
-    local done, block = pcall(function() return exports.w_core:GetCharacterBlock(charid) end)
+    local done, block = pcall(function() return exports.w_lib:FwGetCharacterBlock(charid) end)
     return done and type(block) == 'table' and block or nil
 end
 

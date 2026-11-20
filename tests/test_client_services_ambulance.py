@@ -37,6 +37,56 @@ rawset(exports, 'w_creators', { OpenCosmeticSurgery = function(_, data)
     if type(SurgeryAnswer) == 'function' then return SurgeryAnswer(data) end
     return SurgeryAnswer
 end })
+rawset(exports, 'w_lib', {
+    FwName = function() return 'w_core' end,
+    FwBackend = function() return 'wcore' end,
+    FwGetPlayerData = function(_, src)
+        if src == nil then return {} end
+        local p = WPlayers[tonumber(src) or -1]
+        return p and p.PlayerData or nil
+    end,
+    FwGetOnlinePlayers = function()
+        local out = {}
+        for k, v in pairs(WPlayers) do out[k] = v.PlayerData end
+        return out
+    end,
+    FwGetLoadedPlayers = function()
+        local out = {}
+        for k in pairs(WPlayers) do out[#out + 1] = k end
+        return out
+    end,
+    FwGetOfflinePlayer = function() return nil end,
+    FwSetMetadata = function(_, src, key, value)
+        local p = WPlayers[tonumber(src) or -1]
+        if p and p.PlayerData then p.PlayerData.metadata = p.PlayerData.metadata or {}; p.PlayerData.metadata[key] = value; return true end
+        return false
+    end,
+    FwSetJob = function() return true end,
+    FwSetDuty = function() return true end,
+    FwToggleDuty = function() end,
+    FwAddCommand = function(_, name) CommandsAdded[name] = true; return true end,
+    FwOnCharacterLoaded = function(_, fn)
+        if IsDuplicityVersion() then AddEventHandler('WCore:Server:PlayerLoaded', fn) else RegisterNetEvent('WCore:Client:OnPlayerLoaded', fn) end
+    end,
+    FwOnCharacterUnloaded = function(_, fn)
+        if IsDuplicityVersion() then AddEventHandler('WCore:Server:OnPlayerUnload', fn) else RegisterNetEvent('WCore:Client:OnPlayerUnload', fn) end
+    end,
+    FwOnJobUpdate = function(_, fn) RegisterNetEvent('WCore:Client:OnJobUpdate', fn) end,
+    FwOnDutyChange = function(_, fn) RegisterNetEvent('WCore:Client:SetDuty', fn) end,
+    FwReloadAppearance = function() end,
+    FwGetSharedWeapon = function() return nil end,
+    InvRegisterUsableItem = function(_, name, _, fn) Usables[name] = fn; return true end,
+    InvRegisterShop = function() return true end,
+    InvOpenInventory = function() return true end,
+    InvHasItem = function() return false end,
+    InvGetItemCount = function() return 0 end,
+    InvAddItem = function() return true end,
+    InvRemoveItem = function() return true end,
+    EconName = function() return 'framework' end,
+    EconIsReady = function() return false end,
+    EconEnsureAccount = function() return false end,
+    EconTransfer = function() return false end,
+})
 function request(src, clinicId) fireEvent('hospital:server:requestCosmeticSurgery', src, clinicId) end
 function notes(src)
     local out = {}
@@ -46,6 +96,7 @@ end
 '''
 
 CLIENT_STUBS = r'''
+function IsDuplicityVersion() return false end
 Prompts = {}
 w.prompt = { at = function(opts)
     local rec = { opts = opts, title = opts.title, labels = {}, removed = false }

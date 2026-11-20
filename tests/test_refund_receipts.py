@@ -27,11 +27,24 @@ w={framework={getUser=function() return U end}}
 Bridge={GetLicense=function() return OWNER end}
 function GetResourceState() return 'started' end
 U.data={PlayerData={id=10}}
-exports={w_core={WithCitizenGeneration=function(_,cid,expected,fn)
-    if DENY_GENERATION then return false,DENY_GENERATION end
-    if cid~=CURRENT or expected~=GENERATION then return false,'generation_changed' end
-    LEASE=true;local result=fn();LEASE=false;return result
-end}}
+exports={
+    w_core={WithCitizenGeneration=function(_,cid,expected,fn)
+        if DENY_GENERATION then return false,DENY_GENERATION end
+        if cid~=CURRENT or expected~=GENERATION then return false,'generation_changed' end
+        LEASE=true;local result=fn();LEASE=false;return result
+    end},
+    w_lib={
+        FwName=function() return 'w_core' end,
+        FwBackend=function() return 'wcore' end,
+        FwGetCharacterGeneration=function(_,src)
+            local id = U and U.data and U.data.PlayerData and U.data.PlayerData.id
+            return CURRENT, id
+        end,
+        FwWithCitizenGeneration=function(_,cid,expected,fn)
+            return exports.w_core:WithCitizenGeneration(cid,expected,fn)
+        end,
+    },
+}
 function receipt() return json.decode(KVP['w_creators:refund:A:core:10']) end
 ''')
         for rel in ['shared/result.lua', 'server/core/refunds.lua', 'server/core/economy.lua']:
@@ -64,7 +77,7 @@ function receipt() return json.decode(KVP['w_creators:refund:A:core:10']) end
     def install_real_generation_export(self):
         self.run_lua("GEN_EXPORTS={};exports=function(k,fn) GEN_EXPORTS[k]=fn end;WCore={Citizen={Normalize=function(cid)return cid end,IsBusy=function()return false end,RowPurged=function()return false end,RowMoved=function()return false end}};function GetInvokingResource() return 'w_creators' end;DB_ROW=10;MySQL={single={await=function()return {id=DB_ROW}end}}")
         self.lua.execute((ROOT.parent / 'w_core/server/generation.lua').read_text(encoding='utf-8-sig'))
-        self.run_lua("exports={w_core={WithCitizenGeneration=function(_,...)return GEN_EXPORTS.WithCitizenGeneration(...)end}}")
+        self.run_lua("exports={w_core={WithCitizenGeneration=function(_,...)return GEN_EXPORTS.WithCitizenGeneration(...)end},w_lib={FwName=function() return 'w_core' end,FwBackend=function() return 'wcore' end,FwGetCharacterGeneration=function() return CURRENT, U and U.data and U.data.PlayerData and U.data.PlayerData.id end,FwWithCitizenGeneration=function(_,...)return GEN_EXPORTS.WithCitizenGeneration(...)end}}")
     def test_actual_core_export_holds_generation_through_compensation(self):
         self.install_real_generation_export()
         self.run_lua("local oldDebit=U.canBuy;U.canBuy=function(...) assert(WCore.Citizen.HasGenerationLease('A'));return oldDebit(...) end;local oldCredit=U.addMoney;U.addMoney=function(...) assert(WCore.Citizen.HasGenerationLease('A'));return oldCredit(...) end;local r=WCEconomy.withCharge(1,25,'test',function() assert(WCore.Citizen.HasGenerationLease('A'));return false end);assert(not r.ok and r.data.refunded and credits==1 and not WCore.Citizen.HasGenerationLease('A'))")

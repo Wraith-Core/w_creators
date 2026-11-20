@@ -555,6 +555,11 @@ class CardBalanceTests(unittest.TestCase):
                 return function(self, arg)
                     if res == 'w_centralbank' and name == 'IsReady' then return ledgerReadyFlag end
                     if res == 'w_centralbank' and name == 'GetBalance' then return ledger[arg] end
+                    if res == 'w_lib' and name == 'FwName' then return states.w_core == 'started' and 'w_core' or 'rsg-core' end
+                    if res == 'w_lib' and name == 'FwBackend' then return states.w_core == 'started' and 'wcore' or 'rsg' end
+                    if res == 'w_lib' and name == 'EconName' then return states.w_centralbank == 'started' and 'w_centralbank' or 'framework' end
+                    if res == 'w_lib' and name == 'EconIsReady' then return states.w_centralbank == 'started' and ledgerReadyFlag or false end
+                    if res == 'w_lib' and name == 'EconGetBalance' then return states.w_centralbank == 'started' and ledger[arg] or nil end
                     return nil
                 end
             end }) end })
