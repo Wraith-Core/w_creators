@@ -36,7 +36,7 @@
   --wc-f-fig: 'EB Garamond', Georgia, serif;   /* figures inside text: lining, tabular */
   --wc-f-big: 'RDR Catalogue', 'EB Garamond', Georgia, sans-serif;   /* the big figures (owner) */
   --wc-fast: 120ms;
-  --wc-deg-end: 270deg;  /* the side scrim, dark on the right where the board stands (both languages) */
+  --wc-deg-end: 90deg;   /* the side scrim, dark at the start side (left in LTR, right in RTL) */
   --wc-text-shadow: 0 1px .4em rgba(0, 0, 0, .6);
   --wc-note-glow: rgba(0, 0, 0, .28);
   --wc-k-title: 1;    --wc-lh-title: 1.12;   --wc-track-title: .005em;  --wc-wt-title: 600;
@@ -48,6 +48,7 @@
   --wc-label-track: .1em;
 }
 [dir=rtl] {
+  --wc-deg-end: 270deg;
   --wc-k-title: .92;  --wc-lh-title: 1.3;    --wc-track-title: 0em;     --wc-wt-title: 400;
   --wc-k-text: 1.06;  --wc-lh-text: 1.6;
   --wc-k-action: 1.04; --wc-lh-action: 1.4;  --wc-wt-action: 400;
@@ -144,7 +145,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .editor-shell { position: fixed; inset: 0; }
 .scene-touch { position: absolute; inset: 0; cursor: grab; touch-action: none; }
 .scene-touch:active { cursor: grabbing; }
-/* the world stays visible: only the board's side is darkened (the right, --wc-deg-end) */
+/* the world stays visible: only the board's side is darkened (mirrored in Arabic by --wc-deg-end) */
 .scene-touch::before {
   content: '';
   position: absolute;
@@ -154,13 +155,12 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
     rgba(11, 10, 10, .74) 0%, rgba(11, 10, 10, .55) 20%, rgba(11, 10, 10, .22) 34%, rgba(11, 10, 10, .06) 44%, rgba(11, 10, 10, 0) 52%);
 }
 
-/* The board: on the right of the screen in both languages (owner 2026-11-12: a window keeps its place,
-   only its content flips); the camera frames the actor clear of it (WCCamera opts.panel 'right') */
+/* The board: far left in LTR (English), far right in RTL (Arabic); clear of the character and prompts */
 .atelier {
   position: absolute;
   z-index: 1;
   top: 1.5rem;
-  right: calc(5.4rem + var(--ws-gutter)); /* the kit's board edge; ui-scale: inside the centred 16:9 frame on an ultrawide */
+  inset-inline-start: calc(1.5rem + var(--ws-gutter)); /* far start edge; ui-scale: inside the centred 16:9 frame on an ultrawide */
   width: 24rem;
   max-width: calc(100vw - 2rem);
   max-height: calc(100vh - 3rem);
@@ -1184,8 +1184,8 @@ input[type=range]:disabled { cursor: default; }
   left: 50%;
   transform: translateX(-50%);
   width: max-content;
-  /* 1.1.0: between the board (5.4rem + 24rem from the start edge, + the gutter) and its mirror */
-  max-width: max(20rem, calc(100vw - 2 * (30.4rem + var(--ws-gutter))));
+  /* between the board (1.5rem + 24rem from the start edge, + the gutter) and its mirror */
+  max-width: max(20rem, calc(100vw - 2 * (26.5rem + var(--ws-gutter))));
   pointer-events: none;
 }
 .camera-help {

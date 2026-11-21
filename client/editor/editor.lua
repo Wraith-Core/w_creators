@@ -574,8 +574,8 @@ function E.open(ped, mode, app, opts)
     -- committed only once the first payload exists: no focus without a rendered NUI
     current = s
     opening = false
-    -- the column stands on the right in both languages: the actor is framed clear of it
-    camera('open', ped, s.camera, { panel = 'right' })
+    -- the column follows the language side (far left in LTR, far right in RTL): camera frames clear of it
+    camera('open', ped, s.camera)
     focus(true)
     openPrompts(s)
     send(s.firstPayload)
