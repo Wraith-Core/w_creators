@@ -2,7 +2,7 @@ fx_version "adamant"
 games { "rdr3" }
 rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships.'
 lua54 'yes'
-version '1.2.2' -- 1.2.1 (2026-11-21) = hide closed Saint Denis theatre stage curtains & deactivate new_theater_stage_blocker while creator/selection scene is open; 1.2.0 = clothing/barber split.
+version '1.2.3' -- 1.2.3 (2026-11-22) = stock RSG-Core fixes (sync framework detection, getCoreObject fallback, OnPlayerLoaded, skip VORP-only playerSpawned wait).
 
 -- =====================================================================
 --  w_creators v3 - the character lifecycle authority: account -> characters -> selection ->
@@ -148,7 +148,8 @@ ui_page 'web/build/index.html'
 -- The w_lib modules preloaded at start (both sides). w.pl (client only) resolves lazily on
 -- its first access.
 w_lib {
-    'locale',    -- loads locales/{en,ar}.json before any script runs
-    'component', -- the clothing and tinting catalogue
-    'callback',  -- the request/response calls
+    'locale',           -- loads locales/{en,ar}.json before any script runs
+    'component',        -- the clothing and tinting catalogue
+    'callback',         -- the request/response calls
+    'framework-bridge', -- framework detection and core object access (w_core / RSG / VORP / QBR)
 }

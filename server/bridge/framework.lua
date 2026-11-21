@@ -225,36 +225,90 @@ end)
 
 Bridge = {}
 
---- Detecting the running framework.
+local function normalizeFramework(name)
+    if type(name) ~= 'string' or name == '' then return nil end
+    local low = name:lower()
+    if low == 'rsg' or low == 'rsgcore' or low == 'rsg_v2' or low == 'rsg-core' or low == 'wcore' or low == 'w_core' then
+        return 'rsg'
+    end
+    if low == 'vorp' or low == 'vorp_core' then return 'vorp' end
+    if low == 'qbr' or low == 'qbr_core' or low == 'qbr-core' then return 'qbr' end
+    return low
+end
+
+--- Detecting the running framework (safe against w_lib async detection and RSG v1/v2 ids).
 local function detectFramework()
+    if Config.Framework and Config.Framework ~= 'auto' then
+        return normalizeFramework(Config.Framework) or Config.Framework
+    end
     local ok, status = pcall(function() return exports.w_lib:CompatStatus() end)
     if ok and status and status.inboundAliases then return 'rsg' end
     local okN, native = pcall(function() return exports.w_lib:FwName() end)
-    if okN and native then return native == 'rsgcore' and 'rsg' or native end
-    if Config.Framework and Config.Framework ~= 'auto' then
-        return Config.Framework
+    if okN and native then
+        local norm = normalizeFramework(native)
+        if norm then return norm end
+    end
+    if type(w) == 'table' and type(w.framework) == 'table' and type(w.framework.get) == 'function' then
+        local okM, modName = pcall(w.framework.get, w.framework)
+        if okM and modName then
+            local norm = normalizeFramework(modName)
+            if norm then return norm end
+        end
+    end
+    if type(GetResourceState) == 'function' then
+        if GetResourceState('w_core') == 'started' then return 'rsg' end
+        if GetResourceState('vorp_core') == 'started' then return 'vorp' end
+        if GetResourceState('rsg-core') == 'started' then return 'rsg' end
+        if GetResourceState('qbr-core') == 'started' then return 'qbr' end
     end
     return 'unknown'
 end
 
 Bridge.Name = detectFramework()
 
+local function ensureFramework()
+    if Bridge.Name == 'unknown' or Bridge.Name == nil then
+        Bridge.Name = detectFramework()
+    end
+    return Bridge.Name
+end
+
 -- The frameworks' object getters (lazily loaded to avoid start-order problems)
 local _rsg, _qbr, _vorp
+local function fetchCore(directResource, exportName)
+    if type(w) == 'table' and type(w.framework) == 'table' then
+        if type(w.framework.getCoreObject) == 'function' then
+            local ok, core = pcall(w.framework.getCoreObject, w.framework)
+            if ok and type(core) == 'table' then return core end
+        end
+        if type(w.framework.getCore) == 'function' then
+            local ok, core = pcall(w.framework.getCore, w.framework)
+            if ok and type(core) == 'table' then return core end
+        end
+    end
+    local okF, fwCore = pcall(function() return exports.w_lib:FwGetCore() end)
+    if okF and type(fwCore) == 'table' then return fwCore end
+    if directResource and type(GetResourceState) == 'function' and GetResourceState(directResource) == 'started' then
+        local okD, direct = pcall(function() return exports[directResource][exportName](nil) end)
+        if okD and type(direct) == 'table' then return direct end
+    end
+    return nil
+end
+
 local function rsgCore()
-    if not _rsg then _rsg = w.framework:getCore() end
+    if not _rsg then _rsg = fetchCore('rsg-core', 'GetCoreObject') end
     return _rsg
 end
 local function qbrCore()
-    if not _qbr then _qbr = w.framework:getCore() end
+    if not _qbr then _qbr = fetchCore('qbr-core', 'GetCoreObject') end
     return _qbr
 end
 
---- The VORP core object: through the modern GetCore() with the getCore event as a fallback.
+--- The VORP core object: through w_lib / GetCore() with the getCore event as a fallback.
 local function vorpCore()
     if _vorp then return _vorp end
-    local ok, core = pcall(function() return w.framework:getCore() end)
-    if ok and core then _vorp = core end
+    local core = fetchCore('vorp_core', 'GetCore')
+    if core then _vorp = core end
     return _vorp
 end
 
@@ -276,10 +330,17 @@ end
 
 --- Getting the player object according to the framework (rsg / qbr: the citizenid-based cores).
 local function getFrameworkPlayer(source)
-    if Bridge.Name == 'rsg' then
-        return rsgCore().Functions.GetPlayer(source)
-    elseif Bridge.Name == 'qbr' then
-        return qbrCore().Functions.GetPlayer(source)
+    local fw = ensureFramework()
+    if fw == 'rsg' then
+        local core = rsgCore()
+        if core and core.Functions and core.Functions.GetPlayer then
+            return core.Functions.GetPlayer(source)
+        end
+    elseif fw == 'qbr' then
+        local core = qbrCore()
+        if core and core.Functions and core.Functions.GetPlayer then
+            return core.Functions.GetPlayer(source)
+        end
     end
     return nil
 end
@@ -287,7 +348,7 @@ end
 --- The current character's unique identity (it supports multicharacter automatically).
 --  It returns a fixed string per character, or nil if it cannot be determined.
 function Bridge.GetCharId(source)
-    if Bridge.Name == 'vorp' then
+    if ensureFramework() == 'vorp' then
         local user = vorpUser(source)
         if not user then return nil end
         local char = user.getUsedCharacter
@@ -390,7 +451,8 @@ end
 --  identifier in characters.identifier (loadcharacter.lua:9). The result: every query
 --  searched with a wrong identifier so it found no row - no characters listed, and the save failed after the creation.
 function Bridge.GetLicense(source)
-    if Bridge.Name == 'vorp' then
+    local fw = ensureFramework()
+    if fw == 'vorp' then
         local user = vorpUser(source)
         if user and type(user.getIdentifier) == 'function' then
             local ok, id = pcall(user.getIdentifier)
@@ -399,7 +461,16 @@ function Bridge.GetLicense(source)
         -- A fallback: the same thing vorp_core itself uses on connection
         return GetPlayerIdentifierByType(source, 'steam')
     end
-    return GetPlayerIdentifierByType(source, 'license') or GetPlayerIdentifier(source, 0)
+    if fw == 'rsg' then
+        local core = rsgCore()
+        if core and core.Functions and type(core.Functions.GetIdentifier) == 'function' then
+            local ok, id = pcall(core.Functions.GetIdentifier, source, 'license')
+            if ok and type(id) == 'string' and id ~= '' then return id end
+        end
+    end
+    return GetPlayerIdentifierByType(source, 'license')
+        or GetPlayerIdentifierByType(source, 'license2')
+        or GetPlayerIdentifier(source, 0)
 end
 
 -- A character logged out (switch, re-selection, a creation mid-switch) is saved on the server
@@ -469,8 +540,9 @@ end
 --  A character already logged in on the source is saved (and the write confirmed) first; a save
 --  that cannot be confirmed refuses the login (false) and the character stays logged in.
 local function coreLogin(source, citizenid, newData)
-    if Bridge.Name ~= 'rsg' and Bridge.Name ~= 'qbr' then return false end
-    if Bridge.Name == 'qbr' then
+    local fw = ensureFramework()
+    if fw ~= 'rsg' and fw ~= 'qbr' then return false end
+    if fw == 'qbr' then
         local okR, ready = pcall(function() return exports.w_lib:FwReady() end)
         if not (okR and ready == true) then return false end
     end
@@ -484,10 +556,11 @@ local function coreLogin(source, citizenid, newData)
             return false
         end
     end
-    if Bridge.Name == 'rsg' then
+    if fw == 'rsg' then
         -- A re-selection on a source that is still logged in: log the previous character out
         -- first so OnPlayerUnload reaches the bag, the HUD and every job resource.
         local core = rsgCore()
+        if not core or not core.Player or type(core.Player.Login) ~= 'function' then return false end
         if Player then
             core.Player.Logout(source)
             Wait(250)
@@ -505,10 +578,13 @@ end
 --- Returns accepted, reason. w_core answers `false, reason` ('economy_not_ready' | 'funds' |
 --- 'loan' | 'assets' | 'database'); the upstream cores answer nothing, which is accepted.
 local function coreDelete(source, citizenid)
+    local fw = ensureFramework()
     local called, answer, reason
-    if Bridge.Name == 'rsg' then
-        called, answer, reason = pcall(function() return rsgCore().Player.DeleteCharacter(source, citizenid) end)
-    elseif Bridge.Name == 'qbr' then
+    if fw == 'rsg' then
+        local core = rsgCore()
+        if not core or not core.Player or type(core.Player.DeleteCharacter) ~= 'function' then return false end
+        called, answer, reason = pcall(function() return core.Player.DeleteCharacter(source, citizenid) end)
+    elseif fw == 'qbr' then
         local okR, ready = pcall(function() return exports.w_lib:FwReady() end)
         if not (okR and ready == true) then return false end
         called, answer, reason = pcall(function() return exports.w_lib:FwNativeCoreCall('DeleteCharacter', source, citizenid) end)
@@ -941,6 +1017,10 @@ function Bridge.DeleteCharacter(source, charid)
 end
 
 CreateThread(function()
+    if ensureFramework() == 'unknown' then
+        Wait(1000)
+        ensureFramework()
+    end
     if Bridge.Name == 'unknown' then
         print('^1[w_creators] no supported framework was detected (vorp/rsg/qbr). Set Config.Framework by hand.^0')
     else

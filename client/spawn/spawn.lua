@@ -417,6 +417,19 @@ function Sp.getUp()
     if using == true or using == 1 then ClearPedTasks(ped) end
 end
 
+-- On stock RSG-Core / QBR-Core (without w_core, which listens to w_creators:client:spawn itself),
+-- announce player loaded to the framework and its resources (HUD, inventory, jobs) as rsg-spawn does.
+local function notifyFrameworkLoaded()
+    if call('GetResourceState', 'w_core') == 'started' then return end
+    if call('GetResourceState', 'rsg-core') == 'started' then
+        TriggerServerEvent('RSGCore:Server:OnPlayerLoaded')
+        TriggerEvent('RSGCore:Client:OnPlayerLoaded')
+    elseif call('GetResourceState', 'qbr-core') == 'started' then
+        TriggerServerEvent('QBCore:Server:OnPlayerLoaded')
+        TriggerEvent('QBCore:Client:OnPlayerLoaded')
+    end
+end
+
 --- w_creators:client:spawn — the character enters the world.
 ---@param pos table { x, y, z, heading }
 ---@param meta table|nil { kind, bed = { x, y, z, heading } | nil (1.0.8: «بيتي» on a bed) }
@@ -437,6 +450,7 @@ function Sp.spawn(pos, meta)
         if not fellBack then inBed = Sp.lieInBed(meta.bed) end
         leaveScene()
         restoreUi()
+        notifyFrameworkLoaded()
         DismissLoadingScreen()
         EndFade(Sp.FADE_IN)
     end)

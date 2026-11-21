@@ -38,7 +38,7 @@ class SyntaxTests(unittest.TestCase):
         self.assertEqual(m['server_scripts'][0], '@oxmysql/lib/MySQL.lua')
         self.assertEqual(m['ui_page'], 'web/build/index.html')
         self.assertIn('locales/*.json', m['files'])
-        self.assertEqual(m['w_lib'], ['locale', 'component', 'callback'])
+        self.assertEqual(m['w_lib'], ['locale', 'component', 'callback', 'framework-bridge'])
         for side in ('shared_scripts', 'client_scripts', 'server_scripts'):
             for p in m[side]:
                 if p.startswith('@'):
