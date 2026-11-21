@@ -225,6 +225,14 @@ end)
 
 Bridge = {}
 
+local function isCallable(fn)
+    if type(fn) == 'function' then return true end
+    if type(fn) ~= 'table' then return false end
+    if rawget(fn, '__cfx_functionReference') ~= nil then return true end
+    local mt = getmetatable(fn)
+    return type(mt) == 'table' and mt.__call ~= nil
+end
+
 local function normalizeFramework(name)
     if type(name) ~= 'string' or name == '' then return nil end
     local low = name:lower()
@@ -454,7 +462,7 @@ function Bridge.GetLicense(source)
     local fw = ensureFramework()
     if fw == 'vorp' then
         local user = vorpUser(source)
-        if user and type(user.getIdentifier) == 'function' then
+        if user and isCallable(user.getIdentifier) then
             local ok, id = pcall(user.getIdentifier)
             if ok and id and id ~= '' then return id end
         end
@@ -463,7 +471,7 @@ function Bridge.GetLicense(source)
     end
     if fw == 'rsg' then
         local core = rsgCore()
-        if core and core.Functions and type(core.Functions.GetIdentifier) == 'function' then
+        if core and core.Functions and isCallable(core.Functions.GetIdentifier) then
             local ok, id = pcall(core.Functions.GetIdentifier, source, 'license')
             if ok and type(id) == 'string' and id ~= '' then return id end
         end
@@ -505,7 +513,7 @@ local function saveLoggedIn(source, Player)
     local data = type(Player) == 'table' and Player.PlayerData or nil
     local citizenid = type(data) == 'table' and data.citizenid or nil
     local save = type(Player) == 'table' and type(Player.Functions) == 'table' and Player.Functions.Save or nil
-    if not citizenid or type(save) ~= 'function' then return false, 'the core offers no save' end
+    if not citizenid or not isCallable(save) then return false, 'the core offers no save' end
     -- w_core keeps money in the central ledger and never writes the players.money projection.
     local fields = { 'job', 'gang', 'metadata' }
     local okB, backend = pcall(function() return exports.w_lib:FwBackend() end)
@@ -560,8 +568,8 @@ local function coreLogin(source, citizenid, newData)
         -- A re-selection on a source that is still logged in: log the previous character out
         -- first so OnPlayerUnload reaches the bag, the HUD and every job resource.
         local core = rsgCore()
-        if not core or not core.Player or type(core.Player.Login) ~= 'function' then return false end
-        if Player then
+        if not core or not core.Player or not isCallable(core.Player.Login) then return false end
+        if Player and isCallable(core.Player.Logout) then
             core.Player.Logout(source)
             Wait(250)
         end
@@ -582,7 +590,7 @@ local function coreDelete(source, citizenid)
     local called, answer, reason
     if fw == 'rsg' then
         local core = rsgCore()
-        if not core or not core.Player or type(core.Player.DeleteCharacter) ~= 'function' then return false end
+        if not core or not core.Player or not isCallable(core.Player.DeleteCharacter) then return false end
         called, answer, reason = pcall(function() return core.Player.DeleteCharacter(source, citizenid) end)
     elseif fw == 'qbr' then
         local okR, ready = pcall(function() return exports.w_lib:FwReady() end)
@@ -651,7 +659,7 @@ local function storedJobLabel(source, raw)
         if job.label_ar == nil or job.label_ar == '' then job.label_ar = def.label_ar end
     end
 
-    if shared and type(shared.JobLabel) == 'function' then
+    if shared and isCallable(shared.JobLabel) then
         local okl, label = pcall(shared.JobLabel, job, source)
         if okl and type(label) == 'string' and label ~= '' then return label end
     end
