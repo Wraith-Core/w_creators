@@ -219,3 +219,80 @@ function WCNative.scene.deleteAnimScene(scene)
     local ok = H.invoke(0x84EEDB2C6E650000, scene)
     return ok
 end
+
+--- CREATE_MODEL_HIDE
+-- hash: 0x069848B3FB3C4426 · confidence: Verified (alloc8or rdr3-nativedb ENTITY)
+-- params: x, y, z (float), radius (float), model (hash or name), p5 (bool, true)
+-- returns: boolean · limitations: hides matching world / MLO props (e.g. closed Saint Denis theatre
+--   stage curtains) inside a sphere while the creator / selection scene is open; undo with unhideModel
+-- tested models: p_new_theater_curtain, s_theatercurtain01x · MP safe: yes (local) · OneSync tested here: no
+function WCNative.scene.hideModel(x, y, z, radius, model)
+    x, y, z = tonumber(x), tonumber(y), tonumber(z)
+    if not (WCUtil.isFinite(x) and WCUtil.isFinite(y) and WCUtil.isFinite(z)) then return false end
+    local hash = type(model) == 'string' and GetHashKey(model) or math.tointeger(tonumber(model))
+    if not hash then return false end
+    local r = H.float(radius, 25.0)
+    local ok = H.invoke(0x069848B3FB3C4426, H.float(x), H.float(y), H.float(z), r, hash, true)
+    if type(GetClosestObjectOfType) == 'function' then
+        local okObj, obj = pcall(GetClosestObjectOfType, H.float(x), H.float(y), H.float(z), r, hash, false, false, false)
+        if okObj and type(obj) == 'number' and obj ~= 0 and DoesEntityExist(obj) then
+            pcall(SetEntityVisible, obj, false)
+        end
+    end
+    if type(GetGamePool) == 'function' then
+        local center = vector3(x, y, z)
+        local okPool, pool = pcall(GetGamePool, 'CObject')
+        for _, obj in ipairs(okPool and pool or {}) do
+            if type(obj) == 'number' and obj ~= 0 and DoesEntityExist(obj) and GetEntityModel(obj) == hash then
+                if #(GetEntityCoords(obj) - center) <= r then
+                    pcall(SetEntityVisible, obj, false)
+                end
+            end
+        end
+    end
+    return ok
+end
+
+--- REMOVE_MODEL_HIDE
+-- hash: 0x3F38A98576F6213A · confidence: Verified (alloc8or rdr3-nativedb ENTITY)
+-- params: x, y, z (float), radius (float), model (hash or name), p5 (bool, false)
+-- returns: boolean · limitations: restores a model hidden with hideModel()
+-- tested models: p_new_theater_curtain, s_theatercurtain01x · MP safe: yes (local) · OneSync tested here: no
+function WCNative.scene.unhideModel(x, y, z, radius, model)
+    x, y, z = tonumber(x), tonumber(y), tonumber(z)
+    if not (WCUtil.isFinite(x) and WCUtil.isFinite(y) and WCUtil.isFinite(z)) then return false end
+    local hash = type(model) == 'string' and GetHashKey(model) or math.tointeger(tonumber(model))
+    if not hash then return false end
+    local r = H.float(radius, 25.0)
+    local ok = H.invoke(0x3F38A98576F6213A, H.float(x), H.float(y), H.float(z), r, hash, false)
+    if type(GetClosestObjectOfType) == 'function' then
+        local okObj, obj = pcall(GetClosestObjectOfType, H.float(x), H.float(y), H.float(z), r, hash, false, false, false)
+        if okObj and type(obj) == 'number' and obj ~= 0 and DoesEntityExist(obj) then
+            pcall(SetEntityVisible, obj, true)
+        end
+    end
+    if type(GetGamePool) == 'function' then
+        local center = vector3(x, y, z)
+        local okPool, pool = pcall(GetGamePool, 'CObject')
+        for _, obj in ipairs(okPool and pool or {}) do
+            if type(obj) == 'number' and obj ~= 0 and DoesEntityExist(obj) and GetEntityModel(obj) == hash then
+                if #(GetEntityCoords(obj) - center) <= r then
+                    pcall(SetEntityVisible, obj, true)
+                end
+            end
+        end
+    end
+    return ok
+end
+
+--- DEACTIVATE_INTERIOR_ENTITY_SET
+-- hash: 0x33B81A2C07A51FFF · confidence: Verified (alloc8or rdr3-nativedb INTERIOR)
+-- params: interior (int), name (string), p2 (bool, true for immediate unload)
+-- returns: boolean · limitations: deactivates an interior entity set such as new_theater_stage_blocker
+-- tested models: n/a · MP safe: yes (local) · OneSync tested here: no
+function WCNative.scene.deactivateEntitySet(interior, name)
+    interior = math.tointeger(tonumber(interior))
+    if not interior or interior == 0 or type(name) ~= 'string' or name == '' then return false end
+    local ok = H.invoke(0x33B81A2C07A51FFF, interior, name, true)
+    return ok
+end

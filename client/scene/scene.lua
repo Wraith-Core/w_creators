@@ -28,6 +28,7 @@ local tracked = {}           -- [ped] = true: preview peds created here
 local isolated = false       -- this client asked the server for the private scene
 local loaded = false         -- the room's focus / timecycle / clock override are active
 local requestedMaps = {}     -- the room maps load() requested (not those already active)
+local hiddenModels = {}      -- { x, y, z, radius, model } hidden by load() (e.g. stage curtains)
 local scenarioBlock = nil    -- the scenario blocking area load() added (Config.Scene.ambient = false)
 
 local function cfg() return Config.Scene or {} end
@@ -73,12 +74,51 @@ end
 --  player). Nothing is assumed to succeed: on an early boot StartPlayerTeleport can fail silently,
 --  so the arrival is verified and retried, with a direct SetEntityCoords fallback.
 ---@return boolean arrived
+local function hideStageCurtains(ax, ay, az)
+    local radius = tonumber(cfg().cleanupRadius) or 25.0
+    local models = type(cfg().hideModels) == 'table' and cfg().hideModels or {}
+    if #models == 0 then return end
+    for _, model in ipairs(models) do
+        if model and WCNative.scene and WCNative.scene.hideModel then
+            pcall(WCNative.scene.hideModel, ax, ay, az, radius, model)
+            hiddenModels[model] = { ax, ay, az, radius, model }
+        end
+    end
+end
+
+local function unhideStageCurtains()
+    if next(hiddenModels) == nil then return end
+    for _, entry in pairs(hiddenModels) do
+        if WCNative.scene and WCNative.scene.unhideModel then
+            pcall(WCNative.scene.unhideModel, entry[1], entry[2], entry[3], entry[4], entry[5])
+        end
+    end
+    hiddenModels = {}
+end
+
+local function deactivateStageSets(ax, ay, az)
+    local sets = type(cfg().deactivateSets) == 'table' and cfg().deactivateSets or {}
+    if #sets == 0 or type(GetInteriorAtCoords) ~= 'function' then return end
+    local okAt, interior = pcall(GetInteriorAtCoords, ax, ay, az)
+    if (not okAt or not interior or interior == 0) and cfg().selectionPed then
+        local sx, sy, sz = xyzh(cfg().selectionPed)
+        if sx then okAt, interior = pcall(GetInteriorAtCoords, sx, sy, sz) end
+    end
+    if not okAt or not interior or interior == 0 then return end
+    for _, name in ipairs(sets) do
+        if type(name) == 'string' and name ~= '' and WCNative.scene and WCNative.scene.deactivateEntitySet then
+            pcall(WCNative.scene.deactivateEntitySet, interior, name)
+        end
+    end
+end
+
 function S.load()
     local ax, ay, az, ah = xyzh(cfg().anchor)
     if not ax then
         WCDebug.warn('scene', 'Config.Scene.anchor is invalid')
         return false
     end
+    hideStageCurtains(ax, ay, az)
     local sphere = cfg().loadSphere
     if type(sphere) == 'table' then WCNative.scene.loadSphere(sphere[1], sphere[2], sphere[3], sphere[4], sphere[5]) end
     for _, hash in ipairs(cfg().imaps or {}) do
@@ -142,6 +182,8 @@ function S.load()
         end, S.INTERIOR_TIMEOUT)
         if not ready then WCDebug.log('scene', 'the room interior did not report ready in time') end
     end
+    deactivateStageSets(ax, ay, az)
+    hideStageCurtains(ax, ay, az)
     SetFocusPosAndVel(ax, ay, az, 0.0, 0.0, 0.0)
     WCDebug.log('scene', 'room ready (arrived: %s)', tostring(arrived))
     return arrived
@@ -183,6 +225,7 @@ function S.release(opts)
         loaded = false
     end
     unblockScenarios()
+    unhideStageCurtains()
     if opts.unload then S.unload() end
     if isolated and not opts.keepBucket then
         local ok, result = pcall(w.callback.await, 'w_creators:scene:release', false)
@@ -485,6 +528,7 @@ AddEventHandler('onResourceStop', function(resource)
         loaded = false
     end
     unblockScenarios()
+    unhideStageCurtains()
     -- the room maps go too, unless the player still stands in the room (it floats: removing its
     -- floor under the player would drop them)
     local ok, inRoom = pcall(function()

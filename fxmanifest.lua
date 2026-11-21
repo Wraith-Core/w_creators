@@ -2,7 +2,7 @@ fx_version "adamant"
 games { "rdr3" }
 rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships.'
 lua54 'yes'
-version '1.2.0' -- 1.2.0 (2026-11-21) = clothing stores, wardrobes, saved outfits and clothing actions extracted to standalone w_clothing; barbers and grooming extracted to standalone w_barber; w_creators owns character creation (with starting clothes), multicharacter, spawn, respawn, cosmetic surgery and core appearance sync.
+version '1.2.1' -- 1.2.1 (2026-11-21) = hide closed Saint Denis theatre stage curtains & deactivate new_theater_stage_blocker while creator/selection scene is open; 1.2.0 = clothing/barber split.
 
 -- =====================================================================
 --  w_creators v3 - the character lifecycle authority: account -> characters -> selection ->

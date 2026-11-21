@@ -202,6 +202,20 @@ Config.Swatches = {
 Config.Scene = {
     -- The room's maps (IPL). The theatre is a regular interior of the world: none are needed.
     imaps = {},
+    -- Models to hide in the room while the creator / selection scene is open
+    -- (Saint Denis theatre closed stage curtains that otherwise sit between the camera and the stage).
+    hideModels = {
+        'p_new_theater_curtain',
+        's_theatercurtain01x',
+        'p_new_thtr_curt01a',
+        'p_new_thtr_curt01b',
+        'p_new_magic_curt01a',
+        'p_new_magic_curt01b',
+    },
+    -- Interior entity sets to deactivate while the scene is open (stage blocker on new_theater_int).
+    deactivateSets = {
+        'new_theater_stage_blocker',
+    },
     -- Wait until the interior at the anchor is streamed and ready before the scene shows (an
     -- interior that is not ready yet renders as an empty shell).
     interior = true,
