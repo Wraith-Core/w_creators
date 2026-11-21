@@ -384,6 +384,9 @@ function Repo.save(charid, app, extra, opts)
     if info then info.isMale = legacy.isMale end
     bump(charid)
     remember(charid, app, id, {}, info)
+    if type(WCApi) == 'table' and type(WCApi.syncToFramework) == 'function' then
+        pcall(WCApi.syncToFramework, charid, app)
+    end
     return true, app
 end
 
@@ -413,6 +416,9 @@ function Repo.create(charid, identity, app, extra)
     bump(charid)
     degraded[key(charid)] = nil
     pendingLegacy[key(charid)] = nil
+    if type(WCApi) == 'table' and type(WCApi.syncToFramework) == 'function' then
+        pcall(WCApi.syncToFramework, charid, app)
+    end
     return true, app
 end
 

@@ -104,6 +104,18 @@ end
 --  w.component.applySkin equips; bodyType is the body build outfit (AppearanceSchema.BODY_BUILDS)
 --  when the character has one (the BODIES_UPPER model stays bodyUpperHash).
 function Api.standardSkin(app)
+    local cat = type(WCCatalog) == 'table' and type(WCCatalog.forSex) == 'function' and WCCatalog.forSex(app.sex) or {}
+    local headEntry = cat.heads and cat.heads.hashes and cat.heads.hashes[WCUtil.u32(app.head.head) or -1]
+    local bodyEntry = cat.BODIES_UPPER and cat.BODIES_UPPER.hashes and cat.BODIES_UPPER.hashes[WCUtil.u32(app.body.upper) or -1]
+    local eyesEntry = cat.eyes and cat.eyes.hashes and cat.eyes.hashes[WCUtil.u32(app.head.eyes) or -1]
+    local teethEntry = cat.teeth and cat.teeth.hashes and cat.teeth.hashes[WCUtil.u32(app.head.teeth) or -1]
+
+    local headIndex = headEntry and (tonumber(headEntry.name and headEntry.name:match('_HEAD_(%d+)')) or headEntry.model) or 1
+    local skinTone = headEntry and (tonumber(headEntry.name and headEntry.name:match('_V_(%d+)')) or headEntry.variant) or 1
+    local bodiesIndex = bodyEntry and (tonumber(bodyEntry.name and bodyEntry.name:match('_BODIES_UPPER_(%d+)')) or bodyEntry.model) or 1
+    local eyesIndex = eyesEntry and (tonumber(eyesEntry.name and eyesEntry.name:match('_TINT_(%d+)')) or eyesEntry.variant) or 1
+    local teethIndex = teethEntry and (tonumber(teethEntry.name and teethEntry.name:match('_TEETH_(%d+)')) or teethEntry.model) or 0
+
     local skin = {
         model = 'mp_' .. app.sex,
         sex = app.sex == 'male' and 1 or 2,
@@ -112,6 +124,11 @@ function Api.standardSkin(app)
         bodyLowerHash = app.body.lower,
         eyesHash = app.head.eyes,
         teethHash = app.head.teeth,
+        headIndex = headIndex,
+        skinTone = skinTone,
+        bodiesIndex = bodiesIndex,
+        eyesIndex = eyesIndex,
+        teethIndex = teethIndex,
         bodyWeight = Api.WAIST_TYPES[app.body.weight],
         bodyScale = app.body.height,
         expressions = WCUtil.copy(app.morph),
@@ -159,6 +176,57 @@ function Api.GetAppearance(src)
     local app = loadActive(playerId(src))
     if not app then return nil end
     return { skin = Api.standardSkin(app), clothes = Api.standardClothes(app), appearance = WCUtil.copy(app) }
+end
+
+--- Synchronize a character's v3 appearance into the active framework's native appearance table
+--  (playerskins on stock RSG-Core, characters on VORP-Core) so third-party scripts and w_lib
+--  framework-bridge reads stay in sync with w_creators.
+function Api.syncToFramework(charid, app)
+    if charid == nil or type(app) ~= 'table' then return false end
+    if type(GetResourceState) == 'function' and GetResourceState('w_core') == 'started' then return false end
+    local fw = type(Bridge) == 'table' and Bridge.Name or nil
+    if fw ~= 'rsg' and fw ~= 'vorp' then return false end
+
+    local stdSkin = Api.standardSkin(app)
+    local stdClothes = Api.standardClothes(app)
+    local rawSkin = stdSkin
+    local rawClothes = stdClothes
+    if w and w.framework then
+        if type(w.framework.revertSkin) == 'function' then
+            local okS, s = pcall(function() return w.framework:revertSkin(WCUtil.copy(stdSkin)) end)
+            if okS and type(s) == 'table' then rawSkin = s end
+        end
+        if type(w.framework.revertClothes) == 'function' then
+            local okC, c = pcall(function() return w.framework:revertClothes(WCUtil.copy(stdClothes)) end)
+            if okC and type(c) == 'table' then rawClothes = c end
+        end
+    end
+    if type(rawSkin) == 'table' then
+        rawSkin.headHash = app.head and app.head.head
+        rawSkin.bodyUpperHash = app.body and app.body.upper
+        rawSkin.bodyLowerHash = app.body and app.body.lower
+        rawSkin.eyesHash = app.head and app.head.eyes
+        rawSkin.teethHash = app.head and app.head.teeth
+        if fw == 'rsg' and app.body and app.body.weight then
+            rawSkin.body_waist = app.body.weight
+        end
+    end
+
+    local skinJson = WCUtil.encode(rawSkin) or '{}'
+    local clothesJson = WCUtil.encode(rawClothes) or '{}'
+    if fw == 'rsg' then
+        pcall(w.database.query.await,
+            'INSERT INTO `playerskins` (`citizenid`, `skin`, `clothes`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `skin` = VALUES(`skin`), `clothes` = VALUES(`clothes`)',
+            { tostring(charid), skinJson, clothesJson })
+        return true
+    elseif fw == 'vorp' then
+        local cid = tonumber(charid) or tostring(charid)
+        pcall(w.database.query.await,
+            'UPDATE `characters` SET `skinPlayer` = ?, `compPlayer` = ? WHERE `charidentifier` = ?',
+            { skinJson, clothesJson, cid })
+        return true
+    end
+    return false
 end
 
 -- ---------------------------------------------------------------------

@@ -420,6 +420,12 @@ end
 -- On stock RSG-Core / QBR-Core (without w_core, which listens to w_creators:client:spawn itself),
 -- announce player loaded to the framework and its resources (HUD, inventory, jobs) as rsg-spawn does.
 local function notifyFrameworkLoaded()
+    pcall(function()
+        if LocalPlayer and LocalPlayer.state and type(LocalPlayer.state.set) == 'function' then
+            LocalPlayer.state:set('isLoggedIn', true, false)
+            LocalPlayer.state:set('IsInSession', true, false)
+        end
+    end)
     if call('GetResourceState', 'w_core') == 'started' then return end
     if call('GetResourceState', 'rsg-core') == 'started' then
         TriggerServerEvent('RSGCore:Server:OnPlayerLoaded')

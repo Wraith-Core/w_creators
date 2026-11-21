@@ -909,6 +909,9 @@ function Chars.loaded(src)
         end, LOGIN_TIMEOUT_MS, 100)
         if not ready then return fail('NO_CHARACTER') end
         Chars.setActive(src, p.charid, p.sex)
+        if type(WCApi) == 'table' and type(WCApi.syncToFramework) == 'function' then
+            pcall(WCApi.syncToFramework, p.charid, p.app)
+        end
         WCSync.broadcast(src, p.app)
         local mode = WCSpawnServer.finish(src, p.kind, p.isNew)
         lastLoaded[src] = { entry = active[src], data = { spawn = mode } }
