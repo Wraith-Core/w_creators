@@ -394,7 +394,20 @@ local function overlayOf(layer, value)
         color = 1
     end
     if not color then return nil end
-    return { style = style, color = color, opacity = opacity + 0.0 }
+    local out = { style = style, color = color, opacity = opacity + 0.0 }
+    if value.color2 ~= nil then
+        out.color2 = exactInt(value.color2, 1, WCOverlays.COLORS)
+    elseif value.tint1 ~= nil then
+        local t1 = exactInt(value.tint1)
+        if t1 then out.color2 = exactInt(t1 + 1, 1, WCOverlays.COLORS) end
+    end
+    if value.color3 ~= nil then
+        out.color3 = exactInt(value.color3, 1, WCOverlays.COLORS)
+    elseif value.tint2 ~= nil then
+        local t2 = exactInt(value.tint2)
+        if t2 then out.color3 = exactInt(t2 + 1, 1, WCOverlays.COLORS) end
+    end
+    return out
 end
 
 -- Build the v3 draft of a standard skin over the saved appearance. draft | nil, code, detail.
