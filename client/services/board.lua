@@ -802,9 +802,14 @@ RegisterNUICallback('board:close', function(_, cb)
     B.close()
 end)
 
-RegisterCommand(BOARD.command or 'servicesadmin', function()
+local cmd = BOARD.command or 'servicesadmin'
+RegisterCommand(cmd, function()
     CreateThread(B.open)
 end, false)
+CreateThread(function()
+    Wait(1000)
+    pcall(TriggerEvent, 'chat:addSuggestion', '/' .. cmd, 'لوحة إضافة وتعديل أماكن الخدمات (الملابس والحلاقين والتجميل والخزائن)')
+end)
 
 AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() or not open then return end

@@ -44,7 +44,6 @@ function SS.activeCharacter(src)
         if ok and type(active) == 'table' and active.charid then
             return { charid = tostring(active.charid), sex = active.sex }
         end
-        return nil
     end
     local ok, charid = pcall(Bridge.GetCharId, src)
     if ok and charid then return { charid = tostring(charid) } end

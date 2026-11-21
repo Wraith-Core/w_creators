@@ -2,7 +2,7 @@ fx_version "adamant"
 games { "rdr3" }
 rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships.'
 lua54 'yes'
-version '1.2.4' -- 1.2.4 (2026-11-22) = bi-directional RSG/VORP appearance sync (playerskins / characters) + login state bag sync.
+version '1.2.5' -- 1.2.5 (2026-11-22) = unified /servicesadmin board with w_clothing & w_barber + framework admin check.
 
 -- =====================================================================
 --  w_creators v3 - the character lifecycle authority: account -> characters -> selection ->

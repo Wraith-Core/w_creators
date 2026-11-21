@@ -15,11 +15,11 @@ local P = WCPlaces
 
 P.TABLE = 'w_creators_locations'
 P.CLINIC_POINTS_KEY = 'w_creators:clinicPoints'
-P.TYPES = { 'surgery' }
+P.TYPES = { 'clothing', 'barber', 'surgery', 'wardrobe' }
 
-local TYPE_SET = { surgery = true }
-local TYPE_LABELS = { surgery = 'عيادة التجميل' }
-local SPOT_KINDS = { npc = true, preview = true }
+local TYPE_SET = { clothing = true, barber = true, surgery = true, wardrobe = true }
+local TYPE_LABELS = { clothing = 'متجر الملابس', barber = 'الحلاق', surgery = 'عيادة التجميل', wardrobe = 'الخزانة' }
+local SPOT_KINDS = { npc = true, preview = true, book = 'clothing', chair = 'barber' }
 local MAX_ID = 64
 
 local BOARD = Config.Board or {}
@@ -28,12 +28,54 @@ local publishedPoints = nil -- the last GlobalState[CLINIC_POINTS_KEY] (w_medic 
 
 local function fail(code) return { ok = false, error = code } end
 
-local function isAdmin(src)
-    if src == 0 then return false end
-    local ace = Config.Admin and Config.Admin.ace
+local function hasAce(src, ace)
     if type(ace) ~= 'string' or ace == '' then return false end
     local done, allowed = pcall(IsPlayerAceAllowed, src, ace)
     return done and (allowed == true or allowed == 1)
+end
+
+local function isCallable(fn)
+    if type(fn) == 'function' then return true end
+    if type(fn) == 'table' then
+        if fn.__cfx_functionReference ~= nil then return true end
+        local mt = getmetatable(fn)
+        return type(mt) == 'table' and mt.__call ~= nil
+    end
+    return false
+end
+
+local function isFrameworkAdmin(src)
+    if type(GetResourceState) ~= 'function' then return false end
+    if GetResourceState('rsg-core') == 'started' then
+        local ok, core = pcall(function() return exports['rsg-core']:GetCoreObject() end)
+        if ok and type(core) == 'table' and type(core.Functions) == 'table' and isCallable(core.Functions.HasPermission) then
+            local okA, isA = pcall(core.Functions.HasPermission, src, 'admin')
+            if okA and isA then return true end
+            local okG, isG = pcall(core.Functions.HasPermission, src, 'god')
+            if okG and isG then return true end
+        end
+    end
+    if GetResourceState('vorp_core') == 'started' then
+        local ok, core = pcall(function() return exports.vorp_core:GetCore() end)
+        if ok and type(core) == 'table' and isCallable(core.getUser) then
+            local okU, user = pcall(core.getUser, src)
+            if okU and type(user) == 'table' then
+                local grp = isCallable(user.getGroup) and select(2, pcall(user.getGroup)) or user.getGroup
+                if grp == 'admin' or grp == 'superadmin' or grp == 'owner' then return true end
+            end
+        end
+    end
+    return false
+end
+
+local function isAdmin(src)
+    if src == 0 then return false end
+    local admin = Config.Admin or {}
+    return hasAce(src, admin.ace)
+        or hasAce(src, admin.fallbackAce)
+        or hasAce(src, 'group.admin')
+        or hasAce(src, 'command')
+        or isFrameworkAdmin(src)
 end
 P.isAdmin = isAdmin
 
@@ -96,9 +138,19 @@ end
 -- ---------------------------------------------------------------------
 --  Publishing
 -- ---------------------------------------------------------------------
-local function decodedList()
+local function ownPlaces()
     local out = {}
     for _, place in ipairs(places) do
+        if place.type == 'surgery' then
+            out[#out + 1] = place
+        end
+    end
+    return out
+end
+
+local function decodedList()
+    local out = {}
+    for _, place in ipairs(ownPlaces()) do
         local loc = WCLocations.decode(place)
         if loc then out[#out + 1] = loc end
     end
@@ -124,13 +176,13 @@ function P.publish()
     if not (publishedPoints and WCUtil.deepEqual(publishedPoints, points)) then
         if pcall(function() GlobalState[P.CLINIC_POINTS_KEY] = points end) then publishedPoints = points end
     end
-    TriggerClientEvent('w_creators:client:locations', -1, places)
+    TriggerClientEvent('w_creators:client:locations', -1, ownPlaces())
 end
 
 --- The places in plain form (the client list), or nil before they are loaded.
 function P.list()
     if not P.loaded then return nil end
-    return places
+    return ownPlaces()
 end
 
 -- ---------------------------------------------------------------------
@@ -162,7 +214,7 @@ function P.load()
         return false
     end
     local ok, rows = pcall(w.database.query.await,
-        "SELECT `id`, `type`, `data` FROM `w_creators_locations` WHERE `type` = 'surgery' ORDER BY `position`, `id`")
+        "SELECT `id`, `type`, `data` FROM `w_creators_locations` ORDER BY `position`, `id`")
     if not ok or type(rows) ~= 'table' then
         WCDebug.warn('locations', 'loading the places failed: %s', tostring(rows))
         return false
@@ -202,6 +254,16 @@ end
 
 local function boardPlace(place)
     local loc = WCLocations.byId(place.id)
+    if not loc then
+        local dec = WCLocations.decode(place)
+        if dec then
+            local defaults = ((Config and Config.LocationDefaults) or {})[dec.type] or {}
+            loc = WCUtil.copy(defaults)
+            for k, v in pairs(dec) do loc[k] = v end
+            loc.enabled = place.enabled ~= false
+            loc.interactionRadius = WCUtil.number(loc.interactionRadius, 0.5, 50.0, 2.0)
+        end
+    end
     local out = WCUtil.copy(place)
     out.enabled = place.enabled ~= false
     out.label = type(place.label) == 'string' and place.label or ''
@@ -210,7 +272,7 @@ local function boardPlace(place)
     out.radius = loc and loc.interactionRadius or (BOARD.radius or {}).default or 2.0
     if type(place.npc) ~= 'table' then out.npc = nil end
     out.npcModel = (type(place.npc) == 'table' and place.npc.model) or place.npcModel or defaultModel(place.type)
-    out.usable = loc ~= nil and WCLocations.isUsable(loc) or false
+    out.usable = loc ~= nil and loc.enabled ~= false and WCLocations.isOpen(loc)
     return out
 end
 
@@ -406,13 +468,22 @@ function P.action(src, op, args)
         return fail('invalid')
     end
     if not done then return fail(extra or 'invalid') end
-    if WRITES[op] then P.publish() end
+    if WRITES[op] then
+        P.publish()
+        TriggerEvent('w_locations:changed', GetCurrentResourceName())
+    end
     local data = P.board()
     if type(extra) == 'table' then
         for k, v in pairs(extra) do data[k] = v end
     end
     return { ok = true, data = data }
 end
+
+AddEventHandler('w_locations:changed', function(fromResource)
+    if fromResource ~= GetCurrentResourceName() then
+        CreateThread(P.load)
+    end
+end)
 
 w.callback.register('w_creators:board:action', function(src, op, args)
     return P.action(src, op, args)
