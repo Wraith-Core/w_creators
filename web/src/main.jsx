@@ -58,6 +58,7 @@ try {
   const FONTS = asset('fonts/');
   const AR = 'U+0600-06FF,U+0750-077F,U+0870-088E,U+0890-0891,U+0897-08E1,U+08E3-08FF,U+FB50-FDFF,U+FE70-FE74,U+FE76-FEFC,U+200C-200E,U+2010-2011,U+0660-0669';
   const lalezar = name => `@font-face { font-family: "${name}"; font-weight: 100 900; src: url("${FONTS}Lalezar-400-arabic.woff2") format("woff2"); unicode-range: ${AR}; font-display: swap; }`;
+  const digits = name => `@font-face { font-family: "${name}"; font-weight: 100 900; src: url("${FONTS}RDRCatalogueBold-Bold.woff2") format("woff2"); unicode-range: U+0030-0039; font-display: swap; }`;
   const style = document.createElement('style');
   style.textContent = `
     @font-face { font-family: "EB Garamond"; font-style: normal; font-weight: 400 800; src: url("${FONTS}EBGaramond-latin.woff2") format("woff2"); font-display: swap; }
@@ -65,6 +66,9 @@ try {
     @font-face { font-family: "RDR Lino"; font-weight: 100 900; src: url("${FONTS}RDRLino-Regular.woff2") format("woff2"); font-display: swap; }
     @font-face { font-family: "RDR Catalogue"; font-weight: 100 900; src: url("${FONTS}RDRCatalogueBold-Bold.woff2") format("woff2"); font-display: swap; }
     ${['Lalezar', 'Amiri', 'Tajawal', 'Noto Sans Arabic', 'Aref Ruqaa'].map(lalezar).join(' ')}
+    @font-face { font-family: "EB Garamond"; font-style: normal; font-weight: 400 800; src: url("${FONTS}RDRCatalogueBold-Bold.woff2") format("woff2"); unicode-range: U+0030-0039; font-display: swap; }
+    @font-face { font-family: "EB Garamond"; font-style: italic; font-weight: 400 800; src: url("${FONTS}RDRCatalogueBold-Bold.woff2") format("woff2"); unicode-range: U+0030-0039; font-display: swap; }
+    ${['RDR Lino', 'Lalezar', 'Amiri', 'Tajawal', 'Noto Sans Arabic', 'Aref Ruqaa'].map(digits).join(' ')}
   `;
   document.head.appendChild(style);
 } catch (e) {
