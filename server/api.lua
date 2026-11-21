@@ -662,9 +662,49 @@ function Api.OpenCosmeticSurgery(data, clinicId)
     return openService(src, 'surgery', clinicId)
 end
 
-function Api.OpenClothingStore(src, id) return openService(src, 'store', id) end
-function Api.OpenBarber(src, id) return openService(src, 'barber', id) end
-function Api.OpenWardrobe(src, id) return openService(src, 'wardrobe', id) end
+function Api.OpenClothingStore(src, id)
+    if GetResourceState('w_clothing') == 'started' then
+        local done, res = pcall(function() return exports.w_clothing:OpenClothingStore(src, id) end)
+        if done and res ~= nil then return res end
+    end
+    return fail('STORE_DISABLED')
+end
+
+function Api.OpenBarber(src, id)
+    if GetResourceState('w_barber') == 'started' then
+        local done, res = pcall(function() return exports.w_barber:OpenBarber(src, id) end)
+        if done and res ~= nil then return res end
+    end
+    return fail('BARBER_DISABLED')
+end
+
+function Api.OpenWardrobe(src, id)
+    if GetResourceState('w_clothing') == 'started' then
+        local done, res = pcall(function() return exports.w_clothing:OpenWardrobe(src, id) end)
+        if done and res ~= nil then return res end
+    end
+    return fail('WARDROBE_DISABLED')
+end
+
+--- Called by standalone sibling resources (w_clothing, w_barber) after committing an appearance change
+--  to characters_appearence so w_creators keeps its cache, owner render and OneSync broadcast authoritative.
+function Api.SyncAppearanceFromExternal(src, app)
+    src = playerId(src)
+    if not src or type(app) ~= 'table' then return false end
+    local active = activeOf(src)
+    if active then WCAppearanceRepo.invalidate(active.charid) end
+    TriggerClientEvent('w_creators:client:applyAppearance', src, app)
+    WCSync.broadcast(src, app)
+    return true
+end
+
+--- Called by w_clothing after a clothing state change (hat, bandana, sleeves...) so w_creators
+--  keeps its remote broadcast cache in sync for all clients.
+function Api.SyncClothingStateFromExternal(src, group, value)
+    src = playerId(src)
+    if not src or type(group) ~= 'string' then return false end
+    return WCSync.broadcastState(src, group, value)
+end
 
 -- ---------------------------------------------------------------------
 --  Spawn
@@ -728,8 +768,13 @@ end
 --  same answer as the replicated state bag Config.ClothingStates.bandanaStateBag.
 function Api.IsBandanaUp(src)
     src = playerId(src)
-    if not src or type(WCClothingActions) ~= 'table' then return false end
-    return WCClothingActions.bandanaUp(src) == true
+    if not src then return false end
+    if GetResourceState('w_clothing') == 'started' then
+        local done, up = pcall(function() return exports.w_clothing:IsBandanaUp(src) end)
+        if done then return up == true end
+    end
+    if type(WCClothingActions) == 'table' then return WCClothingActions.bandanaUp(src) == true end
+    return false
 end
 
 -- ---------------------------------------------------------------------
@@ -739,6 +784,7 @@ for _, name in ipairs({
     'GetCharacterAppearance', 'GetAppearance', 'SetClothes', 'SetSkin', 'ApplyCharacterAppearance',
     'OpenCosmeticSurgery', 'OpenClothingStore', 'OpenBarber', 'OpenWardrobe', 'OpenSpawnSelector',
     'RespawnPlayer', 'GetActiveCharacter', 'PurgeCharacter', 'IsBandanaUp',
+    'SyncAppearanceFromExternal', 'SyncClothingStateFromExternal',
 }) do
     exports(name, Api[name])
 end

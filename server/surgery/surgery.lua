@@ -218,7 +218,19 @@ function Surgery.plan(saved, submitted, loc, owned)
     if type(submitted) ~= 'table' then return nil, 'INVALID_PAYLOAD' end
     local allowed = Surgery.sections(saved.sex)
     if next(allowed) == nil then return nil, 'SURGERY_DISABLED' end
-    local valid, invalidCode = WCBarberService.validStyles(saved.sex, submitted, allowed)
+    local function validStyles(sex, sub, secs)
+        local hair = type(sub) == 'table' and sub.hair
+        if hair == nil then return true end
+        if type(hair) ~= 'table' then return false, 'INVALID_PAYLOAD' end
+        local function okStyle(value, cat)
+            if value == nil or value == 0 then return true end
+            return WCCatalog.resolve(sex, cat, value) ~= nil
+        end
+        if secs.hair and not okStyle(hair.style, 'hair') then return false, 'INVALID_COMPONENT' end
+        if secs.facialHair and sex == 'male' and not okStyle(hair.facial, 'mustache') then return false, 'INVALID_COMPONENT' end
+        return true
+    end
+    local valid, invalidCode = validStyles(saved.sex, submitted, allowed)
     if not valid then return nil, invalidCode end
     local merged = AppearanceSchema.mergeSections(saved, submitted, allowed)
     if allowed.clothing then

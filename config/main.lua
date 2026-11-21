@@ -7,6 +7,8 @@
 -- =====================================================================
 
 Config = {}
+Config.Barber = {}   -- moved to standalone resource w_barber
+Config.Wardrobe = {} -- moved to standalone resource w_clothing
 
 -- ---------------------------------------------------------------------
 --  Debug output (WCDebug.log). Silent unless enabled.
@@ -32,12 +34,12 @@ Config.Framework = 'auto'
 Config.Services = {
     characterCreation = true,
     characterDeletion = true,
-    clothingStores    = true,
-    barbers           = true,
+    clothingStores    = false, -- moved to standalone resource w_clothing
+    barbers           = false, -- moved to standalone resource w_barber
     surgery           = true,
-    wardrobe          = true,
-    savedOutfits      = true,
-    clothingActions   = true,
+    wardrobe          = false, -- moved to standalone resource w_clothing
+    savedOutfits      = false, -- moved to standalone resource w_clothing
+    clothingActions   = false, -- moved to standalone resource w_clothing
     spawnSelector     = true,
     lastLocation      = true,
     deathRespawn      = true,

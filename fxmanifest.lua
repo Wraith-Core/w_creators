@@ -2,7 +2,7 @@ fx_version "adamant"
 games { "rdr3" }
 rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships.'
 lua54 'yes'
-version '1.1.10' -- 1.0.18 (2026-11-08) = the services board creates a new place again (it refused every one with «بيانات غير صالحة»); 1.0.17 (2026-11-06) = a slot bought in the store opens a second character again (VIP tiers give none); 1.0.16 (2026-11-06) = ONE character per person (VIP and store slots removed); 1.0.1 = the VIP character slot; 1.0.2 (2026-10-21) = store slots + name change; 1.0.3 (2026-10-23) = the chair picker's marks in the game's glitter (w_lib 4.1.0); 1.0.5 (2026-11-01) = no automatic hair/beard growth, the store camera stays in front of walls, a beard colour keeps the beard (beards 019-024 by name); 1.0.6 (2026-11-01) = refusals say the reason (opening hours, the job, the price and the balance); 1.0.7 (2026-11-02) = greet / antagonize drawn by w_lib (Arabic), hidden in a melee or grapple; 1.0.8 (2026-11-02) = a returning character spawns at his last location, a house owner chooses his last place or his home (w_housing GetHomeSpawn, waking up in bed), home wardrobes (w_housing CanUseWardrobe); 1.0.9 (2026-11-03) = the game's focus prompts hidden under ours, melee F + emote 1 on our card, antagonize on G; 1.0.10 (2026-11-03) = the staff's /promptlab (client/lab, server/lab; nothing changes for players); 1.0.11 (2026-11-04) = lastLocation.direct off (the returning-spawn crash); 1.0.15 (2026-11-05) = a returning character never picks a town: only his last location (+ his home for a house owner), enforced by the server; 1.1.0 (2026-11-08) = the creator, the character card and the stores / barber / surgery / wardrobe pages on the board kit (kit.css, its own fonts and textures; no w_lib theme), the card at the start side, the wordmark from the locales; 1.1.1 (2026-11-08) = the character card back on the left of the screen in both languages (as before 1.1.0)
+version '1.2.0' -- 1.2.0 (2026-11-21) = clothing stores, wardrobes, saved outfits and clothing actions extracted to standalone w_clothing; barbers and grooming extracted to standalone w_barber; w_creators owns character creation (with starting clothes), multicharacter, spawn, respawn, cosmetic surgery and core appearance sync.
 
 -- =====================================================================
 --  w_creators v3 - the character lifecycle authority: account -> characters -> selection ->
@@ -17,9 +17,7 @@ shared_scripts {
     'config/main.lua',
     'config/locations.lua',
     'config/clothing.lua',
-    'config/barber.lua',
     'config/surgery.lua',
-    'config/wardrobe.lua',
     'config/spawn.lua',
     'config/outfits.lua',
     'config/voice.lua',
@@ -74,14 +72,10 @@ client_scripts {
     'client/characters/rename.lua',   -- 2026-10-21: the store's name change (/changename)
     'client/creator/creator.lua',
     'client/creator/cutscene.lua',
-    'client/clothing/catalogue.lua', -- the store's catalogue book: used by the service points and flow
     'client/services/locations.lua',
-    'client/clothing/store.lua',
-    'client/clothing/states.lua',
-    'client/wardrobe/wardrobe.lua',
-    'client/barber/barber.lua',
+    'client/services/seat.lua',
     'client/surgery/surgery.lua',
-    'client/services/board.lua',  -- the staff's services board (/servicesadmin)
+    'client/services/board.lua',  -- the staff's surgery clinics board (/servicesadmin)
     'client/spawn/selector.lua',
     'client/spawn/spawn.lua',
     'client/respawn/respawn.lua',
@@ -111,15 +105,8 @@ server_scripts {
     'server/characters/rename.lua',   -- 2026-10-21: the store's name change (/changename)
     -- scene
     'server/scene.lua',
-    -- domains
-    'server/clothing/ownership.lua',
-    'server/clothing/store.lua',
-    'server/clothing/states.lua',
-    'server/wardrobe/outfits.lua',
-    'server/wardrobe/wardrobe.lua',
-    'server/clothing/items.lua',   -- clothing as inventory items (Config.Clothing.items, off by default)
-    'server/barber/barber.lua',
-    'server/barber/grooming.lua',
+    -- domains (clothing store/wardrobe moved to w_clothing; barber/grooming moved to w_barber)
+    'server/clothing/ownership.lua', -- starter clothing ownership grants on character creation
     'server/surgery/surgery.lua',
     -- the service places edited in game (/servicesadmin)
     'server/locations/store.lua',

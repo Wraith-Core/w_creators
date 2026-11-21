@@ -124,8 +124,14 @@ function F.blocked()
         if WCState.busy(lock) then return lock end
     end
     if ask(WCCreator, 'active') or ask(WCSpawnSelector, 'active') then return 'scene' end
-    for _, mod in ipairs({ WCBarber, WCSurgery }) do
-        if ask(mod, 'busy') then return 'session' end
+    if ask(WCSurgery, 'busy') then return 'session' end
+    if GetResourceState('w_clothing') == 'started' then
+        local ok, clothBusy = pcall(function() return exports.w_clothing:IsBusy() end)
+        if ok and clothBusy then return 'session' end
+    end
+    if GetResourceState('w_barber') == 'started' then
+        local ok, barberBusy = pcall(function() return exports.w_barber:IsBusy() end)
+        if ok and barberBusy then return 'session' end
     end
     return nil
 end
@@ -189,7 +195,7 @@ local function enterFittingRoom(flow, preview)
     flow.saved = { at.x, at.y, at.z, GetEntityHeading(ped) }
     -- a store with a catalogue book: the player leafs through it first, in the shared world where
     -- the others see it (bounded; a failed or cut-short reading never stops the visit)
-    if flow.kind == 'store' and flow.location and WCCatalogue.book(flow.location) then
+    if flow.kind == 'store' and flow.location and type(WCCatalogue) == 'table' and WCCatalogue.book(flow.location) then
         local okRead, read = pcall(WCCatalogue.enter, flow.location)
         flow.reading = okRead and read == true
         -- the reading yielded for seconds: a flow stopped meanwhile (death, the server closing the
@@ -198,7 +204,7 @@ local function enterFittingRoom(flow, preview)
         if flow.finished or flow.abortReason or isDead() then
             if flow.reading then
                 flow.reading = false
-                pcall(WCCatalogue.stop)
+                if type(WCCatalogue) == 'table' then pcall(WCCatalogue.stop) end
             end
             return nil
         end
@@ -217,7 +223,7 @@ local function enterFittingRoom(flow, preview)
     --    cleared, a moment for the game to settle, then the move (the Jump On store does the same,
     --    with the same 100 ms), checked again below before the screen fades in.
     ped = PlayerPedId()
-    if flow.reading then pcall(WCCatalogue.release, ped) end
+    if flow.reading and type(WCCatalogue) == 'table' then pcall(WCCatalogue.release, ped) end
     ClearPedTasksImmediately(ped)
     Wait(F.RELEASE_MS)
     -- a flow stopped during that moment is not moved (leave() undoes the bucket and the fade)
@@ -319,9 +325,9 @@ local function leave(flow)
         flow.reading = false
         local loc = flow.location
         if returned and not isDead() then
-            CreateThread(function() pcall(WCCatalogue.exit, loc) end)
+            if type(WCCatalogue) == 'table' then CreateThread(function() pcall(WCCatalogue.exit, loc) end) end
         else
-            pcall(WCCatalogue.stop)
+            if type(WCCatalogue) == 'table' then pcall(WCCatalogue.stop) end
         end
     end
 end
@@ -663,7 +669,7 @@ local function stopFlow()
     release(flow)
     flow.finished = true
     local ped = PlayerPedId()
-    pcall(WCCatalogue.stop)
+    if type(WCCatalogue) == 'table' then pcall(WCCatalogue.stop) end
     if editorSession(flow) then pcall(WCEditor.close) end
     if flow.env then
         flow.env = false
@@ -925,7 +931,7 @@ function P.clear()
         if point.prompt then pcall(point.prompt.remove) end
         if point.blip then pcall(w.blip.remove, point.blip) end
         if point.npc then pcall(w.entity.delete, point.npc) end
-        if point.book then pcall(WCCatalogue.remove, point.book) end
+        if point.book and type(WCCatalogue) == 'table' then pcall(WCCatalogue.remove, point.book) end
         if point.chair then pcall(w.entity.delete, point.chair) end
     end
     points = {}

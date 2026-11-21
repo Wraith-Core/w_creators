@@ -502,6 +502,10 @@ RegisterCommand('wc_migrate_appearances', function(src)
     end)
 end, true)
 
+AddEventHandler('w_appearance:updated', function(_, charid)
+    if charid ~= nil then Repo.invalidate(charid) end
+end)
+
 AddEventHandler('playerDropped', function()
     local active = WCSessions and WCSessions.activeCharacter and WCSessions.activeCharacter(source)
     if active then Repo.invalidate(active.charid) end

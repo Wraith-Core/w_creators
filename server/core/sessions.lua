@@ -32,12 +32,8 @@ SS.REPLACE_UNUSED_MS = 35000
 
 -- kind -> service, location type, remote permission, lifetime
 SS.KINDS = {
-    store    = { service = 'clothingStores', locationType = 'clothing' },
-    wardrobe = { service = 'wardrobe', locationType = 'wardrobe',
-                 remote = function() return Config.Wardrobe.allowRemote == true end },
-    barber   = { service = 'barbers', locationType = 'barber' },
-    surgery  = { service = 'surgery', locationType = 'surgery',
-                 ttl = function() return (tonumber(Config.CosmeticSurgery.sessionMinutes) or 20) * 60 end },
+    surgery = { service = 'surgery', locationType = 'surgery',
+                ttl = function() return (tonumber(Config.CosmeticSurgery.sessionMinutes) or 20) * 60 end },
 }
 
 --- The active character of a player: { charid, sex? } or nil. WCCharacters when present,

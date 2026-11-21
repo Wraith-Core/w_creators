@@ -15,11 +15,11 @@ local P = WCPlaces
 
 P.TABLE = 'w_creators_locations'
 P.CLINIC_POINTS_KEY = 'w_creators:clinicPoints'
-P.TYPES = { 'clothing', 'barber', 'surgery', 'wardrobe' }
+P.TYPES = { 'surgery' }
 
-local TYPE_SET = { clothing = true, barber = true, surgery = true, wardrobe = true }
-local TYPE_LABELS = { clothing = 'متجر الملابس', barber = 'الحلاق', surgery = 'عيادة التجميل', wardrobe = 'الخزانة' }
-local SPOT_KINDS = { npc = true, preview = true, book = 'clothing', chair = 'barber' }
+local TYPE_SET = { surgery = true }
+local TYPE_LABELS = { surgery = 'عيادة التجميل' }
+local SPOT_KINDS = { npc = true, preview = true }
 local MAX_ID = 64
 
 local BOARD = Config.Board or {}
@@ -162,7 +162,7 @@ function P.load()
         return false
     end
     local ok, rows = pcall(w.database.query.await,
-        'SELECT `id`, `type`, `data` FROM `w_creators_locations` ORDER BY `position`, `id`')
+        "SELECT `id`, `type`, `data` FROM `w_creators_locations` WHERE `type` = 'surgery' ORDER BY `position`, `id`")
     if not ok or type(rows) ~= 'table' then
         WCDebug.warn('locations', 'loading the places failed: %s', tostring(rows))
         return false

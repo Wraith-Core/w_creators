@@ -41,7 +41,7 @@ interface AskSpec { question: string; sub?: string; yes: string; no: string; run
 interface Draft { id: string; base: Form; form: Form }
 
 /* where the admin was, kept between two openings of the board (this page's life only) */
-const memory: { section: PlaceType; sel: Partial<Record<PlaceType, string>>; inPlace: boolean } = { section: 'clothing', sel: {}, inPlace: false };
+const memory: { section: PlaceType; sel: Partial<Record<PlaceType, string>>; inPlace: boolean } = { section: TYPES[0], sel: {}, inPlace: false };
 
 /* the field a problem of formProblems() sits in (for «أصلحه») */
 const FIELD_OF: Record<string, string> = { label: 'f:label', town: 'f:town', radius: 'f:reach', npcModel: 'a:npcText' };

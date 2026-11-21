@@ -6,7 +6,7 @@
 
 export type PlaceType = 'clothing' | 'barber' | 'surgery' | 'wardrobe';
 /** the rail's order */
-export const TYPES: PlaceType[] = ['clothing', 'barber', 'surgery', 'wardrobe'];
+export const TYPES: PlaceType[] = ['surgery'];
 
 /** a place's spots in the world: what `place` / `clear` take as `what` */
 export type SpotKind = 'npc' | 'preview' | 'book' | 'chair';

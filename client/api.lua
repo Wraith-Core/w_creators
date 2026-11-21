@@ -176,15 +176,42 @@ function Api.openSurgery(clinicId)
     return true
 end
 
--- Server export OpenBarber (§13): the open callback re-validates everything.
+-- Backwards-compatible forwarding shims for external resources calling w_creators directly.
+local function forwardClothing(fn, fallback, ...)
+    if GetResourceState('w_clothing') == 'started' then
+        local ok, res = pcall(function(...) return exports.w_clothing[fn](exports.w_clothing, ...) end, ...)
+        if ok then return res end
+    end
+    return fallback
+end
+
+local function forwardBarber(fn, fallback, ...)
+    if GetResourceState('w_barber') == 'started' then
+        local ok, res = pcall(function(...) return exports.w_barber[fn](exports.w_barber, ...) end, ...)
+        if ok then return res end
+    end
+    return fallback
+end
+
 RegisterNetEvent('w_creators:client:openBarber', function(locationId)
-    CreateThread(function() WCBarber.open(locationId) end)
+    forwardBarber('OpenBarber', false, locationId)
 end)
 
 -- ---------------------------------------------------------------------
 --  Exports and the command
 -- ---------------------------------------------------------------------
 exports('OpenCosmeticSurgery', function(clinicId) return Api.openSurgery(clinicId) end)
+exports('OpenWardrobe', function(locationId) return forwardClothing('OpenWardrobe', false, locationId) end)
+exports('OpenClothingStore', function(locationId, look) return forwardClothing('OpenClothingStore', false, locationId, look) end)
+exports('OpenBarber', function(locationId) return forwardBarber('OpenBarber', false, locationId) end)
+exports('GetClothingActions', function() return forwardClothing('GetClothingActions', { status = 'disabled', rows = {} }) end)
+exports('SetClothingState', function(group, value) return forwardClothing('SetClothingState', WCResult.fail('ACTIONS_DISABLED'), group, value) end)
+exports('OpenClothingActions', function() return forwardClothing('OpenClothingActions', WCResult.fail('ACTIONS_DISABLED')) end)
+exports('ToggleHat', function() return forwardClothing('ToggleHat', WCResult.fail('ACTIONS_DISABLED')) end)
+exports('ToggleBandana', function() return forwardClothing('ToggleBandana', WCResult.fail('ACTIONS_DISABLED')) end)
+exports('ToggleSleeves', function() return forwardClothing('ToggleSleeves', WCResult.fail('ACTIONS_DISABLED')) end)
+exports('RemoveClothingCategory', function(cat) return forwardClothing('RemoveClothingCategory', WCResult.fail('ACTIONS_DISABLED'), cat) end)
+exports('RestoreClothingCategory', function(cat) return forwardClothing('RestoreClothingCategory', WCResult.fail('ACTIONS_DISABLED'), cat) end)
 exports('GetAppearance', function() return Api.appearance() end)
 exports('GetCurrentOutfit', function() return Api.currentOutfit() end)
 exports('GetEquippedCategory', function(category) return Api.equippedCategory(category) end)
