@@ -899,14 +899,12 @@ CreateThread(function()
     if not WCUtil.waitUntil(pedPlaced, PED_WAIT_MS, SESSION_WAIT_STEP) then
         WCDebug.warn('characters', 'the player ped wait timed out; opening the selection anyway')
     end
-    -- 3) first login: vorp_core's playerSpawned handler fades the screen out; opening before it
-    --    would leave its fade over our scene. Stock RSG-Core / QBR-Core do not fire playerSpawned
-    --    before character selection, so skip the 20 s wait there.
-    local stockRsgOrQbr = type(GetResourceState) == 'function'
-        and GetResourceState('vorp_core') ~= 'started'
-        and GetResourceState('w_core') ~= 'started'
-        and (GetResourceState('rsg-core') == 'started' or GetResourceState('qbr-core') == 'started')
-    if not bootedInSession and not stockRsgOrQbr then
+    -- 3) first login: only vorp_core's playerSpawned handler fades the screen out; opening before it
+    --    would leave its fade over our scene. w_core, RSG-Core and QBR-Core do not fire playerSpawned
+    --    before character selection, so skip the 20 s wait on them.
+    local needsVorpSpawnWait = type(GetResourceState) == 'function'
+        and GetResourceState('vorp_core') == 'started'
+    if not bootedInSession and needsVorpSpawnWait then
         if WCUtil.waitUntil(function() return spawnFired or nil end, SPAWN_EVENT_WAIT_MS, 50) then
             WCUtil.waitUntil(function() return (IsScreenFadingOut() or IsScreenFadedOut()) or nil end,
                 OTHER_FADE_WAIT_MS, 0)
