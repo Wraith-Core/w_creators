@@ -12,3 +12,22 @@ desktop.ini
 
 # the staff lab report (/promptlab), written by the server
 /promptlab.jsonl
+
+# Local-only tests, Python scripts, and dev tools (never push to GitHub)
+tests/
+test/
+__tests__/
+**/tests/
+**/__pycache__/
+.pytest_cache/
+*.py
+*.pyo
+*.test.js
+*.test.mjs
+*.test.ts
+*.test.tsx
+*.spec.js
+*.spec.ts
+*_spec.lua
+*_test.lua
+/tools/
